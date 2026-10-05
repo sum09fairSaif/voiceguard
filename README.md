@@ -99,5 +99,5 @@ See the diagram at `docs/architecture.png`.
 
 ## Team and mentors
 
-- Team: [names]
+- Team: Sumehra, Nicole, Tulika, Gabriel
 - Technical mentors: [names]
