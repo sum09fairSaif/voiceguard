@@ -100,4 +100,4 @@ See the diagram at `docs/architecture.png`.
 ## Team and mentors
 
 - Team: Sumehra, Nicole, Tulika, Gabriel
-- Technical mentors: [names]
+- Technical mentors: Sesha Varanasi, Duo Xu, Parth Sabhadiya, Drew Abram, Chaitanya Challa
