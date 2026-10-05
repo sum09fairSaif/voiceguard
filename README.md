@@ -95,7 +95,7 @@ See the diagram at `docs/architecture.png`.
 ## Live URLs
 
 - Frontend: https://voiceguard-nu.vercel.app/
-- Backend: [add Render URL here]
+- Backend: https://voiceguard-83cj.onrender.com/
 
 ## Team and mentors
 
