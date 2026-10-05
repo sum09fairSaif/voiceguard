@@ -1,0 +1,11 @@
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+pydantic==2.9.2
+python-dotenv==1.0.1
+
+# Future (voice pipeline), not installed in Sprint 0:
+# pymongo==4.8.0
+# chromadb==0.5.5
+# openai-whisper
+# speechbrain
+# torch
