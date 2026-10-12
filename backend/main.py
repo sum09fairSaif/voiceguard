@@ -2,6 +2,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from routers import auth
+
 app = FastAPI(title="VoiceGuard API", version="0.1.0")
 
 # CORS lets the frontend (a different address) call this API during development.
@@ -11,6 +13,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(auth.router)
 
 @app.get("/health")
 def health():

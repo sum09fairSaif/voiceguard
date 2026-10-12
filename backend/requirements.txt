@@ -2,9 +2,12 @@ fastapi==0.115.0
 uvicorn[standard]==0.30.6
 pydantic==2.9.2
 python-dotenv==1.0.1
+pymongo==4.8.0
+bcrypt==4.2.0
+PyJWT==2.9.0
+email-validator==2.2.0
 
-# Future (voice pipeline), not installed in Sprint 0:
-# pymongo==4.8.0
+# Future (voice pipeline), not installed yet:
 # chromadb==0.5.5
 # openai-whisper
 # speechbrain
