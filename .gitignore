@@ -13,3 +13,8 @@ dist/
 *.pt
 *.onnx
 chroma/
+
+# Context files
+CLAUDE.md
+/backend/CLAUDE.md
+/frontend/CLAUDE.md
