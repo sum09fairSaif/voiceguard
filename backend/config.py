@@ -13,3 +13,7 @@ JWT_ALGORITHM = "HS256"
 JWT_EXPIRE_MINUTES = int(os.getenv("JWT_EXPIRE_MINUTES", "60"))
 if JWT_EXPIRE_MINUTES <= 0:
     raise RuntimeError("JWT_EXPIRE_MINUTES must be more than 0.")
+
+CHALLENGE_TTL_SECONDS = int(os.getenv("CHALLENGE_TTL_SECONDS", "120"))
+if CHALLENGE_TTL_SECONDS <= 0:
+    raise RuntimeError("CHALLENGE_TTL_SECONDS must be more than 0.")
