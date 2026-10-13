@@ -106,6 +106,9 @@ def test_expired_token_is_refused(client, challenges):
 
 
 class UnreachableDatabase:
+    def update_many(self, query, update):
+        raise ServerSelectionTimeoutError("database unreachable")
+
     def insert_one(self, document):
         raise ServerSelectionTimeoutError("database unreachable")
 
@@ -133,6 +136,22 @@ def test_attempt_cannot_be_used_by_someone_else(challenges):
 
     assert use_challenge(challenges, attempt_id, str(ObjectId())) is None
     assert use_challenge(challenges, attempt_id, USER_ID) is not None
+
+
+def test_new_passage_cancels_the_previous_one(challenges):
+    first = str(create_challenge(challenges, USER_ID)["_id"])
+    second = str(create_challenge(challenges, USER_ID)["_id"])
+
+    assert use_challenge(challenges, first, USER_ID) is None
+    assert use_challenge(challenges, second, USER_ID) is not None
+
+
+def test_new_passage_leaves_other_users_alone(challenges):
+    other_user = str(ObjectId())
+    theirs = str(create_challenge(challenges, other_user)["_id"])
+    create_challenge(challenges, USER_ID)
+
+    assert use_challenge(challenges, theirs, other_user) is not None
 
 
 def test_expired_attempt_cannot_be_used(challenges):

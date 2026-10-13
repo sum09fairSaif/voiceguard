@@ -31,4 +31,6 @@ def get_challenges_collection() -> Collection:
     # Its clean-up only runs about once a minute, so the code still checks
     # the expiry time too.
     challenges.create_index("expires_at", expireAfterSeconds=0)
+    # Speeds up finding a user's earlier passages to cancel them.
+    challenges.create_index("user_id")
     return challenges
