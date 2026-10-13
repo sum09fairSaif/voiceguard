@@ -22,3 +22,13 @@ def get_users_collection() -> Collection:
     # even if two signups arrive at the same moment.
     users.create_index([("email", ASCENDING)], unique=True)
     return users
+
+
+@lru_cache
+def get_challenges_collection() -> Collection:
+    challenges = get_client()[config.MONGO_DB_NAME]["challenges"]
+    # MongoDB deletes each attempt by itself once its expiry time has passed.
+    # Its clean-up only runs about once a minute, so the code still checks
+    # the expiry time too.
+    challenges.create_index("expires_at", expireAfterSeconds=0)
+    return challenges
