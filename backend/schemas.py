@@ -36,3 +36,9 @@ class SignupResponse(BaseModel):
     user: UserPublic
     access_token: str
     token_type: str = "bearer"
+
+
+class ChallengeResponse(BaseModel):
+    attempt_id: str
+    passage: str
+    expires_at: datetime

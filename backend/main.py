@@ -5,7 +5,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from pymongo.errors import PyMongoError
 
-from routers import auth
+from routers import auth, challenge
 
 app = FastAPI(title="VoiceGuard API", version="0.1.0")
 
@@ -18,6 +18,7 @@ app.add_middleware(
 )
 
 app.include_router(auth.router)
+app.include_router(challenge.router)
 
 
 @app.exception_handler(RequestValidationError)
