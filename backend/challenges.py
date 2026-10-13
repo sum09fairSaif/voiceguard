@@ -9,6 +9,12 @@ from passages import generate_passage
 
 def create_challenge(challenges: Collection, user_id: str) -> dict:
     now = datetime.now(timezone.utc)
+    # Keep one active passage per user: asking for a new one cancels any
+    # earlier passage they haven't used yet.
+    challenges.update_many(
+        {"user_id": user_id, "used": False},
+        {"$set": {"used": True, "replaced_at": now}},
+    )
     challenge = {
         "_id": ObjectId(),
         "user_id": user_id,
