@@ -2,10 +2,10 @@ from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
 from pymongo.errors import PyMongoError
 
-from routers import auth, challenge
+from routers import auth, challenge, verify
+from transcription import TranscriptionUnavailable
 
 app = FastAPI(title="VoiceGuard API", version="0.1.0")
 
@@ -19,6 +19,7 @@ app.add_middleware(
 
 app.include_router(auth.router)
 app.include_router(challenge.router)
+app.include_router(verify.router)
 
 
 @app.exception_handler(RequestValidationError)
@@ -36,17 +37,14 @@ def database_error(request: Request, exc: PyMongoError) -> JSONResponse:
         content={"detail": "The service is temporarily unavailable. Please try again shortly."},
     )
 
+
+@app.exception_handler(TranscriptionUnavailable)
+def transcription_unavailable(request: Request, exc: TranscriptionUnavailable) -> JSONResponse:
+    return JSONResponse(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        content={"detail": "Voice checks are temporarily unavailable. Please try again shortly."},
+    )
+
 @app.get("/health")
 def health():
     return {"status": "ok", "service": "voiceguard-api"}
-
-class VerifyResult(BaseModel):
-    content: float
-    identity: float
-    liveness: float
-    decision: str
-
-@app.post("/api/verify", response_model=VerifyResult)
-def verify():
-    # Placeholder. Real content, identity, and liveness checks come later.
-    return VerifyResult(content=0.0, identity=0.0, liveness=0.0, decision="stub")

@@ -1,10 +1,15 @@
-from functools import lru_cache
+from functools import lru_cache, partial
+from typing import Callable
 
 import openai
 
 import config
 
 MODEL = "whisper-1"
+
+# Takes the recording and a filename (whose extension tells Whisper the
+# format) and returns what was said.
+Transcriber = Callable[[bytes, str], str]
 
 
 class TranscriptionUnavailable(Exception):
@@ -34,3 +39,9 @@ def transcribe(client: openai.OpenAI, audio: bytes, filename: str) -> str:
     except openai.OpenAIError as exc:
         raise TranscriptionUnavailable("Speech-to-text request failed.") from exc
     return result.text
+
+
+def get_transcriber() -> Transcriber:
+    # Raises before the request does anything else if the key is missing, so
+    # a misconfigured server doesn't use up the user's passage.
+    return partial(transcribe, get_openai_client())

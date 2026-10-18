@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
@@ -42,3 +43,19 @@ class ChallengeResponse(BaseModel):
     attempt_id: str
     passage: str
     expires_at: datetime
+
+
+class ContentScore(BaseModel):
+    passed: bool
+    score: float
+    matched: int
+    total: int
+
+
+class VerifyResponse(BaseModel):
+    decision: Literal["approved", "rejected"]
+    reason: str
+    content: ContentScore
+    # Not built yet (#16, #17). Reported as such rather than faked as passing.
+    identity: Literal["not_checked"] = "not_checked"
+    liveness: Literal["not_checked"] = "not_checked"
