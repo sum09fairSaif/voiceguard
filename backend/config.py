@@ -17,3 +17,7 @@ if JWT_EXPIRE_MINUTES <= 0:
 CHALLENGE_TTL_SECONDS = int(os.getenv("CHALLENGE_TTL_SECONDS", "120"))
 if CHALLENGE_TTL_SECONDS <= 0:
     raise RuntimeError("CHALLENGE_TTL_SECONDS must be more than 0.")
+
+# Hosted speech-to-text. Left blank, voice checks answer "unavailable"
+# instead of crashing.
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
