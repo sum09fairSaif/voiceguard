@@ -5,8 +5,6 @@ import openai
 
 import config
 
-MODEL = "whisper-1"
-
 # Takes the recording and a filename (whose extension tells Whisper the
 # format) and returns what was said.
 Transcriber = Callable[[bytes, str], str]
@@ -14,6 +12,10 @@ Transcriber = Callable[[bytes, str], str]
 
 class TranscriptionUnavailable(Exception):
     """Speech-to-text isn't set up or can't be reached right now."""
+
+
+class AudioNotUnderstood(Exception):
+    """Speech-to-text received the recording but couldn't read it as audio."""
 
 
 @lru_cache
@@ -32,10 +34,13 @@ def transcribe(client: openai.OpenAI, audio: bytes, filename: str) -> str:
         # nudge the transcript towards the expected words and let a wrong
         # recording pass the content check.
         result = client.audio.transcriptions.create(
-            model=MODEL,
+            model=config.WHISPER_MODEL,
             file=(filename, audio),
             language="en",
         )
+    except openai.BadRequestError as exc:
+        # The service is fine; the file itself is broken or not really audio.
+        raise AudioNotUnderstood("Speech-to-text couldn't read the recording.") from exc
     except openai.OpenAIError as exc:
         raise TranscriptionUnavailable("Speech-to-text request failed.") from exc
     return result.text

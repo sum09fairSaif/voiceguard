@@ -1,10 +1,11 @@
 from types import SimpleNamespace
 
+import httpx
 import openai
 import pytest
 
 import config
-from transcription import MODEL, TranscriptionUnavailable, get_openai_client, transcribe
+from transcription import AudioNotUnderstood, TranscriptionUnavailable, get_openai_client, transcribe
 
 
 class FakeTranscriptions:
@@ -44,7 +45,7 @@ def test_sends_the_audio_to_whisper_in_english():
     transcribe(fake_client(transcriptions), b"audio-bytes", "attempt.webm")
 
     [call] = transcriptions.calls
-    assert call["model"] == MODEL
+    assert call["model"] == config.WHISPER_MODEL
     assert call["file"] == ("attempt.webm", b"audio-bytes")
     assert call["language"] == "en"
 
@@ -57,6 +58,29 @@ def test_never_hints_the_expected_words():
     [call] = transcriptions.calls
     assert "prompt" not in call
     assert "keywords" not in call
+
+
+def test_model_comes_from_settings(monkeypatch):
+    monkeypatch.setattr(config, "WHISPER_MODEL", "some-newer-model")
+    transcriptions = FakeTranscriptions()
+
+    transcribe(fake_client(transcriptions), b"audio-bytes", "attempt.webm")
+
+    assert transcriptions.calls[0]["model"] == "some-newer-model"
+
+
+def test_unreadable_audio_is_not_reported_as_an_outage():
+    # OpenAI answers 400 when the file isn't valid audio: that's the
+    # recording's fault, not a service problem.
+    rejected = openai.BadRequestError(
+        "Invalid file format.",
+        response=httpx.Response(400, request=httpx.Request("POST", "https://api.openai.com/v1/audio/transcriptions")),
+        body=None,
+    )
+    transcriptions = FakeTranscriptions(error=rejected)
+
+    with pytest.raises(AudioNotUnderstood):
+        transcribe(fake_client(transcriptions), b"not really audio", "attempt.webm")
 
 
 def test_outage_is_reported_as_unavailable():
