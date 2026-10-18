@@ -5,7 +5,7 @@ from fastapi.responses import JSONResponse
 from pymongo.errors import PyMongoError
 
 from routers import auth, challenge, verify
-from transcription import TranscriptionUnavailable
+from transcription import AudioNotUnderstood, TranscriptionUnavailable
 
 app = FastAPI(title="VoiceGuard API", version="0.1.0")
 
@@ -43,6 +43,15 @@ def transcription_unavailable(request: Request, exc: TranscriptionUnavailable) -
     return JSONResponse(
         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
         content={"detail": "Voice checks are temporarily unavailable. Please try again shortly."},
+    )
+
+
+@app.exception_handler(AudioNotUnderstood)
+def audio_not_understood(request: Request, exc: AudioNotUnderstood) -> JSONResponse:
+    # The passage was already used up, so the user needs a fresh one.
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content={"detail": "We couldn't process that recording. Please get a new passage and record again."},
     )
 
 @app.get("/health")

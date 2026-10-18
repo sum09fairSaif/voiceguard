@@ -53,7 +53,8 @@ class ContentScore(BaseModel):
 
 
 class VerifyResponse(BaseModel):
-    decision: Literal["approved", "rejected"]
+    # "incomplete" until the identity (#16) and liveness (#17) checks exist.
+    decision: Literal["approved", "rejected", "incomplete"]
     reason: str
     content: ContentScore
     # Not built yet (#16, #17). Reported as such rather than faked as passing.

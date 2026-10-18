@@ -1,5 +1,6 @@
 import pytest
 
+import config
 from content_check import check_content
 
 PASSAGE = "quilt tiger ocean pebble winter planet"
@@ -62,3 +63,39 @@ def test_empty_passage_never_passes():
 
     assert not result.passed
     assert result.score == 0.0
+
+
+def test_passage_hidden_in_a_long_recording_fails():
+    # A long recording that happens to contain the six words in order
+    # mustn't pass: only a few extra words are allowed.
+    padded = "apple banana " + PASSAGE + " and lots of other words here too"
+    result = check_content(PASSAGE, padded)
+
+    assert result.matched == 6
+    assert result.extra == 9
+    assert not result.passed
+    # 6 matched out of 6 + (9 extra - 4 allowed) = 6 / 11
+    assert result.score == pytest.approx(6 / 11)
+
+
+def test_up_to_four_extra_words_are_allowed():
+    result = check_content(PASSAGE, "okay here we go " + PASSAGE)
+
+    assert result.extra == 4
+    assert result.passed
+    assert result.score == 1.0
+
+
+def test_a_fifth_extra_word_fails():
+    result = check_content(PASSAGE, "okay so here we go " + PASSAGE)
+
+    assert result.extra == 5
+    assert not result.passed
+
+
+def test_limits_come_from_settings(monkeypatch):
+    monkeypatch.setattr(config, "CONTENT_MAX_MISSED_WORDS", 0)
+    assert not check_content(PASSAGE, "quilt tiger ocean people winter planet").passed
+
+    monkeypatch.setattr(config, "CONTENT_MAX_EXTRA_WORDS", 0)
+    assert not check_content(PASSAGE, "um " + PASSAGE).passed

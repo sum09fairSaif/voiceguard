@@ -10,7 +10,7 @@ from db import get_challenges_collection
 from main import app
 from routers.verify import MAX_AUDIO_BYTES
 from security import create_access_token
-from transcription import TranscriptionUnavailable, get_openai_client, get_transcriber
+from transcription import AudioNotUnderstood, TranscriptionUnavailable, get_openai_client, get_transcriber
 
 VERIFY_URL = "/api/verify"
 USER_ID = str(ObjectId())
@@ -65,14 +65,14 @@ def is_unused(challenges, attempt_id):
 # --- The voice check itself -------------------------------------------------
 
 
-def test_reading_the_passage_is_approved(client, challenges, transcriber, attempt):
+def test_reading_the_passage_is_not_yet_approved(client, challenges, transcriber, attempt):
     transcriber.heard = attempt["passage"].capitalize() + "."
     response = submit(client, attempt["id"])
 
     assert response.status_code == 200
     assert response.json() == {
-        "decision": "approved",
-        "reason": "The passage was read correctly.",
+        "decision": "incomplete",
+        "reason": "The passage was read correctly, but the identity and liveness checks aren't built yet.",
         "content": {"passed": True, "score": 1.0, "matched": 6, "total": 6},
         "identity": "not_checked",
         "liveness": "not_checked",
@@ -207,6 +207,15 @@ def test_transcription_outage_returns_503(client, transcriber, attempt):
 
     assert response.status_code == 503
     assert response.json()["detail"] == "Voice checks are temporarily unavailable. Please try again shortly."
+
+
+def test_unreadable_recording_asks_for_a_new_passage(client, transcriber, attempt):
+    transcriber.error = AudioNotUnderstood("Speech-to-text couldn't read the recording.")
+
+    response = submit(client, attempt["id"])
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "We couldn't process that recording. Please get a new passage and record again."
 
 
 class UnreachableDatabase:

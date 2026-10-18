@@ -21,3 +21,14 @@ if CHALLENGE_TTL_SECONDS <= 0:
 # Hosted speech-to-text. Left blank, voice checks answer "unavailable"
 # instead of crashing.
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+WHISPER_MODEL = os.getenv("WHISPER_MODEL", "whisper-1")
+
+# Content check limits. Provisional: tune them with real recordings.
+# How many passage words may be misheard or missing and still pass.
+CONTENT_MAX_MISSED_WORDS = int(os.getenv("CONTENT_MAX_MISSED_WORDS", "1"))
+# How many words that aren't in the passage ("um, okay") may be heard and
+# still pass. Beyond this, a long recording that happens to contain the
+# passage fails.
+CONTENT_MAX_EXTRA_WORDS = int(os.getenv("CONTENT_MAX_EXTRA_WORDS", "4"))
+if CONTENT_MAX_MISSED_WORDS < 0 or CONTENT_MAX_EXTRA_WORDS < 0:
+    raise RuntimeError("CONTENT_MAX_MISSED_WORDS and CONTENT_MAX_EXTRA_WORDS can't be negative.")
