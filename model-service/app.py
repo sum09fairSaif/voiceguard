@@ -24,6 +24,12 @@ MODEL_DIR = os.getenv("MODEL_DIR", "pretrained_models/spkrec-ecapa-voxceleb")
 SAMPLE_RATE = 16000  # what the model was trained on
 MAX_AUDIO_BYTES = 1024 * 1024  # same cap as the backend
 MIN_SECONDS = 0.5  # shorter than this isn't enough voice to describe
+# Recording-quality measures, reported back so the backend can turn away
+# poor enrollment samples. The backend decides the limits; these only say
+# how the audio is measured.
+FRAME_SECONDS = 0.03  # loudness is measured in 30 ms slices
+SPEECH_LEVEL = 0.01  # a slice louder than this (about -40 dBFS) counts as sound
+CLIPPED_LEVEL = 0.99  # a sample this close to full scale was cut off (too loud)
 FFMPEG = os.getenv("FFMPEG_BINARY", "ffmpeg")
 
 # The formats browsers record in, by file extension, mapped to the ffmpeg
@@ -47,6 +53,10 @@ Encoder = Callable[[np.ndarray], list[float]]
 class EmbeddingResponse(BaseModel):
     embedding: list[float]
     model: str
+    # Seconds of the recording loud enough to be voice rather than silence.
+    speech_seconds: float
+    # Share of samples cut off at full volume, 0 to 1. High means distorted.
+    clipped_share: float
 
 
 def load_encoder() -> Encoder:
@@ -106,6 +116,15 @@ def decode_audio(audio: bytes, demuxer: str) -> np.ndarray:
     return samples
 
 
+def measure_quality(samples: np.ndarray) -> tuple[float, float]:
+    """Return (speech_seconds, clipped_share) for 16 kHz mono samples."""
+    frame = int(FRAME_SECONDS * SAMPLE_RATE)
+    frames = samples[: len(samples) // frame * frame].reshape(-1, frame)
+    loud = np.sqrt(np.mean(frames**2, axis=1)) >= SPEECH_LEVEL
+    clipped = np.mean(np.abs(samples) >= CLIPPED_LEVEL) if len(samples) else 0.0
+    return float(np.sum(loud) * FRAME_SECONDS), float(clipped)
+
+
 def require_token(authorization: str = Header(default="")) -> None:
     expected = os.getenv("SERVICE_TOKEN", "")
     if not expected:
@@ -141,7 +160,13 @@ def create_app(load: Callable[[], Encoder] = load_encoder) -> FastAPI:
             samples = decode_audio(data, demuxer)
         except (ValueError, subprocess.TimeoutExpired):
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Couldn't read the recording as audio.")
-        return EmbeddingResponse(embedding=request.app.state.encode(samples), model=MODEL_SOURCE)
+        speech_seconds, clipped_share = measure_quality(samples)
+        return EmbeddingResponse(
+            embedding=request.app.state.encode(samples),
+            model=MODEL_SOURCE,
+            speech_seconds=speech_seconds,
+            clipped_share=clipped_share,
+        )
 
     return app
 
