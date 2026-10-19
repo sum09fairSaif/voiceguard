@@ -139,3 +139,25 @@ def test_service_without_a_token_refuses_everything(client, encoder, monkeypatch
 
     assert send(client, make_audio()).status_code == 503
     assert encoder.calls == []
+
+
+@pytest.mark.parametrize("filename", ["attempt.m3u8", "attempt.txt", "attempt", "attempt.webm.exe"])
+def test_other_formats_are_refused(client, encoder, filename):
+    assert send(client, make_audio(), filename).status_code == 422
+    assert encoder.calls == []
+
+
+def test_playlist_disguised_as_audio_is_not_followed(client, encoder, tmp_path):
+    # An HLS playlist pointing at real audio. If ffmpeg guessed the format
+    # from the contents, it would open the other file and succeed.
+    real = tmp_path / "real.wav"
+    real.write_bytes(make_audio())
+    playlist = f"#EXTM3U\n#EXT-X-TARGETDURATION:1\n#EXTINF:1.0,\n{real.as_posix()}\n#EXT-X-ENDLIST\n".encode()
+
+    for filename in ("attempt.webm", "attempt.wav", "attempt.mp3"):
+        assert send(client, playlist, filename).status_code == 422
+    assert encoder.calls == []
+
+
+def test_mp3_is_decoded(client, encoder):
+    assert send(client, make_audio(fmt="mp3", codec="libmp3lame"), "attempt.mp3").status_code == 200

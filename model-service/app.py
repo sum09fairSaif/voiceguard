@@ -25,6 +25,20 @@ MAX_AUDIO_BYTES = 1024 * 1024  # same cap as the backend
 MIN_SECONDS = 0.5  # shorter than this isn't enough voice to describe
 FFMPEG = os.getenv("FFMPEG_BINARY", "ffmpeg")
 
+# The formats browsers record in, by file extension, mapped to the ffmpeg
+# demuxer that reads each. Anything else is refused. Naming the demuxer
+# stops ffmpeg guessing the format from the contents, so an upload can't
+# pass itself off as a playlist (HLS, concat) that makes ffmpeg open other
+# files or URLs.
+FORMATS = {
+    ".webm": "webm",
+    ".ogg": "ogg",
+    ".mp4": "mp4",
+    ".m4a": "m4a",
+    ".mp3": "mp3",
+    ".wav": "wav",
+}
+
 # Takes 16 kHz mono samples and returns the embedding.
 Encoder = Callable[[np.ndarray], list[float]]
 
@@ -58,21 +72,29 @@ def load_encoder() -> Encoder:
     return encode
 
 
-def decode_audio(audio: bytes, suffix: str) -> np.ndarray:
-    """Decode any common audio format to 16 kHz mono float samples.
-    Raises ValueError if it isn't readable audio."""
+def decode_audio(audio: bytes, demuxer: str) -> np.ndarray:
+    """Decode a recording to 16 kHz mono float samples. `demuxer` must be
+    one of FORMATS' values. Raises ValueError if it isn't readable audio."""
+    if demuxer not in FORMATS.values():
+        raise ValueError("Unsupported format.")
     # A temporary file rather than a pipe, because some formats (m4a, mp4)
     # keep their index at the end of the file, which ffmpeg can't read
-    # from a pipe.
-    handle, path = tempfile.mkstemp(suffix=suffix)
+    # from a pipe. Its name is made here, never taken from the upload.
+    handle, path = tempfile.mkstemp(suffix=".audio")
     try:
         with os.fdopen(handle, "wb") as file:
             file.write(audio)
-        result = subprocess.run(
-            [FFMPEG, "-nostdin", "-loglevel", "error", "-i", path, "-ac", "1", "-ar", str(SAMPLE_RATE), "-f", "f32le", "-"],
-            capture_output=True,
-            timeout=30,
-        )
+        # A list of arguments with no shell, so nothing in them is run as a
+        # command. Every argument is a constant, the server-made temp path,
+        # or a demuxer name checked against FORMATS above.
+        command = [
+            FFMPEG, "-nostdin", "-loglevel", "error",
+            "-protocol_whitelist", "file",  # never open URLs
+            "-f", demuxer, "-i", path,
+            "-ac", "1", "-ar", str(SAMPLE_RATE), "-f", "f32le", "-",
+        ]
+        # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit, python.lang.security.audit.dangerous-subprocess-use-tainted-env-args
+        result = subprocess.run(command, capture_output=True, timeout=30)
     finally:
         os.remove(path)
     if result.returncode != 0:
@@ -110,10 +132,12 @@ def create_app(load: Callable[[], Encoder] = load_encoder) -> FastAPI:
         data = audio.file.read(MAX_AUDIO_BYTES + 1)
         if len(data) > MAX_AUDIO_BYTES:
             raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, "Recording is too large.")
-        # Only the extension is used, as a hint for the format.
-        suffix = os.path.splitext(audio.filename or "")[1][:8]
+        # Only the extension is used, to pick the format.
+        demuxer = FORMATS.get(os.path.splitext(audio.filename or "")[1].lower())
+        if demuxer is None:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Send webm, ogg, mp4, m4a, mp3 or wav audio.")
         try:
-            samples = decode_audio(data, suffix)
+            samples = decode_audio(data, demuxer)
         except (ValueError, subprocess.TimeoutExpired):
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Couldn't read the recording as audio.")
         return EmbeddingResponse(embedding=request.app.state.encode(samples), model=MODEL_SOURCE)
