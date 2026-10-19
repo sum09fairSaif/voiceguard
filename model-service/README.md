@@ -35,7 +35,8 @@ installs Gradio (which brings FastAPI and uvicorn), the apt packages in
 which serves the FastAPI app on port 7860. No Gradio UI is used.
 
 1. On huggingface.co, create a new Space: SDK **Gradio**, template
-   **Blank**, hardware **CPU basic** (free), visibility **Public** (the
+   **Blank**, hardware **ZeroGPU** (the free option; CPU basic needs PRO),
+   visibility **Public** (the
    backend calls it without a Hugging Face login; `/embed` is protected by
    `SERVICE_TOKEN` instead).
 2. In the Space's **Settings → Variables and secrets**, add a secret
@@ -59,7 +60,7 @@ Needs Python 3.11, ffmpeg on the PATH (or `FFMPEG_BINARY` pointing at it),
 and about 450 MB of free memory.
 
 ```
-pip install -r requirements.txt fastapi==0.115.2 uvicorn==0.30.6 python-multipart==0.0.32
+pip install --extra-index-url https://download.pytorch.org/whl/cpu -r requirements.txt fastapi==0.115.2 uvicorn==0.30.6 python-multipart==0.0.32
 SERVICE_TOKEN=any-local-token PORT=7861 python app.py
 ```
 

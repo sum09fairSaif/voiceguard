@@ -12,10 +12,11 @@ from app import FFMPEG, MAX_AUDIO_BYTES, SAMPLE_RATE, create_app
 TOKEN = "test-service-token"
 
 
-def make_audio(seconds=1.0, fmt="wav", codec="pcm_s16le"):
+def make_audio(seconds=1.0, fmt="wav", codec="pcm_s16le", source=None):
     """A tone made by ffmpeg, so the tests need no audio files."""
+    source = source or f"sine=frequency=220:duration={seconds}"
     result = subprocess.run(
-        [FFMPEG, "-nostdin", "-loglevel", "error", "-f", "lavfi", "-i", f"sine=frequency=220:duration={seconds}",
+        [FFMPEG, "-nostdin", "-loglevel", "error", "-f", "lavfi", "-i", source,
          "-ar", "48000", "-c:a", codec, "-f", fmt, "-"],
         capture_output=True,
     )
@@ -58,7 +59,9 @@ def test_recording_becomes_an_embedding(client, encoder):
     response = send(client, make_audio(seconds=1.0))
 
     assert response.status_code == 200
-    assert response.json() == {"embedding": [0.1, -0.2, 0.3], "model": "speechbrain/spkrec-ecapa-voxceleb"}
+    body = response.json()
+    assert body["embedding"] == [0.1, -0.2, 0.3]
+    assert body["model"] == "speechbrain/spkrec-ecapa-voxceleb"
     # Decoded to one second of 16 kHz mono before reaching the model.
     [samples] = encoder.calls
     assert samples.dtype == np.float32
@@ -161,3 +164,31 @@ def test_playlist_disguised_as_audio_is_not_followed(client, encoder, tmp_path):
 
 def test_mp3_is_decoded(client, encoder):
     assert send(client, make_audio(fmt="mp3", codec="libmp3lame"), "attempt.mp3").status_code == 200
+
+
+# --- Recording quality, for enrollment ----------------------------------------
+
+
+def test_a_clear_recording_is_all_speech_and_not_clipped(client):
+    body = send(client, make_audio(seconds=1.0)).json()
+
+    assert body["speech_seconds"] == pytest.approx(1.0, abs=0.05)
+    assert body["clipped_share"] == 0.0
+
+
+def test_silence_has_no_speech(client):
+    silence = make_audio(source="anullsrc=channel_layout=mono:sample_rate=48000:duration=1")
+
+    assert send(client, silence).json()["speech_seconds"] == 0.0
+
+
+def test_half_silence_counts_only_the_sound(client):
+    half = make_audio(source="sine=frequency=220:duration=1,apad=pad_dur=1")
+
+    assert send(client, half).json()["speech_seconds"] == pytest.approx(1.0, abs=0.05)
+
+
+def test_a_too_loud_recording_is_clipped(client):
+    loud = make_audio(source="sine=frequency=220:duration=1,volume=20")
+
+    assert send(client, loud).json()["clipped_share"] > 0.5
