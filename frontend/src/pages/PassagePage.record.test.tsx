@@ -6,7 +6,7 @@ import { requestChallenge, type Challenge } from "../api/challenge";
 import { getToken, saveToken } from "../api/session";
 import { submitAttempt, type VerifyResult } from "../api/verify";
 import { RECORDER_MESSAGES } from "../hooks/useRecorder";
-import { apiError } from "../test/apiError";
+import { apiError, networkError } from "../test/apiError";
 import { installFakeMicrophone, removeFakeMicrophone } from "../test/fakeMicrophone";
 import { PassagePage } from "./PassagePage";
 import { ResultPage } from "./ResultPage";
@@ -120,6 +120,7 @@ describe("Recording and submitting", () => {
     [apiError(400), "This phrase has expired or was already used. Get a new phrase and try again."],
     [apiError(422), "We couldn't make out the recording. Get a new phrase and record again."],
     [apiError(503), "VoiceGuard is temporarily unavailable. Please try again shortly."],
+    [networkError(), "Can't reach VoiceGuard. Check your connection and try again."],
   ])("asks for a new phrase when the passage may be used up (%#)", async (error, message) => {
     mockSubmit.mockRejectedValue(error);
     const user = userEvent.setup();
@@ -138,6 +139,7 @@ describe("Recording and submitting", () => {
 
   it.each([
     [apiError(413), "That recording is too long. Please read just the phrase."],
+    [apiError(415), "Your browser recorded audio in a format we can't use. Please try Chrome or Safari."],
     [apiError(429, {}, { "retry-after": "120" }), "Too many attempts. Please try again in 2 minutes."],
   ])("keeps the same phrase when it wasn't used up (%#)", async (error, message) => {
     mockSubmit.mockRejectedValue(error);
@@ -183,5 +185,61 @@ describe("Recording and submitting", () => {
     renderFlow();
 
     expect(screen.getByRole("button", { name: "Start recording" })).toBeDisabled();
+  });
+
+  it("can't record or submit once the passage has expired", async () => {
+    mockChallenge.mockReset().mockResolvedValue({
+      attempt_id: "a1",
+      passage: "passage a1",
+      expires_at: new Date(Date.now() + 1500).toISOString(),
+    });
+    const user = userEvent.setup();
+    renderFlow();
+    await recordClip(user);
+
+    expect(await screen.findByText("This phrase has expired.", {}, { timeout: 3000 })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /submit/i })).toBeDisabled();
+
+    await user.click(screen.getByRole("button", { name: /record again/i }));
+    expect(screen.getByRole("button", { name: "Start recording" })).toBeDisabled();
+  });
+
+  it("doesn't allow a new phrase while recording", async () => {
+    const user = userEvent.setup();
+    renderFlow();
+    await screen.findByText("“Passage a1”");
+
+    await user.click(screen.getByRole("button", { name: "Start recording" }));
+    await screen.findByRole("button", { name: "Stop recording" });
+
+    expect(screen.getByRole("button", { name: /new phrase/i })).toBeDisabled();
+  });
+
+  it("shows that it's waiting while the browser asks for the microphone", async () => {
+    microphone.getUserMedia.mockReturnValue(new Promise(() => {}));
+    const user = userEvent.setup();
+    renderFlow();
+    await screen.findByText("“Passage a1”");
+
+    await user.click(screen.getByRole("button", { name: "Start recording" }));
+
+    expect(screen.getByText("Waiting for your microphone…")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Start recording" })).toBeDisabled();
+  });
+
+  it("goes back to ready after a microphone problem", async () => {
+    microphone.getUserMedia.mockRejectedValueOnce(new DOMException("no", "NotFoundError"));
+    const user = userEvent.setup();
+    renderFlow();
+    await screen.findByText("“Passage a1”");
+    await user.click(screen.getByRole("button", { name: "Start recording" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(RECORDER_MESSAGES.noMicrophone);
+
+    await user.click(screen.getByRole("button", { name: /try again/i }));
+
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByText("Tap to start recording")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Start recording" }));
+    expect(await screen.findByRole("button", { name: "Stop recording" })).toBeInTheDocument();
   });
 });
