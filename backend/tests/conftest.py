@@ -5,7 +5,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import config
-from db import get_challenges_collection, get_users_collection
+from db import get_challenges_collection, get_rate_limits_collection, get_users_collection
 from main import app
 
 
@@ -25,10 +25,18 @@ def challenges():
 
 
 @pytest.fixture
-def client(users, challenges, monkeypatch):
+def rate_limits():
+    collection = mongomock.MongoClient()["voiceguard_test"]["rate_limits"]
+    collection.create_index("expires_at", expireAfterSeconds=0)
+    return collection
+
+
+@pytest.fixture
+def client(users, challenges, rate_limits, monkeypatch):
     # A fresh random key each run, so the code can't pass by hard-coding one.
     monkeypatch.setattr(config, "JWT_SECRET", secrets.token_urlsafe(32))
     app.dependency_overrides[get_users_collection] = lambda: users
     app.dependency_overrides[get_challenges_collection] = lambda: challenges
+    app.dependency_overrides[get_rate_limits_collection] = lambda: rate_limits
     yield TestClient(app)
     app.dependency_overrides.clear()

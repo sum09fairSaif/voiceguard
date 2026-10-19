@@ -34,3 +34,12 @@ def get_challenges_collection() -> Collection:
     # Speeds up finding a user's earlier passages to cancel them.
     challenges.create_index("user_id")
     return challenges
+
+
+@lru_cache
+def get_rate_limits_collection() -> Collection:
+    rate_limits = get_client()[config.MONGO_DB_NAME]["rate_limits"]
+    # One counter per user per time window. MongoDB deletes each counter
+    # once its window has ended.
+    rate_limits.create_index("expires_at", expireAfterSeconds=0)
+    return rate_limits

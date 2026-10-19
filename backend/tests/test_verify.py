@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -227,3 +228,59 @@ def test_database_outage_returns_503(client, transcriber):
     app.dependency_overrides[get_challenges_collection] = lambda: UnreachableDatabase()
 
     assert submit(client, str(ObjectId())).status_code == 503
+
+# --- Rate limit and spend log -------------------------------------------------
+
+
+def test_too_many_checks_are_refused_without_using_the_passage(client, challenges, transcriber, monkeypatch):
+    monkeypatch.setattr(config, "VERIFY_RATE_LIMIT", 2)
+    for _ in range(2):
+        submit(client, str(create_challenge(challenges, USER_ID)["_id"]))
+    attempt_id = str(create_challenge(challenges, USER_ID)["_id"])
+
+    response = submit(client, attempt_id)
+
+    assert response.status_code == 429
+    assert "Retry-After" in response.headers
+    assert len(transcriber.calls) == 2
+    assert is_unused(challenges, attempt_id)
+
+
+def test_each_transcription_is_logged_without_the_words(client, transcriber, attempt, caplog):
+    transcriber.heard = attempt["passage"]
+
+    with caplog.at_level(logging.INFO, logger="voiceguard.verify"):
+        submit(client, attempt["id"])
+
+    [line] = [r.getMessage() for r in caplog.records if r.name == "voiceguard.verify"]
+    assert line.startswith(f"transcription user={USER_ID} attempt={attempt['id']} ")
+    assert f"bytes={len(RECORDING)}" in line
+    assert "format=webm" in line
+    assert "outcome=ok" in line
+    for word in attempt["passage"].split():
+        assert word not in line
+
+
+@pytest.mark.parametrize(
+    "error, outcome",
+    [
+        (AudioNotUnderstood("bad audio"), "unreadable"),
+        (TranscriptionUnavailable("down"), "unavailable"),
+    ],
+    ids=["unreadable", "unavailable"],
+)
+def test_failed_transcription_is_logged_too(client, transcriber, attempt, caplog, error, outcome):
+    transcriber.error = error
+
+    with caplog.at_level(logging.INFO, logger="voiceguard.verify"):
+        submit(client, attempt["id"])
+
+    [line] = [r.getMessage() for r in caplog.records if r.name == "voiceguard.verify"]
+    assert f"outcome={outcome}" in line
+
+
+def test_refused_requests_are_not_logged_as_transcriptions(client, transcriber, attempt, caplog):
+    with caplog.at_level(logging.INFO, logger="voiceguard.verify"):
+        submit(client, attempt["id"], content_type="text/plain")
+
+    assert not [r for r in caplog.records if r.name == "voiceguard.verify"]
