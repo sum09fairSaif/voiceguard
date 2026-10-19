@@ -5,7 +5,9 @@ export type VerifyResult = {
   reason: string;
   content: { passed: boolean; score: number; matched: number; total: number };
   identity: "passed" | "failed" | "not_enrolled";
-  liveness: "not_checked";
+  // Only "not_checked" until the liveness check (#17) exists; the other
+  // values are handled already so the result screen needs no change then.
+  liveness: "passed" | "failed" | "not_checked";
 };
 
 // What the voice check's error statuses mean for the person on screen. Used as
