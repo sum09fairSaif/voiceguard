@@ -1,8 +1,8 @@
 # Installed by the Hugging Face Space on top of Gradio, which already
 # brings FastAPI, uvicorn, python-multipart and numpy.
-# CPU-only PyTorch: the default build pulls in GPU libraries (several GB)
-# that a free CPU Space can't use.
---extra-index-url https://download.pytorch.org/whl/cpu
-torch==2.7.1+cpu
-torchaudio==2.7.1+cpu
+# The Space runs on ZeroGPU (the free hardware for Gradio Spaces), which
+# only accepts certain PyTorch versions; 2.8.0 is one. The model still runs
+# on the CPU: it's small enough, and that keeps clear of ZeroGPU's quota.
+torch==2.8.0
+torchaudio==2.8.0
 speechbrain==1.1.1
