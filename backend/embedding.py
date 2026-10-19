@@ -1,3 +1,6 @@
+import base64
+import json
+import os
 from dataclasses import dataclass
 from functools import partial
 from typing import Callable
@@ -26,27 +29,41 @@ Embedder = Callable[[bytes, str], Embedding]
 
 def embed(url: str, token: str, audio: bytes, filename: str) -> Embedding:
     """Ask the model service for the speaker embedding of this recording.
-    The audio is sent as-is and never saved, here or by the service."""
+    The audio is sent as-is and never saved, here or by the service.
+
+    The service is a Gradio app (Hugging Face's free GPU hardware only runs
+    Gradio apps), so this uses Gradio's HTTP API: one request starts the
+    job and returns an id, a second one waits for the result."""
+    call_url = f"{url.rstrip('/')}/gradio_api/call/embed"
+    # The recording travels as base64 text so Gradio never saves it as an
+    # uploaded file. Only the extension of the filename is sent.
+    data = [token, base64.b64encode(audio).decode("ascii"), os.path.splitext(filename)[1]]
+    # Optional: lets the Space count GPU time against our Hugging Face
+    # account rather than as anonymous use, which gets very little.
+    headers = {}
+    if config.EMBEDDING_SERVICE_HF_TOKEN:
+        headers["Authorization"] = f"Bearer {config.EMBEDDING_SERVICE_HF_TOKEN}"
     try:
-        response = httpx.post(
-            f"{url.rstrip('/')}/embed",
-            headers={"Authorization": f"Bearer {token}"},
-            files={"audio": (filename, audio)},
-            # A sleeping free-tier service can take a while to wake up.
-            timeout=30,
-        )
+        # A sleeping free-tier service can take a while to wake up.
+        with httpx.Client(headers=headers, timeout=60) as client:
+            started = client.post(call_url, json={"data": data})
+            started.raise_for_status()
+            finished = client.get(f"{call_url}/{started.json()['event_id']}")
+            finished.raise_for_status()
     except httpx.HTTPError as exc:
         raise IdentityUnavailable("The model service can't be reached.") from exc
-    if response.status_code == 422:
-        # The service is fine; the file itself is broken or not really audio.
-        raise AudioNotUnderstood("The model service couldn't read the recording.")
-    if response.status_code != 200:
-        raise IdentityUnavailable(f"The model service answered {response.status_code}.")
-    try:
-        body = response.json()
-        embedding = body["embedding"]
     except (ValueError, KeyError, TypeError) as exc:
         raise IdentityUnavailable("The model service sent an unexpected answer.") from exc
+
+    body = _result(finished.text)
+    error = body.get("error")
+    if error in ("not_audio", "unsupported_format", "too_large"):
+        # The service is fine; the file itself is broken or not really audio.
+        raise AudioNotUnderstood("The model service couldn't read the recording.")
+    if error is not None:
+        # e.g. "unauthorized": the tokens don't match. A server problem.
+        raise IdentityUnavailable(f"The model service refused the request: {error}.")
+    embedding = body.get("embedding")
     if not isinstance(embedding, list) or not all(_is_number(x) for x in embedding):
         raise IdentityUnavailable("The model service sent an unexpected answer.")
     return Embedding(
@@ -54,6 +71,26 @@ def embed(url: str, token: str, audio: bytes, filename: str) -> Embedding:
         speech_seconds=_optional_number(body, "speech_seconds"),
         clipped_share=_optional_number(body, "clipped_share"),
     )
+
+
+def _result(stream: str) -> dict:
+    """Read the endpoint's answer from Gradio's event stream, which ends
+    with "event: complete" and a "data:" line holding a one-item list."""
+    event = data = None
+    for line in stream.splitlines():
+        if line.startswith("event:"):
+            event = line[len("event:"):].strip()
+        elif line.startswith("data:"):
+            data = line[len("data:"):].strip()
+    if event != "complete" or data is None:
+        raise IdentityUnavailable(f"The model service failed (event {event!r}).")
+    try:
+        [body] = json.loads(data)
+    except (ValueError, TypeError) as exc:
+        raise IdentityUnavailable("The model service sent an unexpected answer.") from exc
+    if not isinstance(body, dict):
+        raise IdentityUnavailable("The model service sent an unexpected answer.")
+    return body
 
 
 def _is_number(value: object) -> bool:
