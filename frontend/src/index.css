@@ -7,17 +7,28 @@
   --color-accent-soft: #e9f5f3;
   --color-border: #cbd2dc;
   --color-accent-border: #cde7e3;
+  --color-accent-faint: #f5faf9;
   --color-track: #e5e9f0;
   --color-surface: #ffffff;
   /* Not in the Figma frames: frames the phone column on wider screens. */
   --color-backdrop: #f2f4f6;
+  /* Success colours from the Figma "Verified" frame (1:369). */
+  --color-success: #526c19;
+  --color-success-soft: #edf2df;
+  --color-success-ring: #e3eacd;
+  --color-success-dot: #b5c784;
   /* Not in the Figma frames; chosen to stay readable on white. */
   --color-error: #b42318;
+  --color-error-soft: #fdeceb;
+  --color-error-ring: #f6d6d2;
+  --color-error-dot: #ec9a91;
+  --color-card-border: #e5e9f0;
 
   --radius-input: 10px;
   --radius-button: 12px;
   --radius-badge: 15px;
   --radius-card: 16px;
+  --radius-status-card: 13px;
 
   --page-padding-x: 36px;
   --column-max-width: 390px;

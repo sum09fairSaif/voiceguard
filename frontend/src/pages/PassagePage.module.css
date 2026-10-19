@@ -86,3 +86,51 @@
   outline-offset: 2px;
   border-radius: 4px;
 }
+
+.link:disabled {
+  color: var(--color-muted);
+  cursor: not-allowed;
+}
+
+.recorder {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.recorderTitle {
+  margin-top: 19px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.recorderHint {
+  margin-top: 10px;
+  font-size: 11px;
+  color: var(--color-muted);
+}
+
+.actions {
+  margin-top: 20px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+.problem {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.problem .error {
+  margin-top: 0;
+}

@@ -69,6 +69,8 @@ describe("useChallenge", () => {
     mockRequest.mockResolvedValue(challenge("a1", 3));
     const { result } = renderChallenge();
     await waitFor(() => expect(result.current.challenge).not.toBeNull());
+    // Let React set up the countdown timer before moving the clock.
+    await act(async () => {});
 
     act(() => vi.advanceTimersByTime(1000));
     expect(result.current.secondsRemaining).toBe(2);

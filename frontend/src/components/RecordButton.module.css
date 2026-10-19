@@ -1,0 +1,68 @@
+.outer {
+  width: 156px;
+  height: 156px;
+  border-radius: 50%;
+  border: 1px solid var(--color-accent-border);
+  display: grid;
+  place-items: center;
+}
+
+.middle {
+  width: 124px;
+  height: 124px;
+  border-radius: 50%;
+  border: 1px solid var(--color-accent-border);
+  background: var(--color-accent-faint);
+  display: grid;
+  place-items: center;
+}
+
+.button {
+  width: 90px;
+  height: 90px;
+  border-radius: 50%;
+  border: none;
+  background: var(--color-accent);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.button:focus-visible {
+  outline: 2px solid var(--color-text);
+  outline-offset: 4px;
+}
+
+.stop {
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  background: #ffffff;
+}
+
+/* Not in the Figma: a gentle pulse so it's obvious the app is listening. */
+.listening {
+  animation: pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(0, 127, 123, 0.25);
+  }
+  50% {
+    box-shadow: 0 0 0 12px rgba(0, 127, 123, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .listening {
+    animation: none;
+    border-color: var(--color-accent);
+  }
+}
