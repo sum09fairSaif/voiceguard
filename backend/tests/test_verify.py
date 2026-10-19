@@ -8,10 +8,13 @@ from pymongo.errors import ServerSelectionTimeoutError
 import config
 from challenges import create_challenge
 from db import get_challenges_collection
+from embedding import get_embedder
+from identity_check import IdentityUnavailable
 from main import app
 from routers.verify import MAX_AUDIO_BYTES
 from security import create_access_token
 from transcription import AudioNotUnderstood, TranscriptionUnavailable, get_openai_client, get_transcriber
+from voiceprints import save_voiceprint
 
 VERIFY_URL = "/api/verify"
 USER_ID = str(ObjectId())
@@ -44,6 +47,38 @@ def transcriber():
     return fake
 
 
+class FakeEmbedder:
+    # Stands in for the model service: returns whatever voice the test
+    # sets and remembers what it was sent.
+    def __init__(self, voice=None, error=None):
+        self.voice = voice
+        self.error = error
+        self.calls = []
+
+    def __call__(self, audio, filename):
+        self.calls.append((audio, filename))
+        if self.error:
+            raise self.error
+        return self.voice
+
+
+# Two made-up voices at right angles to each other: similarity 0.
+USERS_VOICE = [0.6, 0.8, 0.0]
+OTHER_VOICE = [0.0, 0.0, 1.0]
+
+
+@pytest.fixture
+def embedder():
+    fake = FakeEmbedder(voice=USERS_VOICE)
+    app.dependency_overrides[get_embedder] = lambda: fake
+    return fake
+
+
+@pytest.fixture
+def enrolled(voiceprints):
+    save_voiceprint(voiceprints, USER_ID, USERS_VOICE)
+
+
 @pytest.fixture
 def attempt(challenges):
     challenge = create_challenge(challenges, USER_ID)
@@ -73,9 +108,10 @@ def test_reading_the_passage_is_not_yet_approved(client, challenges, transcriber
     assert response.status_code == 200
     assert response.json() == {
         "decision": "incomplete",
-        "reason": "The passage was read correctly, but the identity and liveness checks aren't built yet.",
+        "reason": "The passage was read correctly, but this account has no voiceprint yet "
+        "and the liveness check isn't built yet.",
         "content": {"passed": True, "score": 1.0, "matched": 6, "total": 6},
-        "identity": "not_checked",
+        "identity": "not_enrolled",
         "liveness": "not_checked",
     }
     assert not is_unused(challenges, attempt["id"])
@@ -284,3 +320,109 @@ def test_refused_requests_are_not_logged_as_transcriptions(client, transcriber, 
         submit(client, attempt["id"], content_type="text/plain")
 
     assert not [r for r in caplog.records if r.name == "voiceguard.verify"]
+
+
+# --- Identity check ------------------------------------------------------------
+
+
+def test_enrolled_user_reading_in_their_own_voice_is_not_yet_approved(
+    client, transcriber, embedder, enrolled, attempt
+):
+    transcriber.heard = attempt["passage"]
+    response = submit(client, attempt["id"])
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "decision": "incomplete",
+        "reason": "The passage and the voice matched, but the liveness check isn't built yet.",
+        "content": {"passed": True, "score": 1.0, "matched": 6, "total": 6},
+        "identity": "passed",
+        "liveness": "not_checked",
+    }
+    assert embedder.calls == [(RECORDING, "attempt.webm")]
+
+
+def test_different_speaker_is_rejected(client, transcriber, embedder, enrolled, attempt):
+    transcriber.heard = attempt["passage"]
+    embedder.voice = OTHER_VOICE
+    response = submit(client, attempt["id"])
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["decision"] == "rejected"
+    assert body["reason"] == "The voice didn't match this account."
+    assert body["identity"] == "failed"
+
+
+def test_identity_score_is_not_sent_back(client, transcriber, embedder, enrolled, attempt):
+    # A score would let someone tune a voice clone until it gets through.
+    transcriber.heard = attempt["passage"]
+    body = submit(client, attempt["id"]).json()
+
+    assert body["identity"] == "passed"
+    assert set(body) == {"decision", "reason", "content", "identity", "liveness"}
+
+
+def test_identity_score_is_logged_for_tuning(client, transcriber, embedder, enrolled, attempt, caplog):
+    embedder.voice = [0.6, 0.0, 0.8]  # similarity 0.36 with USERS_VOICE: below the threshold
+
+    with caplog.at_level(logging.INFO, logger="voiceguard.verify"):
+        submit(client, attempt["id"])
+
+    lines = [r.getMessage() for r in caplog.records if r.message.startswith("identity ")]
+    assert lines == [f"identity user={USER_ID} attempt={attempt['id']} score=0.360 passed=False"]
+
+
+def test_user_without_a_voiceprint_is_not_sent_to_the_model_service(client, transcriber, embedder, attempt):
+    body = submit(client, attempt["id"]).json()
+
+    assert body["identity"] == "not_enrolled"
+    assert embedder.calls == []
+
+
+def test_unconfigured_model_service_returns_503_and_keeps_the_passage(
+    client, challenges, transcriber, enrolled, attempt
+):
+    app.dependency_overrides[get_embedder] = lambda: None
+    response = submit(client, attempt["id"])
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "Voice checks are temporarily unavailable. Please try again shortly."
+    assert is_unused(challenges, attempt["id"])
+    assert transcriber.calls == []
+
+
+def test_missing_voiceprint_key_returns_503_and_keeps_the_passage(
+    client, challenges, transcriber, embedder, enrolled, attempt, monkeypatch
+):
+    monkeypatch.setattr(config, "VOICEPRINT_KEY", "")
+    response = submit(client, attempt["id"])
+
+    assert response.status_code == 503
+    assert is_unused(challenges, attempt["id"])
+
+
+def test_model_service_outage_returns_503(client, transcriber, embedder, enrolled, attempt):
+    embedder.error = IdentityUnavailable("The model service can't be reached.")
+
+    response = submit(client, attempt["id"])
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "Voice checks are temporarily unavailable. Please try again shortly."
+
+
+def test_embedding_from_a_different_model_returns_503(client, transcriber, embedder, enrolled, attempt):
+    embedder.voice = [0.1, 0.2]  # not the voiceprint's size
+
+    assert submit(client, attempt["id"]).status_code == 503
+
+
+def test_recording_the_model_service_cannot_read_asks_for_a_new_passage(
+    client, transcriber, embedder, enrolled, attempt
+):
+    embedder.error = AudioNotUnderstood("The model service couldn't read the recording.")
+
+    response = submit(client, attempt["id"])
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "We couldn't process that recording. Please get a new passage and record again."

@@ -37,6 +37,12 @@ def get_challenges_collection() -> Collection:
 
 
 @lru_cache
+def get_voiceprints_collection() -> Collection:
+    # One encrypted voiceprint per user, keyed by user id.
+    return get_client()[config.MONGO_DB_NAME]["voiceprints"]
+
+
+@lru_cache
 def get_rate_limits_collection() -> Collection:
     rate_limits = get_client()[config.MONGO_DB_NAME]["rate_limits"]
     # One counter per user per time window. MongoDB deletes each counter
