@@ -1,7 +1,8 @@
-# PyTorch is installed separately (CPU-only build), see the Dockerfile.
-speechbrain==1.0.3
-huggingface_hub==0.25.2
-numpy==1.26.4
-fastapi==0.115.0
-uvicorn==0.30.6
-python-multipart==0.0.32
+# Installed by the Hugging Face Space on top of Gradio, which already
+# brings FastAPI, uvicorn, python-multipart and numpy.
+# CPU-only PyTorch: the default build pulls in GPU libraries (several GB)
+# that a free CPU Space can't use.
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.7.1+cpu
+torchaudio==2.7.1+cpu
+speechbrain==1.1.1
