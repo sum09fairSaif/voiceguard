@@ -177,7 +177,7 @@ def test_a_clear_recording_is_all_speech_and_not_clipped(client):
 
 
 def test_silence_has_no_speech(client):
-    silence = make_audio(source="anullsrc=channel_layout=mono:sample_rate=48000:duration=1")
+    silence = make_audio(source="sine=frequency=220:duration=1,volume=0")
 
     assert send(client, silence).json()["speech_seconds"] == 0.0
 

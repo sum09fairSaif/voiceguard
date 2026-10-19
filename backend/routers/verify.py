@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, s
 from pymongo.collection import Collection
 
 import config
+from audio_upload import read_recording
 from challenges import use_challenge
 from content_check import check_content
 from db import get_challenges_collection, get_rate_limits_collection, get_voiceprints_collection
@@ -20,24 +21,6 @@ from transcription import AudioNotUnderstood, Transcriber, TranscriptionUnavaila
 router = APIRouter(prefix="/api", tags=["verify"])
 
 logger = logging.getLogger("voiceguard.verify")
-
-# Reading six words is a few seconds of compressed audio, around 100 KB.
-# 1 MB is plenty, and uploads that size stay in memory instead of being
-# written to a temporary file.
-MAX_AUDIO_BYTES = 1024 * 1024
-
-# What browsers record in, mapped to the file extension Whisper and the
-# model service use to recognise the format. The uploaded filename is never trusted or used.
-AUDIO_TYPES = {
-    "audio/webm": "webm",
-    "audio/ogg": "ogg",
-    "audio/mp4": "mp4",
-    "audio/m4a": "m4a",
-    "audio/x-m4a": "m4a",
-    "audio/mpeg": "mp3",
-    "audio/wav": "wav",
-    "audio/x-wav": "wav",
-}
 
 
 @router.post("/verify", response_model=VerifyResponse)
@@ -55,26 +38,7 @@ def verify(
     # cost the user their passage.
     count_request(rate_limits, "verify", user_id, config.VERIFY_RATE_LIMIT, config.RATE_LIMIT_WINDOW_SECONDS)
 
-    # Browsers send e.g. "audio/webm;codecs=opus", so drop the parameters.
-    media_type = (audio.content_type or "").split(";")[0].strip().lower()
-    extension = AUDIO_TYPES.get(media_type)
-    if extension is None:
-        raise HTTPException(
-            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-            detail="Please send the recording as audio (webm, ogg, mp4, mp3 or wav).",
-        )
-
-    recording = audio.file.read(MAX_AUDIO_BYTES + 1)
-    if len(recording) > MAX_AUDIO_BYTES:
-        raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail="The recording is too long. Please read just the passage.",
-        )
-    if not recording:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="The recording is empty. Please try again.",
-        )
+    recording, extension = read_recording(audio)
 
     # None if the user hasn't enrolled. Checked before the passage is used
     # up, so a misconfigured server doesn't cost the user their passage.
@@ -96,7 +60,7 @@ def verify(
     identity = None
     if voiceprint is not None:
         try:
-            identity = check_identity(voiceprint, embed(recording, f"attempt.{extension}"))
+            identity = check_identity(voiceprint, embed(recording, f"attempt.{extension}").vector)
         except ValueError as exc:
             # Sizes differ: the service is running a different model.
             raise IdentityUnavailable("The embedding doesn't match the voiceprint's model.") from exc
