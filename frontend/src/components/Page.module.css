@@ -1,0 +1,13 @@
+.viewport {
+  min-height: 100dvh;
+  display: flex;
+  justify-content: center;
+}
+
+.column {
+  width: 100%;
+  max-width: var(--column-max-width);
+  padding: 40px var(--page-padding-x) 32px;
+  display: flex;
+  flex-direction: column;
+}

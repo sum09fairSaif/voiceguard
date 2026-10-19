@@ -1,0 +1,42 @@
+.field {
+  display: flex;
+  flex-direction: column;
+}
+
+.label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.input {
+  margin-top: 9px;
+  height: 52px;
+  padding: 0 15px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-input);
+  background: var(--color-surface);
+  font: inherit;
+  font-size: 13px;
+  color: var(--color-text);
+}
+
+.input::placeholder {
+  color: var(--color-muted);
+}
+
+.input:focus {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -1px;
+  border-color: var(--color-accent);
+}
+
+.input[aria-invalid="true"] {
+  border-color: var(--color-error);
+}
+
+.error {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--color-error);
+}
