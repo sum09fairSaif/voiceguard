@@ -49,3 +49,12 @@ def get_rate_limits_collection() -> Collection:
     # once its window has ended.
     rate_limits.create_index("expires_at", expireAfterSeconds=0)
     return rate_limits
+
+
+@lru_cache
+def get_enrollments_collection() -> Collection:
+    # Samples a user has given towards a voiceprint, keyed by user id.
+    # MongoDB deletes an unfinished enrollment once it has expired.
+    enrollments = get_client()[config.MONGO_DB_NAME]["enrollments"]
+    enrollments.create_index("expires_at", expireAfterSeconds=0)
+    return enrollments

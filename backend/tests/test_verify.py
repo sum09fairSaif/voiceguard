@@ -6,12 +6,12 @@ from bson import ObjectId
 from pymongo.errors import ServerSelectionTimeoutError
 
 import config
+from audio_upload import MAX_AUDIO_BYTES
 from challenges import create_challenge
 from db import get_challenges_collection
-from embedding import get_embedder
+from embedding import Embedding, get_embedder
 from identity_check import IdentityUnavailable
 from main import app
-from routers.verify import MAX_AUDIO_BYTES
 from security import create_access_token
 from transcription import AudioNotUnderstood, TranscriptionUnavailable, get_openai_client, get_transcriber
 from voiceprints import save_voiceprint
@@ -59,7 +59,7 @@ class FakeEmbedder:
         self.calls.append((audio, filename))
         if self.error:
             raise self.error
-        return self.voice
+        return Embedding(vector=self.voice, speech_seconds=2.0, clipped_share=0.0)
 
 
 # Two made-up voices at right angles to each other: similarity 0.

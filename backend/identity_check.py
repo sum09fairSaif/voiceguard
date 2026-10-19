@@ -16,7 +16,7 @@ class IdentityResult:
     passed: bool
 
 
-def _cosine(a: list[float], b: list[float]) -> float:
+def cosine_similarity(a: list[float], b: list[float]) -> float:
     if len(a) != len(b):
         raise ValueError(f"Embeddings differ in size ({len(a)} vs {len(b)}).")
     norms = math.sqrt(sum(x * x for x in a)) * math.sqrt(sum(y * y for y in b))
@@ -27,5 +27,5 @@ def _cosine(a: list[float], b: list[float]) -> float:
 
 def check_identity(voiceprint: list[float], attempt: list[float]) -> IdentityResult:
     """Compare the voice in this attempt to the user's enrolled voiceprint."""
-    score = _cosine(voiceprint, attempt)
+    score = cosine_similarity(voiceprint, attempt)
     return IdentityResult(score=score, passed=score >= config.IDENTITY_THRESHOLD)

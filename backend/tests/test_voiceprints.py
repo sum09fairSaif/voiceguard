@@ -3,7 +3,7 @@ from cryptography.fernet import Fernet
 
 import config
 from identity_check import IdentityUnavailable
-from voiceprints import build_voiceprint, load_voiceprint, save_voiceprint
+from voiceprints import build_voiceprint, has_voiceprint, load_voiceprint, save_voiceprint
 
 USER_ID = "user-1"
 VOICEPRINT = [0.123456, -0.5, 0.25]
@@ -68,3 +68,12 @@ def test_voiceprint_needs_a_recording_with_voice_in_it():
         build_voiceprint([])
     with pytest.raises(ValueError):
         build_voiceprint([[0.0, 0.0]])
+
+
+def test_has_voiceprint_only_for_the_current_model(voiceprints, monkeypatch):
+    assert has_voiceprint(voiceprints, USER_ID) is False
+    save_voiceprint(voiceprints, USER_ID, VOICEPRINT)
+    assert has_voiceprint(voiceprints, USER_ID) is True
+
+    monkeypatch.setattr(config, "EMBEDDING_MODEL", "some/other-model")
+    assert has_voiceprint(voiceprints, USER_ID) is False

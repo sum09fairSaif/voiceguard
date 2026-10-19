@@ -35,7 +35,23 @@ def service(monkeypatch):
 
 
 def test_returns_the_embedding(service):
-    assert embed(URL, TOKEN, RECORDING, "attempt.webm") == [0.1, -0.2, 0.3]
+    result = embed(URL, TOKEN, RECORDING, "attempt.webm")
+
+    assert result.vector == [0.1, -0.2, 0.3]
+    # An older model service doesn't measure quality; that's not an error.
+    assert result.speech_seconds is None
+    assert result.clipped_share is None
+
+
+def test_returns_the_quality_measures(service):
+    service.response = httpx.Response(
+        200, json={"embedding": [0.1, -0.2, 0.3], "speech_seconds": 2.4, "clipped_share": 0}
+    )
+
+    result = embed(URL, TOKEN, RECORDING, "attempt.webm")
+
+    assert result.speech_seconds == 2.4
+    assert result.clipped_share == 0.0
 
 
 def test_sends_the_recording_with_the_service_token(service):
@@ -71,8 +87,15 @@ def test_unreachable_service_is_reported_as_unavailable(service):
 
 @pytest.mark.parametrize(
     "body",
-    [{"wrong": [0.1]}, {"embedding": "0.1"}, {"embedding": [0.1, "x"]}, ["not", "a", "dict"]],
-    ids=["missing", "not-a-list", "not-numbers", "not-an-object"],
+    [
+        {"wrong": [0.1]},
+        {"embedding": "0.1"},
+        {"embedding": [0.1, "x"]},
+        ["not", "a", "dict"],
+        {"embedding": [0.1], "speech_seconds": "long"},
+        {"embedding": [0.1], "clipped_share": True},
+    ],
+    ids=["missing", "not-a-list", "not-numbers", "not-an-object", "bad-speech-seconds", "bad-clipped-share"],
 )
 def test_unexpected_answer_is_reported_as_unavailable(service, body):
     service.response = httpx.Response(200, json=body)
@@ -95,5 +118,5 @@ def test_embedder_uses_the_configured_service(service, monkeypatch):
     monkeypatch.setattr(config, "EMBEDDING_SERVICE_URL", URL)
     monkeypatch.setattr(config, "EMBEDDING_SERVICE_TOKEN", TOKEN)
 
-    assert get_embedder()(RECORDING, "attempt.ogg") == [0.1, -0.2, 0.3]
+    assert get_embedder()(RECORDING, "attempt.ogg").vector == [0.1, -0.2, 0.3]
     assert service.calls[0][1]["files"]["audio"][0] == "attempt.ogg"

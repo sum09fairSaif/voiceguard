@@ -62,3 +62,13 @@ class VerifyResponse(BaseModel):
     identity: Literal["passed", "failed", "not_enrolled"]
     # Not built yet (#17). Reported as such rather than faked as passing.
     liveness: Literal["not_checked"] = "not_checked"
+
+
+class EnrollmentStatus(BaseModel):
+    status: Literal["not_started", "in_progress", "enrolled"]
+    samples_accepted: int
+    samples_required: int
+    # Something for the user to read aloud for their next sample, so each
+    # take is a few seconds of natural speech. Not checked, just a guide.
+    # None once enrolled.
+    prompt: str | None

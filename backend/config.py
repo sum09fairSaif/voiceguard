@@ -60,3 +60,27 @@ CHALLENGE_RATE_LIMIT = int(os.getenv("CHALLENGE_RATE_LIMIT", "20"))
 VERIFY_RATE_LIMIT = int(os.getenv("VERIFY_RATE_LIMIT", "10"))
 if RATE_LIMIT_WINDOW_SECONDS <= 0 or CHALLENGE_RATE_LIMIT <= 0 or VERIFY_RATE_LIMIT <= 0:
     raise RuntimeError("RATE_LIMIT_WINDOW_SECONDS, CHALLENGE_RATE_LIMIT and VERIFY_RATE_LIMIT must be more than 0.")
+
+# Enrollment. Provisional limits: set them from the evaluation harness and
+# the per-sample log lines once there are real recordings.
+# How many good samples make a voiceprint.
+ENROLL_SAMPLES_REQUIRED = int(os.getenv("ENROLL_SAMPLES_REQUIRED", "3"))
+# Least voice (not silence) a sample must hold. Reading a six-word passage
+# gives about 2 seconds.
+ENROLL_MIN_SPEECH_SECONDS = float(os.getenv("ENROLL_MIN_SPEECH_SECONDS", "1.5"))
+# Most of a sample that may be cut off at full volume (0.01 = 1%).
+ENROLL_MAX_CLIPPED_SHARE = float(os.getenv("ENROLL_MAX_CLIPPED_SHARE", "0.01"))
+# Lowest similarity between a new sample and the user's earlier ones. Below
+# it, the sample is probably noise, another voice, or a bad microphone.
+ENROLL_CONSISTENCY_THRESHOLD = float(os.getenv("ENROLL_CONSISTENCY_THRESHOLD", "0.5"))
+# How long accepted samples wait for the rest before they're thrown away.
+ENROLL_SESSION_TTL_SECONDS = int(os.getenv("ENROLL_SESSION_TTL_SECONDS", "1800"))
+# Each sample is a model-service call. A user who has to redo every take
+# still stays well under this.
+ENROLL_RATE_LIMIT = int(os.getenv("ENROLL_RATE_LIMIT", "20"))
+if ENROLL_SAMPLES_REQUIRED <= 0 or ENROLL_SESSION_TTL_SECONDS <= 0 or ENROLL_RATE_LIMIT <= 0:
+    raise RuntimeError("ENROLL_SAMPLES_REQUIRED, ENROLL_SESSION_TTL_SECONDS and ENROLL_RATE_LIMIT must be more than 0.")
+if ENROLL_MIN_SPEECH_SECONDS < 0 or not 0.0 <= ENROLL_MAX_CLIPPED_SHARE <= 1.0:
+    raise RuntimeError("ENROLL_MIN_SPEECH_SECONDS can't be negative; ENROLL_MAX_CLIPPED_SHARE must be between 0 and 1.")
+if not -1.0 <= ENROLL_CONSISTENCY_THRESHOLD <= 1.0:
+    raise RuntimeError("ENROLL_CONSISTENCY_THRESHOLD must be between -1 and 1.")
