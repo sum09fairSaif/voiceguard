@@ -1,6 +1,7 @@
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { RequireSession } from "./components/RequireSession";
 import { PassagePage } from "./pages/PassagePage";
+import { ResultPage } from "./pages/ResultPage";
 import { SignupPage } from "./pages/SignupPage";
 
 function App() {
@@ -13,6 +14,14 @@ function App() {
           element={
             <RequireSession>
               <PassagePage />
+            </RequireSession>
+          }
+        />
+        <Route
+          path="/result"
+          element={
+            <RequireSession>
+              <ResultPage />
             </RequireSession>
           }
         />
