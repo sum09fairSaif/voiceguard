@@ -89,7 +89,12 @@ describe("Passage screen", () => {
     renderPage();
     await screen.findByText("“Quilt tiger ocean”");
 
-    act(() => vi.advanceTimersByTime(2000));
+    // Let React finish setting up the countdown timer, then go a little past
+    // the expiry. Advancing before the timer exists made this test flaky.
+    await act(async () => {});
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3000);
+    });
 
     expect(screen.getByText("This phrase has expired.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /get a new phrase/i })).toBeInTheDocument();
