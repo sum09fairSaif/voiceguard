@@ -1,7 +1,7 @@
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { RequireSession } from "./components/RequireSession";
+import { PassagePage } from "./pages/PassagePage";
 import { SignupPage } from "./pages/SignupPage";
-import { VerifyPlaceholderPage } from "./pages/VerifyPlaceholderPage";
 
 function App() {
   return (
@@ -12,7 +12,7 @@ function App() {
           path="/verify"
           element={
             <RequireSession>
-              <VerifyPlaceholderPage />
+              <PassagePage />
             </RequireSession>
           }
         />
