@@ -1,17 +1,25 @@
-import { Logo } from "./components/Logo";
-import { Page } from "./components/Page";
-import { PageHeading } from "./components/PageHeading";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { RequireSession } from "./components/RequireSession";
+import { SignupPage } from "./pages/SignupPage";
+import { VerifyPlaceholderPage } from "./pages/VerifyPlaceholderPage";
 
 function App() {
   return (
-    <Page>
-      <Logo />
-      <PageHeading
-        eyebrow="Your voice. Your security."
-        title="Be yourself. Stay protected."
-        subtitle="Voice-biometric multi-factor authentication. Screens are on their way."
-      />
-    </Page>
+    <BrowserRouter>
+      <Routes>
+        <Route path="/signup" element={<SignupPage />} />
+        <Route
+          path="/verify"
+          element={
+            <RequireSession>
+              <VerifyPlaceholderPage />
+            </RequireSession>
+          }
+        />
+        {/* "/" and any unknown address start at signup. */}
+        <Route path="*" element={<Navigate to="/signup" replace />} />
+      </Routes>
+    </BrowserRouter>
   );
 }
 
