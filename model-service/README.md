@@ -60,7 +60,7 @@ Needs Python 3.11, ffmpeg on the PATH (or `FFMPEG_BINARY` pointing at it),
 and about 450 MB of free memory.
 
 ```
-pip install --extra-index-url https://download.pytorch.org/whl/cpu -r requirements.txt fastapi==0.115.2 uvicorn==0.30.6 python-multipart==0.0.32
+pip install -r requirements.txt fastapi==0.115.2 uvicorn==0.30.6 python-multipart==0.0.32
 SERVICE_TOKEN=any-local-token PORT=7861 python app.py
 ```
 
