@@ -1,6 +1,4 @@
-# Enough to run the tests, which use a stand-in for the model, so no PyTorch.
+# Enough to run the tests, which call the request handler directly with a
+# stand-in for the model: no PyTorch and no Gradio needed.
 numpy==1.26.4
-fastapi==0.115.0
-python-multipart==0.0.32
-httpx==0.27.2
 pytest==8.3.3
