@@ -15,6 +15,18 @@ def _cipher() -> Fernet:
     return Fernet(config.VOICEPRINT_KEY)
 
 
+def encrypt_embedding(embedding: list[float]) -> bytes:
+    return _cipher().encrypt(json.dumps(embedding).encode())
+
+
+def decrypt_embedding(encrypted: bytes) -> list[float]:
+    try:
+        return json.loads(_cipher().decrypt(encrypted))
+    except InvalidToken as exc:
+        # Wrong or rotated key: a server problem, not the user's fault.
+        raise IdentityUnavailable("The voiceprint couldn't be decrypted.") from exc
+
+
 def build_voiceprint(embeddings: list[list[float]]) -> list[float]:
     """Combine the embeddings of several recordings into one voiceprint:
     the average of each scaled to length 1, so no take counts more for
@@ -32,8 +44,8 @@ def build_voiceprint(embeddings: list[list[float]]) -> list[float]:
 
 def save_voiceprint(voiceprints: Collection, user_id: str, embedding: list[float]) -> None:
     """Store a user's voiceprint, encrypted, replacing any earlier one.
-    Enrollment will call this; for now only tests and the dev script do."""
-    encrypted = _cipher().encrypt(json.dumps(embedding).encode())
+    Callers decide whether replacing is allowed (enrollment refuses to)."""
+    encrypted = encrypt_embedding(embedding)
     voiceprints.replace_one(
         {"_id": user_id},
         {
@@ -47,14 +59,16 @@ def save_voiceprint(voiceprints: Collection, user_id: str, embedding: list[float
     )
 
 
+def has_voiceprint(voiceprints: Collection, user_id: str) -> bool:
+    """Whether the user has a voiceprint from the current model. Needs no
+    key, so it works even when voice checks are unavailable."""
+    return voiceprints.count_documents({"_id": user_id, "model": config.EMBEDDING_MODEL}, limit=1) > 0
+
+
 def load_voiceprint(voiceprints: Collection, user_id: str) -> list[float] | None:
     """Return the user's decrypted voiceprint, or None if they haven't
     enrolled (or enrolled with a different model, so must enroll again)."""
     record = voiceprints.find_one({"_id": user_id})
     if record is None or record.get("model") != config.EMBEDDING_MODEL:
         return None
-    try:
-        return json.loads(_cipher().decrypt(record["voiceprint"]))
-    except InvalidToken as exc:
-        # Wrong or rotated key: a server problem, not the user's fault.
-        raise IdentityUnavailable("The voiceprint couldn't be decrypted.") from exc
+    return decrypt_embedding(record["voiceprint"])

@@ -9,7 +9,7 @@ from pymongo.errors import PyMongoError
 
 from identity_check import IdentityUnavailable
 from rate_limit import RateLimited
-from routers import auth, challenge, verify
+from routers import auth, challenge, enroll, verify
 from transcription import AudioNotUnderstood, TranscriptionUnavailable
 
 # uvicorn only sets up its own loggers, so without this our info lines
@@ -28,6 +28,7 @@ app.add_middleware(
 
 app.include_router(auth.router)
 app.include_router(challenge.router)
+app.include_router(enroll.router)
 app.include_router(verify.router)
 
 

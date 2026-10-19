@@ -23,7 +23,11 @@ while ffmpeg decodes it, then deleted.
 - `GET /health` returns `{"status": "ok", "model": "..."}`.
 - `POST /embed` with header `Authorization: Bearer <SERVICE_TOKEN>` and a
   multipart file field `audio` (webm, ogg, mp4, m4a, mp3 or wav, up to
-  1 MB, at least 0.5 s of sound). Returns `{"embedding": [...], "model": "..."}`.
+  1 MB, at least 0.5 s of sound). Returns
+  `{"embedding": [...], "model": "...", "speech_seconds": 2.1, "clipped_share": 0.0}`:
+  `speech_seconds` is how much of the recording is loud enough to be voice,
+  `clipped_share` the share of samples cut off at full volume (0 to 1).
+  The backend uses these to turn away poor enrollment samples.
   Errors: 401 wrong token, 413 too large, 422 not readable audio,
   503 `SERVICE_TOKEN` not set on the service.
 
