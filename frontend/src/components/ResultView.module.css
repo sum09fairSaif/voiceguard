@@ -1,0 +1,92 @@
+.result {
+  margin-top: 54px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.eyebrow {
+  margin-top: 40px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.eyebrow.success,
+.eyebrow.partial {
+  color: var(--color-accent);
+}
+
+.eyebrow.failure {
+  color: var(--color-error);
+}
+
+.title {
+  margin-top: 8px;
+  max-width: 260px;
+  font-size: 38px;
+  line-height: 43px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--color-text);
+}
+
+.subtitle {
+  margin-top: 22px;
+  max-width: 280px;
+  font-size: 13px;
+  line-height: 22px;
+  color: var(--color-muted);
+}
+
+.checks {
+  margin: 30px 0 0;
+  padding: 4px 18px;
+  width: 100%;
+  list-style: none;
+  border: 1px solid var(--color-card-border);
+  border-radius: var(--radius-status-card);
+  background: var(--color-surface);
+}
+
+.check {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px 0;
+  font-size: 12px;
+}
+
+.check + .check {
+  border-top: 1px solid var(--color-card-border);
+}
+
+.checkLabel {
+  color: var(--color-muted);
+}
+
+.checkStatus {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+
+.passed {
+  color: var(--color-success);
+}
+
+.failed {
+  color: var(--color-error);
+}
+
+.pending {
+  color: var(--color-muted);
+}
+
+.action {
+  margin-top: 30px;
+  width: 100%;
+}

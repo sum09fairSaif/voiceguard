@@ -90,7 +90,7 @@ describe("Recording and submitting", () => {
 
     reply.resolve(INCOMPLETE);
     expect(await screen.findByText("Almost there.")).toBeInTheDocument();
-    expect(screen.getByText("No voiceprint yet")).toBeInTheDocument();
+    expect(screen.getByText("Not set up yet")).toBeInTheDocument();
   });
 
   it("lets you record again before submitting", async () => {
