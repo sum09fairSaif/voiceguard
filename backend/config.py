@@ -38,6 +38,11 @@ if CONTENT_MAX_MISSED_WORDS < 0 or CONTENT_MAX_EXTRA_WORDS < 0:
 # "unavailable"; users without one are unaffected.
 EMBEDDING_SERVICE_URL = os.getenv("EMBEDDING_SERVICE_URL", "")
 EMBEDDING_SERVICE_TOKEN = os.getenv("EMBEDDING_SERVICE_TOKEN", "")
+# Optional Hugging Face access token. The model service runs on ZeroGPU,
+# which rations GPU time per caller; with this set, the backend's calls
+# count against that account instead of as anonymous use. Without it (or
+# once the quota is used up) the service falls back to its CPU.
+EMBEDDING_SERVICE_HF_TOKEN = os.getenv("EMBEDDING_SERVICE_HF_TOKEN", "")
 # Which model made the voiceprints. Changing models means re-enrolling.
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "speechbrain/spkrec-ecapa-voxceleb")
 # Encrypts voiceprints at rest. A Fernet key: generate one with
