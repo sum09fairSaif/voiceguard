@@ -1,0 +1,69 @@
+.emblem {
+  position: relative;
+  width: 220px;
+  height: 220px;
+}
+
+.outer,
+.middle,
+.core,
+.dotLarge,
+.dotSmall {
+  position: absolute;
+  border-radius: 50%;
+}
+
+.outer {
+  inset: 0;
+  border: 1px solid var(--ring);
+}
+
+.middle {
+  inset: 26px;
+  border: 1px solid var(--ring);
+}
+
+.core {
+  inset: 50px;
+  background: var(--soft);
+  color: var(--strong);
+  display: grid;
+  place-items: center;
+}
+
+.dotLarge {
+  width: 10px;
+  height: 10px;
+  top: 25px;
+  right: 29px;
+  background: var(--strong);
+}
+
+.dotSmall {
+  width: 8px;
+  height: 8px;
+  top: 162px;
+  left: 14px;
+  background: var(--dot);
+}
+
+.success {
+  --strong: var(--color-success);
+  --soft: var(--color-success-soft);
+  --ring: var(--color-success-ring);
+  --dot: var(--color-success-dot);
+}
+
+.failure {
+  --strong: var(--color-error);
+  --soft: var(--color-error-soft);
+  --ring: var(--color-error-ring);
+  --dot: var(--color-error-dot);
+}
+
+.partial {
+  --strong: var(--color-accent);
+  --soft: var(--color-accent-soft);
+  --ring: var(--color-accent-border);
+  --dot: var(--color-accent-border);
+}
