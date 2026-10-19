@@ -167,3 +167,28 @@ def test_expired_attempt_cannot_be_used(challenges):
 @pytest.mark.parametrize("attempt_id", ["not-an-id", str(ObjectId())], ids=["malformed", "unknown"])
 def test_unknown_attempt_cannot_be_used(challenges, attempt_id):
     assert use_challenge(challenges, attempt_id, USER_ID) is None
+
+
+# --- Rate limit -------------------------------------------------------------
+
+
+def test_too_many_passages_are_refused(client, challenges, monkeypatch):
+    monkeypatch.setattr(config, "CHALLENGE_RATE_LIMIT", 2)
+    for _ in range(2):
+        assert client.post(CHALLENGE_URL, headers=signed_in()).status_code == 201
+
+    response = client.post(CHALLENGE_URL, headers=signed_in())
+
+    assert response.status_code == 429
+    assert response.json()["detail"].startswith("Too many attempts. Please try again in ")
+    assert 0 < int(response.headers["Retry-After"]) <= config.RATE_LIMIT_WINDOW_SECONDS
+    assert challenges.count_documents({}) == 2
+
+
+def test_rate_limit_is_per_user(client, monkeypatch):
+    monkeypatch.setattr(config, "CHALLENGE_RATE_LIMIT", 1)
+    client.post(CHALLENGE_URL, headers=signed_in())
+
+    response = client.post(CHALLENGE_URL, headers=signed_in(str(ObjectId())))
+
+    assert response.status_code == 201
