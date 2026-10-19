@@ -1,0 +1,38 @@
+.heading {
+  display: flex;
+  flex-direction: column;
+}
+
+.badge {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-badge);
+  background: var(--color-accent-soft);
+  display: grid;
+  place-items: center;
+}
+
+.eyebrow {
+  margin-top: 23px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-accent);
+}
+
+.title {
+  margin-top: 6px;
+  font-size: 36px;
+  line-height: 40px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--color-text);
+}
+
+.subtitle {
+  margin-top: 22px;
+  font-size: 13px;
+  line-height: 21px;
+  color: var(--color-muted);
+}

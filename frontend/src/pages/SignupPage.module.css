@@ -1,0 +1,27 @@
+.heading {
+  margin-top: 48px;
+}
+
+.form {
+  margin-top: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.formError {
+  font-size: 13px;
+  color: var(--color-error);
+}
+
+.submit {
+  margin-top: 19px;
+}
+
+/* The Figma uses 8px here; 11px keeps it readable. */
+.terms {
+  margin-top: 24px;
+  font-size: 11px;
+  text-align: center;
+  color: var(--color-muted);
+}
