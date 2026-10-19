@@ -114,6 +114,25 @@ describe("Create account screen", () => {
     expect(screen.getByRole("button", { name: /creating account/i })).toBeDisabled();
     expect(mockSignup).toHaveBeenCalledTimes(1);
   });
+
+  it("locks the fields while sending, so an error always matches what was sent", async () => {
+    mockSignup.mockReturnValue(new Promise(() => {}));
+    renderApp();
+    await fillAndSubmit();
+
+    expect(screen.getByLabelText("Full name")).toBeDisabled();
+    expect(screen.getByLabelText("Email address")).toBeDisabled();
+    expect(screen.getByLabelText("Password")).toBeDisabled();
+  });
+
+  it("unlocks the fields again after a failed signup", async () => {
+    mockSignup.mockRejectedValue(apiError(409));
+    renderApp();
+    await fillAndSubmit();
+
+    await screen.findByText("An account with this email already exists.");
+    expect(screen.getByLabelText("Email address")).toBeEnabled();
+  });
 });
 
 describe("Session guard", () => {

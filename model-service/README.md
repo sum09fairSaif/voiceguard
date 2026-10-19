@@ -35,7 +35,8 @@ installs Gradio (which brings FastAPI and uvicorn), the apt packages in
 which serves the FastAPI app on port 7860. No Gradio UI is used.
 
 1. On huggingface.co, create a new Space: SDK **Gradio**, template
-   **Blank**, hardware **CPU basic** (free), visibility **Public** (the
+   **Blank**, hardware **ZeroGPU** (the free option; CPU basic needs PRO),
+   visibility **Public** (the
    backend calls it without a Hugging Face login; `/embed` is protected by
    `SERVICE_TOKEN` instead).
 2. In the Space's **Settings → Variables and secrets**, add a secret

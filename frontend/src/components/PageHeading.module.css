@@ -10,10 +10,10 @@
   background: var(--color-accent-soft);
   display: grid;
   place-items: center;
+  margin-bottom: 23px;
 }
 
 .eyebrow {
-  margin-top: 23px;
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.04em;

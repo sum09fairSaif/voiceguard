@@ -79,6 +79,7 @@ export function SignupPage() {
         />
       </div>
 
+      {/* Fields lock while sending, so a server error always matches what was sent. */}
       <form className={styles.form} onSubmit={handleSubmit} noValidate>
         <TextField
           id="full-name"
@@ -88,6 +89,7 @@ export function SignupPage() {
           value={form.fullName}
           onChange={(event) => update("fullName", event.target.value)}
           error={errors.fullName}
+          disabled={submitting}
         />
         <TextField
           id="email"
@@ -98,6 +100,7 @@ export function SignupPage() {
           value={form.email}
           onChange={(event) => update("email", event.target.value)}
           error={errors.email}
+          disabled={submitting}
         />
         <TextField
           id="password"
@@ -108,6 +111,7 @@ export function SignupPage() {
           value={form.password}
           onChange={(event) => update("password", event.target.value)}
           error={errors.password}
+          disabled={submitting}
         />
 
         {formError && (
