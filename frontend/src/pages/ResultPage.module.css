@@ -1,0 +1,40 @@
+.progress {
+  margin-top: 47px;
+}
+
+.heading {
+  margin-top: 35px;
+}
+
+.checks {
+  margin: 25px 0 0;
+  padding: 6px 16px;
+  border: 1px solid var(--color-accent-border);
+  border-radius: var(--radius-card);
+  background: var(--color-accent-soft);
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  padding: 12px 0;
+  font-size: 13px;
+}
+
+.row + .row {
+  border-top: 1px solid var(--color-accent-border);
+}
+
+.row dt {
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.row dd {
+  margin: 0;
+  color: var(--color-muted);
+}
+
+.action {
+  margin-top: 32px;
+}
