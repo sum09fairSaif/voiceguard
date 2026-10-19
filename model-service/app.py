@@ -1,7 +1,8 @@
 """VoiceGuard model service: turns a recording into a speaker embedding.
 
-Runs separately from the backend (as a Hugging Face Space) because the
-voice model needs PyTorch, which is too big for the backend's host. The
+Runs separately from the backend (as a free Hugging Face Space, started
+with `python app.py`) because the voice model needs PyTorch, which is too
+big for the backend's host. The
 backend sends a recording and gets back a list of numbers describing the
 voice. Recordings are never stored: each one lives in a temporary file only
 while it is decoded, then is deleted.
@@ -146,3 +147,10 @@ def create_app(load: Callable[[], Encoder] = load_encoder) -> FastAPI:
 
 
 app = create_app()
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    # Hugging Face Spaces serve whatever listens on port 7860.
+    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", "7860")))
