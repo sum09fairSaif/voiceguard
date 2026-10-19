@@ -46,13 +46,31 @@ export function useRecorder({ maxSeconds = 15 }: { maxSeconds?: number } = {}) {
   const [recording, setRecording] = useState<Blob | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  // Bumped by reset and by leaving the screen. A start that was waiting for
+  // microphone permission checks it afterwards, so a late "Allow" can't
+  // start recording for a passage that's gone.
+  const generationRef = useRef(0);
 
   const releaseMicrophone = useCallback(() => {
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
   }, []);
 
+  // Stops any recording in progress without keeping it, and turns the
+  // microphone off.
+  const discardRecording = useCallback(() => {
+    const recorder = recorderRef.current;
+    recorderRef.current = null;
+    if (recorder && recorder.state === "recording") {
+      recorder.ondataavailable = null;
+      recorder.onstop = null;
+      recorder.stop();
+    }
+    releaseMicrophone();
+  }, [releaseMicrophone]);
+
   const start = useCallback(async () => {
+    const generation = ++generationRef.current;
     setError("");
     setRecording(null);
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
@@ -67,8 +85,14 @@ export function useRecorder({ maxSeconds = 15 }: { maxSeconds?: number } = {}) {
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch (err) {
+      if (generation !== generationRef.current) return;
       setStatus("error");
       setError(microphoneError(err));
+      return;
+    }
+    if (generation !== generationRef.current) {
+      // Reset or left while the permission prompt was open.
+      stream.getTracks().forEach((track) => track.stop());
       return;
     }
     streamRef.current = stream;
@@ -101,11 +125,13 @@ export function useRecorder({ maxSeconds = 15 }: { maxSeconds?: number } = {}) {
   }, []);
 
   const reset = useCallback(() => {
+    generationRef.current++;
+    discardRecording();
     setRecording(null);
     setError("");
     setElapsed(0);
     setStatus("idle");
-  }, []);
+  }, [discardRecording]);
 
   // Elapsed seconds while recording.
   useEffect(() => {
@@ -121,15 +147,12 @@ export function useRecorder({ maxSeconds = 15 }: { maxSeconds?: number } = {}) {
 
   // Leaving the screen mid-recording must not leave the microphone on.
   useEffect(() => {
+    const generation = generationRef;
     return () => {
-      const recorder = recorderRef.current;
-      if (recorder && recorder.state === "recording") {
-        recorder.onstop = null;
-        recorder.stop();
-      }
-      releaseMicrophone();
+      generation.current++;
+      discardRecording();
     };
-  }, [releaseMicrophone]);
+  }, [discardRecording]);
 
   return { status, error, elapsed, recording, start, stop, reset };
 }

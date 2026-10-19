@@ -30,6 +30,8 @@ export function PassagePage() {
   const [needsNewPhrase, setNeedsNewPhrase] = useState(false);
 
   const passageUsable = challenge !== null && !expired && !loading && !needsNewPhrase;
+  // Changing the passage mid-recording would pair the recording with the wrong one.
+  const microphoneBusy = recorder.status === "recording" || recorder.status === "requesting";
 
   // A recording only counts for the passage it was read against.
   function handleNewPhrase() {
@@ -108,7 +110,7 @@ export function PassagePage() {
             <>
               <span className={styles.countdown}>Expires in {formatCountdown(secondsRemaining)}</span>
               <span aria-hidden="true">·</span>
-              <button type="button" className={styles.link} onClick={handleNewPhrase} disabled={recording}>
+              <button type="button" className={styles.link} onClick={handleNewPhrase} disabled={microphoneBusy}>
                 ↻ New phrase
               </button>
             </>
@@ -116,7 +118,7 @@ export function PassagePage() {
           {!loading && challenge && expired && (
             <>
               <span className={styles.countdown}>This phrase has expired.</span>
-              <button type="button" className={styles.link} onClick={handleNewPhrase}>
+              <button type="button" className={styles.link} onClick={handleNewPhrase} disabled={microphoneBusy}>
                 ↻ Get a new phrase
               </button>
             </>

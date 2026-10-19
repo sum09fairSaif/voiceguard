@@ -242,4 +242,32 @@ describe("Recording and submitting", () => {
     await user.click(screen.getByRole("button", { name: "Start recording" }));
     expect(await screen.findByRole("button", { name: "Stop recording" })).toBeInTheDocument();
   });
+
+  it("won't change the phrase while recording, even once it has expired", async () => {
+    mockChallenge.mockReset().mockResolvedValue({
+      attempt_id: "a1",
+      passage: "passage a1",
+      expires_at: new Date(Date.now() + 1500).toISOString(),
+    });
+    const user = userEvent.setup();
+    renderFlow();
+    await screen.findByText("“Passage a1”");
+    await user.click(screen.getByRole("button", { name: "Start recording" }));
+    await screen.findByRole("button", { name: "Stop recording" });
+
+    expect(await screen.findByText("This phrase has expired.", {}, { timeout: 3000 })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /get a new phrase/i })).toBeDisabled();
+    expect(mockChallenge).toHaveBeenCalledTimes(1);
+  });
+
+  it("won't change the phrase while waiting for microphone permission", async () => {
+    microphone.getUserMedia.mockReturnValue(new Promise(() => {}));
+    const user = userEvent.setup();
+    renderFlow();
+    await screen.findByText("“Passage a1”");
+
+    await user.click(screen.getByRole("button", { name: "Start recording" }));
+
+    expect(screen.getByRole("button", { name: /new phrase/i })).toBeDisabled();
+  });
 });

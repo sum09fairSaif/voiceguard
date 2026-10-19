@@ -126,4 +126,46 @@ describe("useRecorder", () => {
 
     expect(microphone.stopTrack).toHaveBeenCalled();
   });
+
+  it("stops the recorder and the microphone when reset mid-recording", async () => {
+    const { result } = renderHook(() => useRecorder());
+    await startRecording(result);
+    const recorder = FakeMediaRecorder.instances[0];
+
+    act(() => result.current.reset());
+
+    expect(recorder.state).toBe("inactive");
+    expect(microphone.stopTrack).toHaveBeenCalled();
+    expect(result.current.status).toBe("idle");
+    expect(result.current.recording).toBeNull();
+  });
+
+  it("ignores a microphone that arrives after a reset", async () => {
+    let grant!: (stream: MediaStream) => void;
+    microphone.getUserMedia.mockReturnValue(new Promise((resolve) => (grant = resolve)));
+    const lateTrack = vi.fn();
+    const { result } = renderHook(() => useRecorder());
+
+    act(() => void result.current.start());
+    act(() => result.current.reset());
+    await act(async () => grant({ getTracks: () => [{ stop: lateTrack }] } as unknown as MediaStream));
+
+    expect(lateTrack).toHaveBeenCalled();
+    expect(FakeMediaRecorder.instances).toHaveLength(0);
+    expect(result.current.status).toBe("idle");
+  });
+
+  it("ignores a microphone that arrives after leaving the screen", async () => {
+    let grant!: (stream: MediaStream) => void;
+    microphone.getUserMedia.mockReturnValue(new Promise((resolve) => (grant = resolve)));
+    const lateTrack = vi.fn();
+    const { result, unmount } = renderHook(() => useRecorder());
+
+    act(() => void result.current.start());
+    unmount();
+    await act(async () => grant({ getTracks: () => [{ stop: lateTrack }] } as unknown as MediaStream));
+
+    expect(lateTrack).toHaveBeenCalled();
+    expect(FakeMediaRecorder.instances).toHaveLength(0);
+  });
 });
