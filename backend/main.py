@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pymongo.errors import PyMongoError
 
+from identity_check import IdentityUnavailable
 from rate_limit import RateLimited
 from routers import auth, challenge, verify
 from transcription import AudioNotUnderstood, TranscriptionUnavailable
@@ -47,7 +48,8 @@ def database_error(request: Request, exc: PyMongoError) -> JSONResponse:
 
 
 @app.exception_handler(TranscriptionUnavailable)
-def transcription_unavailable(request: Request, exc: TranscriptionUnavailable) -> JSONResponse:
+@app.exception_handler(IdentityUnavailable)
+def voice_check_unavailable(request: Request, exc: Exception) -> JSONResponse:
     return JSONResponse(
         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
         content={"detail": "Voice checks are temporarily unavailable. Please try again shortly."},

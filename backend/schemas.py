@@ -53,10 +53,12 @@ class ContentScore(BaseModel):
 
 
 class VerifyResponse(BaseModel):
-    # "incomplete" until the identity (#16) and liveness (#17) checks exist.
+    # "incomplete" until the liveness check (#17) exists.
     decision: Literal["approved", "rejected", "incomplete"]
     reason: str
     content: ContentScore
-    # Not built yet (#16, #17). Reported as such rather than faked as passing.
-    identity: Literal["not_checked"] = "not_checked"
+    # Pass or fail only. The similarity score stays on the server: handing
+    # it back would let someone tune a voice clone until it scores high.
+    identity: Literal["passed", "failed", "not_enrolled"]
+    # Not built yet (#17). Reported as such rather than faked as passing.
     liveness: Literal["not_checked"] = "not_checked"

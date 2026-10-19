@@ -2,10 +2,11 @@ import secrets
 
 import mongomock
 import pytest
+from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
 
 import config
-from db import get_challenges_collection, get_rate_limits_collection, get_users_collection
+from db import get_challenges_collection, get_rate_limits_collection, get_users_collection, get_voiceprints_collection
 from main import app
 
 
@@ -32,11 +33,19 @@ def rate_limits():
 
 
 @pytest.fixture
-def client(users, challenges, rate_limits, monkeypatch):
+def voiceprints(monkeypatch):
+    # A fresh random encryption key each run, like JWT_SECRET below.
+    monkeypatch.setattr(config, "VOICEPRINT_KEY", Fernet.generate_key().decode())
+    return mongomock.MongoClient()["voiceguard_test"]["voiceprints"]
+
+
+@pytest.fixture
+def client(users, challenges, rate_limits, voiceprints, monkeypatch):
     # A fresh random key each run, so the code can't pass by hard-coding one.
     monkeypatch.setattr(config, "JWT_SECRET", secrets.token_urlsafe(32))
     app.dependency_overrides[get_users_collection] = lambda: users
     app.dependency_overrides[get_challenges_collection] = lambda: challenges
     app.dependency_overrides[get_rate_limits_collection] = lambda: rate_limits
+    app.dependency_overrides[get_voiceprints_collection] = lambda: voiceprints
     yield TestClient(app)
     app.dependency_overrides.clear()

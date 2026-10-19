@@ -56,7 +56,7 @@ the login or transaction approved.
 | Frontend   | React + TypeScript (built with Vite)               |
 | Backend    | FastAPI (Python), run with uvicorn                 |
 | Records DB | MongoDB Atlas                                       |
-| Voiceprints| ChromaDB (vector store, added later)               |
+| Voiceprints| MongoDB, encrypted (one per user)                  |
 | Models     | Whisper (content), SpeechBrain ECAPA (identity), AASIST/RawNet2 (liveness) |
 | Hosting    | Vercel (frontend), Render (backend)                |
 | CI/CD      | GitHub Actions                                      |
