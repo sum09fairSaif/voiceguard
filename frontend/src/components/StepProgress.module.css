@@ -1,0 +1,19 @@
+.track {
+  display: flex;
+  gap: 7px;
+}
+
+.done,
+.todo {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+}
+
+.done {
+  background: var(--color-accent);
+}
+
+.todo {
+  background: var(--color-track);
+}
