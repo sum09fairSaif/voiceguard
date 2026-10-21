@@ -14,6 +14,14 @@ JWT_EXPIRE_MINUTES = int(os.getenv("JWT_EXPIRE_MINUTES", "60"))
 if JWT_EXPIRE_MINUTES <= 0:
     raise RuntimeError("JWT_EXPIRE_MINUTES must be more than 0.")
 
+# Sign-in lockout: this many wrong passwords for one email within the
+# window locks that email out for the lockout time.
+LOGIN_MAX_FAILURES = int(os.getenv("LOGIN_MAX_FAILURES", "5"))
+LOGIN_FAILURE_WINDOW_SECONDS = int(os.getenv("LOGIN_FAILURE_WINDOW_SECONDS", "900"))
+LOGIN_LOCKOUT_SECONDS = int(os.getenv("LOGIN_LOCKOUT_SECONDS", "1800"))
+if LOGIN_MAX_FAILURES <= 0 or LOGIN_FAILURE_WINDOW_SECONDS <= 0 or LOGIN_LOCKOUT_SECONDS <= 0:
+    raise RuntimeError("LOGIN_MAX_FAILURES, LOGIN_FAILURE_WINDOW_SECONDS and LOGIN_LOCKOUT_SECONDS must be more than 0.")
+
 CHALLENGE_TTL_SECONDS = int(os.getenv("CHALLENGE_TTL_SECONDS", "120"))
 if CHALLENGE_TTL_SECONDS <= 0:
     raise RuntimeError("CHALLENGE_TTL_SECONDS must be more than 0.")

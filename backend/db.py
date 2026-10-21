@@ -52,6 +52,15 @@ def get_rate_limits_collection() -> Collection:
 
 
 @lru_cache
+def get_login_failures_collection() -> Collection:
+    # Wrong-password counts and lockouts, one per email. MongoDB deletes
+    # each once its window and any lockout have ended.
+    login_failures = get_client()[config.MONGO_DB_NAME]["login_failures"]
+    login_failures.create_index("expires_at", expireAfterSeconds=0)
+    return login_failures
+
+
+@lru_cache
 def get_enrollments_collection() -> Collection:
     # Samples a user has given towards a voiceprint, keyed by user id.
     # MongoDB deletes an unfinished enrollment once it has expired.

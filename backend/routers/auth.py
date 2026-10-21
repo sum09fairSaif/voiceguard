@@ -1,3 +1,5 @@
+import logging
+import math
 from datetime import datetime, timezone
 
 from bson import ObjectId
@@ -5,11 +7,15 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pymongo.collection import Collection
 from pymongo.errors import DuplicateKeyError
 
-from db import get_users_collection
-from schemas import SignupRequest, SignupResponse, UserPublic
-from security import create_access_token, hash_password
+import config
+from db import get_login_failures_collection, get_users_collection
+from login_lockout import clear_failures, record_failure, seconds_locked
+from schemas import LoginRequest, LoginResponse, SignupRequest, SignupResponse, UserPublic
+from security import check_password, create_access_token, hash_password
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
+
+logger = logging.getLogger("voiceguard.auth")
 
 
 @router.post("/signup", response_model=SignupResponse, status_code=status.HTTP_201_CREATED)
@@ -37,12 +43,70 @@ def signup(
             detail="An account with this email already exists.",
         )
 
-    return SignupResponse(
-        user=UserPublic(
-            id=str(user_id),
-            full_name=user["full_name"],
-            email=user["email"],
-            created_at=user["created_at"],
+    return SignupResponse(user=_public(user), access_token=token)
+
+
+@router.post("/login", response_model=LoginResponse)
+def login(
+    body: LoginRequest,
+    users: Collection = Depends(get_users_collection),
+    login_failures: Collection = Depends(get_login_failures_collection),
+) -> LoginResponse:
+    email = body.email.lower()
+    # A locked email isn't even checked, so guessing can't go on while
+    # it's locked.
+    locked = seconds_locked(login_failures, email)
+    if locked:
+        raise _locked_out(locked)
+
+    user = users.find_one({"email": email})
+    if not check_password(body.password, user["password_hash"] if user else None):
+        # Emails with no account are counted and locked the same way, so
+        # the answers never give away which emails have accounts.
+        locked = record_failure(
+            login_failures,
+            email,
+            config.LOGIN_MAX_FAILURES,
+            config.LOGIN_FAILURE_WINDOW_SECONDS,
+            config.LOGIN_LOCKOUT_SECONDS,
+        )
+        if locked:
+            logger.info("login_locked user=%s", user["_id"] if user else "-")
+            raise _locked_out(locked)
+        # Same words whether the email or the password was wrong.
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="The email or password is incorrect.",
+        )
+
+    token = create_access_token(str(user["_id"]))
+    clear_failures(login_failures, email)
+    logger.info("login user=%s", user["_id"])
+    return LoginResponse(user=_public(user), access_token=token)
+
+
+def _public(user: dict) -> UserPublic:
+    created_at = user["created_at"]
+    # MongoDB hands dates back without a time zone; they are UTC. Without
+    # this, the app would read the time as its own local time.
+    if created_at.tzinfo is None:
+        created_at = created_at.replace(tzinfo=timezone.utc)
+    return UserPublic(
+        id=str(user["_id"]),
+        full_name=user["full_name"],
+        email=user["email"],
+        created_at=created_at,
+    )
+
+
+def _locked_out(seconds: int) -> HTTPException:
+    minutes = math.ceil(seconds / 60)
+    wait = "1 minute" if minutes == 1 else f"{minutes} minutes"
+    return HTTPException(
+        status_code=status.HTTP_423_LOCKED,
+        detail=(
+            "Too many failed sign-in attempts, so this account is locked for now. "
+            f"Please try again in {wait}. If you've forgotten your password, reset it."
         ),
-        access_token=token,
+        headers={"Retry-After": str(seconds)},
     )

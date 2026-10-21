@@ -1,4 +1,6 @@
+import secrets
 from datetime import datetime, timedelta, timezone
+from functools import lru_cache
 
 import bcrypt
 import jwt
@@ -14,6 +16,26 @@ _bearer = HTTPBearer(auto_error=False)
 
 def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+
+
+@lru_cache
+def _dummy_hash() -> bytes:
+    return bcrypt.hashpw(secrets.token_bytes(16), bcrypt.gensalt())
+
+
+def check_password(password: str, password_hash: str | None) -> bool:
+    """True if `password` matches `password_hash`. Pass None when there's
+    no such account: a dummy hash is still checked, so the answer takes as
+    long either way and doesn't give away which emails have accounts."""
+    password_bytes = password.encode("utf-8")
+    # Signup refuses passwords over 72 bytes (bcrypt reads no further), so
+    # a longer one can't be right.
+    if len(password_bytes) > 72:
+        return False
+    if password_hash is None:
+        bcrypt.checkpw(password_bytes, _dummy_hash())
+        return False
+    return bcrypt.checkpw(password_bytes, password_hash.encode("utf-8"))
 
 
 def create_access_token(user_id: str) -> str:
