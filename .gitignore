@@ -3,6 +3,8 @@ venv/
 .venv/
 __pycache__/
 *.pyc
+.pytest_cache/
+.ruff_cache/
 .env
 
 # Node
@@ -13,7 +15,25 @@ dist/
 # Models and data
 *.pt
 *.onnx
+*.ckpt
 chroma/
+# Downloaded by the model service when it runs locally (about 80 MB).
+pretrained_models/
+
+# Voice recordings. Raw audio must never be committed (see README).
+*.wav
+*.webm
+*.m4a
+*.mp3
+*.mp4
+*.ogg
+*.flac
+
+# Editors and operating systems
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
 
 # Context files
 CLAUDE.md
