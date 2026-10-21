@@ -39,6 +39,17 @@ class SignupResponse(BaseModel):
     token_type: str = "bearer"
 
 
+class LoginRequest(BaseModel):
+    email: EmailStr
+    # No length or strength rules here: a wrong password, of any length,
+    # gets the same "incorrect" answer.
+    password: str = Field(min_length=1)
+
+
+class LoginResponse(SignupResponse):
+    """Same shape as signup: the account and a fresh token."""
+
+
 class ChallengeResponse(BaseModel):
     attempt_id: str
     passage: str
