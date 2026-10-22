@@ -42,7 +42,7 @@ export function useChallenge(): ChallengeState {
       if (requestId !== latestRequest.current) return;
       if (isAxiosError(err) && err.response?.status === 401) {
         clearToken();
-        navigate("/signup", { replace: true });
+        navigate("/signin", { replace: true });
         return;
       }
       setChallenge(null);
