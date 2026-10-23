@@ -1,0 +1,47 @@
+name: User story
+description: A feature, written so it meets our Definition of Ready (#21).
+labels: [story]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Title it with a short name, e.g. **Log in with voice**. After creating it, add the area labels (`frontend`, `backend`, `ml`) and a `priority:` label in the sidebar.
+  - type: textarea
+    id: story
+    attributes:
+      label: User story
+      description: Who wants what, and why.
+      placeholder: As a returning user, I want to log in using my voice, so that I can get in without a password.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Testable outcomes. Describe what happens, not how the screen looks.
+      value: |
+        - [ ]
+        - [ ]
+    validations:
+      required: true
+  - type: textarea
+    id: tasks
+    attributes:
+      label: Tasks
+      description: The work broken into steps small enough to finish in one sprint.
+      value: |
+        - [ ]
+        - [ ]
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependencies
+      description: Other stories or setup this needs first, e.g. "needs #10 (enrollment)". Write "none" if there are none.
+  - type: checkboxes
+    id: ready
+    attributes:
+      label: Definition of Ready
+      options:
+        - label: Acceptance criteria are written and testable.
+        - label: The story is small enough for one sprint.
+        - label: The team agrees it is understood.

@@ -1,0 +1,47 @@
+# Dependabot checks our dependencies once a week and opens a pull request
+# when there's a newer version. Security fixes are proposed as soon as
+# they're published. Its pull requests go into dev, like everyone else's,
+# and need a review and green CI before they merge.
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: /backend
+    target-branch: dev
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+    groups:
+      # One pull request for all the small updates, instead of one each.
+      minor-and-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: pip
+    directory: /model-service
+    target-branch: dev
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+    ignore:
+      # ZeroGPU only accepts certain PyTorch versions (see requirements.txt),
+      # so these are upgraded by hand after checking the Space still starts.
+      - dependency-name: torch
+      - dependency-name: torchaudio
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: npm
+    directory: /frontend
+    target-branch: dev
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    target-branch: dev
+    schedule:
+      interval: monthly
