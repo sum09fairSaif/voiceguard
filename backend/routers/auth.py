@@ -8,8 +8,9 @@ from pymongo.collection import Collection
 from pymongo.errors import DuplicateKeyError
 
 import config
-from db import get_login_failures_collection, get_users_collection
+from db import get_login_failures_collection, get_rate_limits_collection, get_users_collection
 from login_lockout import clear_failures, record_failure, seconds_locked
+from rate_limit import count_request
 from schemas import LoginRequest, LoginResponse, SignupRequest, SignupResponse, UserPublic
 from security import check_password, create_access_token, hash_password
 
@@ -22,7 +23,11 @@ logger = logging.getLogger("voiceguard.auth")
 def signup(
     body: SignupRequest,
     users: Collection = Depends(get_users_collection),
+    rate_limits: Collection = Depends(get_rate_limits_collection),
 ) -> SignupResponse:
+    # One count for everyone (see config.SIGNUP_RATE_LIMIT).
+    count_request(rate_limits, "signup", "all", config.SIGNUP_RATE_LIMIT, config.RATE_LIMIT_WINDOW_SECONDS)
+
     user_id = ObjectId()
     # Make the token before saving, so a config problem never leaves
     # behind an account the user can't sign up for again.
