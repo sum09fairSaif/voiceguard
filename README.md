@@ -154,6 +154,7 @@ frontend/       React + TypeScript app (Vite)
 model-service/  voice-embedding service, deployed as a Hugging Face Space
 docs/           architecture diagram and screenshots
 .github/        CI workflow and pull request template
+LICENSE         MIT license
 ```
 
 ## Local setup
@@ -291,5 +292,21 @@ green CI before it merges.
 
 ## Team and mentors
 
-- Team: Sumehra, Nicole, Tulika, Gabriel
-- Technical mentors: Sesha Varanasi, Duo Xu, Parth Sabhadiya, Drew Abram, Chaitanya Challa
+| Name | Role |
+|---|---|
+| Sumehra Saif | Backend engineer |
+| Nicole | <!-- role --> |
+| Tulika | <!-- role --> |
+| Gabriel | <!-- role --> |
+| **Technical mentors** | |
+| Sesha Varanasi | Technical mentor |
+| Duo Xu | Technical mentor |
+| Parth Sabhadiya | Technical mentor |
+| Drew Abram | Technical mentor |
+| Chaitanya Challa | Technical mentor |
+
+*BU Spark! XC475 Technology Innovation Fellowship, Fall 2026*
+
+## License
+
+[MIT](LICENSE)
