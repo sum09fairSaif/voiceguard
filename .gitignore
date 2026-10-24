@@ -14,6 +14,15 @@ dist/
 *.pt
 *.onnx
 chroma/
+ml/liveness/data/
+
+# Audio: raw recordings must never be committed, wherever they're saved
+*.wav
+*.flac
+*.mp3
+*.webm
+*.m4a
+*.ogg
 
 # Context files
 CLAUDE.md
