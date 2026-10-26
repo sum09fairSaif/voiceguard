@@ -9,6 +9,7 @@ needs AASIST's weights. This is for measuring how well it works.
 | Source | What it gives us | Labels | Split | Size | License |
 |---|---|---|---|---|---|
 | `asvspoof2019_la` | The standard benchmark: VCTK speech plus 19 TTS and voice-conversion attacks. AASIST was trained on it. | bonafide + spoof | official train / dev / eval (eval becomes `test`) | ~7 GB | ODC-By 1.0 |
+| `asvspoof2019_pa` | Replay attacks: VCTK speech played back through simulated rooms and replay devices of three quality levels. Our only replay data. | bonafide + spoof | official train / dev / eval | ~18 GB | ODC-By 1.0 |
 | `asvspoof5` | The 2024 ASVspoof: ~2,000 crowdsourced speakers in varied conditions, 32 modern and adversarial attacks, most eval clips codec-compressed. | bonafide + spoof | official train / dev / eval | dev + 1 eval part ~29 GB (full: 143 GB) | ODC-By 1.0 |
 | `in_the_wild` | Real deepfakes of public figures, made with unknown tools. Our generalization test. | bonafide + spoof | test only | ~8 GB | research use, see source |
 | `codecfake` | VCTK speech re-synthesized by 15 neural codecs, the technology behind zero-shot voice cloning. Same speakers as ASVspoof 2019. | bonafide + spoof | by speaker, ~80/10/10 | 16 shards ~10 GB (full: 102 GB) | CC-BY-4.0 |
@@ -38,6 +39,7 @@ Unzip each dataset into `data/raw/<source>/` in this folder:
 ml/liveness/data/          (git-ignored: audio is never committed)
   raw/
     asvspoof2019_la/LA/...
+    asvspoof2019_pa/PA/...
     asvspoof5/ASVspoof5.*.tsv, flac_D/, flac_E_eval/
     in_the_wild/release_in_the_wild/...
     codecfake/metadata.csv, audio/<codec>/...
