@@ -1,5 +1,5 @@
 # Enough to run the tests, which call the request handler directly with a
 # stand-in for the model: no PyTorch and no Gradio needed.
 numpy==1.26.4
-pytest==8.3.3
+pytest==9.0.3
 ruff==0.8.4
