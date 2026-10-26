@@ -1,8 +1,9 @@
 # Installed by the Hugging Face Space on top of Gradio, which already
 # brings FastAPI, uvicorn, python-multipart and numpy.
 # The Space runs on ZeroGPU (the free hardware for Gradio Spaces), which
-# only accepts certain PyTorch versions; 2.8.0 is one. The model still runs
-# on the CPU: it's small enough, and that keeps clear of ZeroGPU's quota.
+# only accepts certain PyTorch versions; 2.8.0 is one. The model runs on
+# ZeroGPU's GPU when one is free and falls back to the CPU otherwise
+# (see encode() in app.py); it's small enough for either.
 torch==2.8.0
 torchaudio==2.8.0
 speechbrain==1.1.1
