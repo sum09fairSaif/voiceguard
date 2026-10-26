@@ -8,9 +8,16 @@ A loader is a module with:
 To add a dataset, write a module like the others and add it here.
 """
 
-from sources import asvspoof2019_la, common_voice, in_the_wild, team
+from sources import (
+    asvspoof5,
+    asvspoof2019_la,
+    codecfake,
+    common_voice,
+    in_the_wild,
+    team,
+)
 
 LOADERS = {
     module.NAME: module
-    for module in (asvspoof2019_la, in_the_wild, common_voice, team)
+    for module in (asvspoof2019_la, asvspoof5, in_the_wild, codecfake, common_voice, team)
 }

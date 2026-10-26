@@ -9,13 +9,26 @@ needs AASIST's weights. This is for measuring how well it works.
 | Source | What it gives us | Labels | Split | Size | License |
 |---|---|---|---|---|---|
 | `asvspoof2019_la` | The standard benchmark: VCTK speech plus 19 TTS and voice-conversion attacks. AASIST was trained on it. | bonafide + spoof | official train / dev / eval (eval becomes `test`) | ~7 GB | ODC-By 1.0 |
+| `asvspoof5` | The 2024 ASVspoof: ~2,000 crowdsourced speakers in varied conditions, 32 modern and adversarial attacks, most eval clips codec-compressed. | bonafide + spoof | official train / dev / eval | dev + 1 eval part ~29 GB (full: 143 GB) | ODC-By 1.0 |
 | `in_the_wild` | Real deepfakes of public figures, made with unknown tools. Our generalization test. | bonafide + spoof | test only | ~8 GB | research use, see source |
+| `codecfake` | VCTK speech re-synthesized by 15 neural codecs, the technology behind zero-shot voice cloning. Same speakers as ASVspoof 2019. | bonafide + spoof | by speaker, ~80/10/10 | 16 shards ~10 GB (full: 102 GB) | CC-BY-4.0 |
 | `common_voice` | English speakers recorded in their browsers on everyday mics, like our users. Stops "cheap mic" being mistaken for "fake". | bonafide | official train / dev / test, a few clips per speaker | slice of the English set | CC0 1.0 |
 | `team` | Our own recordings through the app: live reads, replays and consented voice clones. The threshold is chosen on this. | bonafide + spoof | dev / test only, never trained on | small | private, team only |
 
-Where to download each one, and how to unzip it, is at the top of its loader
-in [sources/](sources/). Most require accepting terms on the download page,
-so they're downloaded by hand rather than by a script.
+The datasets hosted on Hugging Face are fetched by a script, which takes a
+manageable slice of each (see its docstring for options):
+
+```
+python download.py asvspoof5
+python download.py codecfake
+```
+
+Downloads resume after a dropped connection, so rerun a command if it
+stops. For gated datasets, accept the terms on the dataset's page while
+logged in to huggingface.co, then run `huggingface-cli login` once.
+
+The others are downloaded by hand: where to get each one, and how to unzip
+it, is at the top of its loader in [sources/](sources/).
 
 ## Where the audio goes
 
@@ -25,7 +38,9 @@ Unzip each dataset into `data/raw/<source>/` in this folder:
 ml/liveness/data/          (git-ignored: audio is never committed)
   raw/
     asvspoof2019_la/LA/...
+    asvspoof5/ASVspoof5.*.tsv, flac_D/, flac_E_eval/
     in_the_wild/release_in_the_wild/...
+    codecfake/metadata.csv, audio/<codec>/...
     common_voice/cv-corpus-*/en/...
     team/metadata.csv, spk01/...
   manifest.parquet         (written by build_manifest.py)
