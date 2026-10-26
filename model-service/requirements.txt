@@ -3,6 +3,6 @@
 # The Space runs on ZeroGPU (the free hardware for Gradio Spaces), which
 # only accepts certain PyTorch versions; 2.8.0 is one. The model still runs
 # on the CPU: it's small enough, and that keeps clear of ZeroGPU's quota.
-torch==2.8.0
+torch==2.13.0
 torchaudio==2.8.0
 speechbrain==1.1.1
