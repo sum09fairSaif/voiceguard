@@ -6,9 +6,12 @@ on:
   pull_request:
     branches: [main, dev]
 
+# Each job stops after 15 minutes. Without a limit GitHub waits 6 hours,
+# so a stuck step (like a stalled apt download) holds up merges all day.
 jobs:
   backend:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: backend
@@ -26,6 +29,7 @@ jobs:
 
   model-service:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: model-service
@@ -35,6 +39,7 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install ffmpeg
+        timeout-minutes: 5
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
@@ -45,6 +50,7 @@ jobs:
 
   ml-liveness:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: ml/liveness
@@ -58,6 +64,7 @@ jobs:
 
   frontend:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: frontend
