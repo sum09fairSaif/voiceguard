@@ -3,5 +3,5 @@
 # holds the audio. soundfile reads FLAC, WAV and MP3.
 numpy==1.26.4
 pandas==2.2.3
-pyarrow==17.0.0
+pyarrow==23.0.1
 soundfile==0.12.1
