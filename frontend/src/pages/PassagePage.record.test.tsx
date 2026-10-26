@@ -44,7 +44,7 @@ function renderFlow() {
       <Routes>
         <Route path="/verify" element={<PassagePage />} />
         <Route path="/result" element={<ResultPage />} />
-        <Route path="/signup" element={<p>signup screen</p>} />
+        <Route path="/signin" element={<p>sign-in screen</p>} />
       </Routes>
     </MemoryRouter>,
   );
@@ -155,7 +155,7 @@ describe("Recording and submitting", () => {
     expect(screen.getByRole("button", { name: "Start recording" })).toBeEnabled();
   });
 
-  it("sends a signed-out user back to signup", async () => {
+  it("sends a signed-out user back to sign in", async () => {
     saveToken("expired");
     mockSubmit.mockRejectedValue(apiError(401));
     const user = userEvent.setup();
@@ -164,7 +164,7 @@ describe("Recording and submitting", () => {
 
     await user.click(screen.getByRole("button", { name: /submit/i }));
 
-    expect(await screen.findByText("signup screen")).toBeInTheDocument();
+    expect(await screen.findByText("sign-in screen")).toBeInTheDocument();
     expect(getToken()).toBeNull();
   });
 

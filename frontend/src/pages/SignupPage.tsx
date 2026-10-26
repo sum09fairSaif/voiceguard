@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { signup } from "../api/auth";
 import { describeApiError, invalidFields } from "../api/errors";
 import { saveToken } from "../api/session";
@@ -127,6 +127,9 @@ export function SignupPage() {
         </div>
       </form>
 
+      <p className={styles.switch}>
+        <Link to="/signin">Already a member? Sign in</Link>
+      </p>
       <p className={styles.terms}>By continuing, you agree to our Terms &amp; Privacy Policy.</p>
     </Page>
   );

@@ -44,7 +44,7 @@ Each row is a user story (see the
 | Story | Backend (API) | Frontend (screens) |
 |---|---|---|
 | #11 Create an account | ✅ Done | ✅ Done |
-| #12 Log in with voice | ✅ Password sign-in with lockout | ⏳ Sign-in screen to do |
+| #12 Log in with voice | ✅ Password sign-in with lockout | ✅ Sign-in screen (voice-only sign-in not built) |
 | #13 Show a challenge passage | ✅ Done | ✅ Done |
 | #14 Record and submit the attempt | ✅ Done | ✅ Done |
 | #15 Content check | ✅ Done (OpenAI Whisper) | — |
@@ -70,7 +70,7 @@ docs/screenshots/result.png (result with the check breakdown). -->
 
 ## How to use it
 
-1. Open the [live app](https://voiceguard-nu.vercel.app/) and create an account.
+1. Open the [live app](https://voiceguard-nu.vercel.app/) and create an account (or sign in, if you already have one).
 2. Read the six-word phrase on screen aloud: tap the microphone, read, tap again to stop, then **Submit**.
 3. The result screen shows whether the words and voice matched. Each phrase can be used once and expires after two minutes; **New phrase** gets another.
 
