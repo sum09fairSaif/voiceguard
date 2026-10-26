@@ -6,7 +6,7 @@ import pytest
 from pymongo.errors import ServerSelectionTimeoutError
 
 import config
-from db import get_users_collection
+from db import get_client, get_users_collection
 from main import app
 
 SIGNUP_URL = "/api/auth/signup"
@@ -89,12 +89,43 @@ def test_missing_field_is_refused(client, users):
     assert users.count_documents({}) == 0
 
 
-def test_missing_jwt_secret_saves_nothing(client, users, monkeypatch):
+def test_missing_jwt_secret_returns_503_and_saves_nothing(client, users, monkeypatch):
     monkeypatch.setattr(config, "JWT_SECRET", "")
 
-    with pytest.raises(RuntimeError, match="JWT_SECRET"):
-        client.post(SIGNUP_URL, json=new_user())
+    response = client.post(SIGNUP_URL, json=new_user())
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "The service is temporarily unavailable. Please try again shortly."
+    assert "JWT_SECRET" not in response.text
     assert users.count_documents({}) == 0
+
+
+def test_missing_mongo_uri_returns_503(client, monkeypatch):
+    # Use the real database connection, with no address to connect to.
+    del app.dependency_overrides[get_users_collection]
+    monkeypatch.setattr(config, "MONGO_URI", "")
+    get_client.cache_clear()
+    get_users_collection.cache_clear()
+    try:
+        response = client.post(SIGNUP_URL, json=new_user())
+    finally:
+        get_client.cache_clear()
+        get_users_collection.cache_clear()
+
+    assert response.status_code == 503
+    assert "MONGO_URI" not in response.text
+
+
+def test_too_many_signups_are_refused(client, users, monkeypatch):
+    monkeypatch.setattr(config, "SIGNUP_RATE_LIMIT", 2)
+    for n in range(2):
+        assert client.post(SIGNUP_URL, json=new_user(email=f"user{n}@example.com")).status_code == 201
+
+    response = client.post(SIGNUP_URL, json=new_user(email="one-too-many@example.com"))
+
+    assert response.status_code == 429
+    assert 0 < int(response.headers["Retry-After"]) <= config.RATE_LIMIT_WINDOW_SECONDS
+    assert users.count_documents({}) == 2
 
 
 @pytest.mark.parametrize("password", ["mypass1", "p" * 73])
