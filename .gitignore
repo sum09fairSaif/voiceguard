@@ -3,6 +3,8 @@ venv/
 .venv/
 __pycache__/
 *.pyc
+.pytest_cache/
+.ruff_cache/
 .env
 
 # Node
@@ -13,6 +15,7 @@ dist/
 # Models and data
 *.pt
 *.onnx
+*.ckpt
 chroma/
 ml/liveness/data/
 
