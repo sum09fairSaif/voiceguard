@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pymongo.errors import PyMongoError
 
+import config
 from identity_check import IdentityUnavailable
 from rate_limit import RateLimited
 from routers import auth, challenge, enroll, verify
@@ -16,12 +17,16 @@ from transcription import AudioNotUnderstood, TranscriptionUnavailable
 # (one per transcription) would never reach the console or Render's logs.
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
+logger = logging.getLogger("voiceguard")
+
 app = FastAPI(title="VoiceGuard API", version="0.1.0")
 
-# CORS lets the frontend (a different address) call this API during development.
+# CORS lets the frontend (a different address) call this API from the
+# browser. Only our own frontends are allowed (see config.ALLOWED_ORIGINS).
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=config.ALLOWED_ORIGINS,
+    allow_origin_regex=config.ALLOWED_ORIGIN_REGEX,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -64,6 +69,17 @@ def audio_not_understood(request: Request, exc: AudioNotUnderstood) -> JSONRespo
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         content={"detail": "We couldn't process that recording. Please get a new passage and record again."},
     )
+
+
+@app.exception_handler(config.NotConfigured)
+def not_configured(request: Request, exc: config.NotConfigured) -> JSONResponse:
+    # The log says which setting is missing; the user just hears it's down.
+    logger.error("Server not configured: %s", exc)
+    return JSONResponse(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        content={"detail": "The service is temporarily unavailable. Please try again shortly."},
+    )
+
 
 @app.exception_handler(RateLimited)
 def rate_limited(request: Request, exc: RateLimited) -> JSONResponse:

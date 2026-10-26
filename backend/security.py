@@ -40,8 +40,8 @@ def check_password(password: str, password_hash: str | None) -> bool:
 
 def create_access_token(user_id: str) -> str:
     if not config.JWT_SECRET:
-        raise RuntimeError("JWT_SECRET is not set. Add it to your .env file.")
-    now = datetime.now(timezone.utc)
+        raise config.NotConfigured("JWT_SECRET is not set. Add it to your .env file.")
+    now =datetime.now(timezone.utc)
     payload = {
         "sub": user_id,
         "iat": now,
@@ -64,7 +64,7 @@ def get_current_user_id(
     if credentials is None:
         raise _not_signed_in("Please sign in first.")
     if not config.JWT_SECRET:
-        raise RuntimeError("JWT_SECRET is not set. Add it to your .env file.")
+        raise config.NotConfigured("JWT_SECRET is not set. Add it to your .env file.")
     try:
         claims = jwt.decode(
             credentials.credentials,
