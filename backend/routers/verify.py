@@ -15,8 +15,8 @@ from identity_check import IdentityResult, IdentityUnavailable, check_identity
 from rate_limit import count_request
 from schemas import ContentScore, VerifyResponse
 from security import get_current_user_id
-from voiceprints import load_voiceprint
 from transcription import AudioNotUnderstood, Transcriber, TranscriptionUnavailable, get_transcriber
+from voiceprints import load_voiceprint
 
 router = APIRouter(prefix="/api", tags=["verify"])
 

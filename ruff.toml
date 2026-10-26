@@ -1,0 +1,11 @@
+# Python lint settings for backend/ and model-service/, run in CI.
+target-version = "py311"
+line-length = 120
+# Where our own modules live, so imports like `import config` are sorted
+# as ours rather than as installed packages.
+src = ["backend", "model-service"]
+
+[lint]
+# Ruff's defaults (real errors: unused imports, undefined names, ...)
+# plus import sorting.
+extend-select = ["I"]
