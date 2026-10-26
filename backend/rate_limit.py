@@ -1,5 +1,5 @@
 import math
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 from pymongo import ReturnDocument
 from pymongo.collection import Collection
