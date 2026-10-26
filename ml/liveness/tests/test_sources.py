@@ -102,6 +102,30 @@ def test_common_voice_takes_a_few_clips_per_speaker(tmp_path, monkeypatch):
     assert [r["split"] for r in rows].count("dev") == 1
 
 
+def test_common_voice_reads_the_2017_release(tmp_path, monkeypatch):
+    header = "filename,text,up_votes,down_votes,age,gender,accent,duration\n"
+    for split in ["train", "dev", "test"]:
+        lines = [f"cv-valid-{split}/sample-{i:06d}.mp3,hello there,2,0,,,," for i in range(5)]
+        (tmp_path / f"cv-valid-{split}.csv").write_text(header + "\n".join(lines) + "\n")
+    monkeypatch.setitem(common_voice.MAX_CLIPS, "train", 3)
+
+    rows = common_voice.load(tmp_path)
+    manifest.check_rows(rows, "common_voice")
+
+    train = [r for r in rows if r["split"] == "train"]
+    assert len(train) == 3
+    assert [r["split"] for r in rows].count("dev") == 5
+    # The same sample on every run.
+    assert train == [r for r in common_voice.load(tmp_path) if r["split"] == "train"]
+    clip = train[0]
+    assert clip["path"].startswith("cv-valid-train/sample-")
+    assert clip["utt_id"] == "common_voice/" + clip["path"].removesuffix(".mp3")
+    # No speaker ids in this release: each clip is its own "speaker".
+    assert clip["speaker_id"] == "common_voice/unknown/" + clip["path"].removesuffix(".mp3")
+    # Every split numbers its clips from 000000, so ids include the split.
+    assert len({r["utt_id"] for r in rows}) == len(rows)
+
+
 def test_team_reads_metadata(team_dir):
     rows = by_id(team.load(team_dir))
     manifest.check_rows(list(rows.values()), "team")

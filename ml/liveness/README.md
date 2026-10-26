@@ -13,7 +13,7 @@ needs AASIST's weights. This is for measuring how well it works.
 | `asvspoof5` | The 2024 ASVspoof: ~2,000 crowdsourced speakers in varied conditions, 32 modern and adversarial attacks, most eval clips codec-compressed. | bonafide + spoof | official train / dev / eval | dev + 1 eval part ~29 GB (full: 143 GB) | ODC-By 1.0 |
 | `in_the_wild` | Real deepfakes of public figures, made with unknown tools. Our generalization test. | bonafide + spoof | test only | ~8 GB | research use, see source |
 | `codecfake` | VCTK speech re-synthesized by 15 neural codecs, the technology behind zero-shot voice cloning. Same speakers as ASVspoof 2019. | bonafide + spoof | by speaker, ~80/10/10 | 16 shards ~10 GB (full: 102 GB) | CC-BY-4.0 |
-| `common_voice` | English speakers recorded in their browsers on everyday mics, like our users. Stops "cheap mic" being mistaken for "fake". | bonafide | official train / dev / test, a few clips per speaker | slice of the English set | CC0 1.0 |
+| `common_voice` | English speakers recorded in their browsers on everyday mics, like our users. Stops "cheap mic" being mistaken for "fake". Reads current releases or the 2017 Kaggle one (no speaker ids). | bonafide | official train / dev / test, a fixed slice of each | slice of the English set | CC0 1.0 |
 | `team` | Our own recordings through the app: live reads, replays and consented voice clones. The threshold is chosen on this. | bonafide + spoof | dev / test only, never trained on | small | private, team only |
 
 The datasets hosted on Hugging Face are fetched by a script, which takes a
@@ -43,7 +43,7 @@ ml/liveness/data/          (git-ignored: audio is never committed)
     asvspoof5/ASVspoof5.*.tsv, flac_D/, flac_E_eval/
     in_the_wild/release_in_the_wild/...
     codecfake/metadata.csv, audio/<codec>/...
-    common_voice/cv-corpus-*/en/...
+    common_voice/cv-corpus-*/en/...   (or cv-valid-*.csv + cv-valid-*/ from the 2017 release)
     team/metadata.csv, spk01/...
   manifest.parquet         (written by build_manifest.py)
   manifest.clean.parquet   (written by validate.py)
