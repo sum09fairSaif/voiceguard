@@ -1,0 +1,3 @@
+# Still allows a blank issue for anything that isn't a story or a bug,
+# e.g. a process task like the Definition of Ready.
+blank_issues_enabled: true
