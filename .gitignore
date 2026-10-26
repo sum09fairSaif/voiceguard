@@ -17,23 +17,15 @@ dist/
 *.onnx
 *.ckpt
 chroma/
-# Downloaded by the model service when it runs locally (about 80 MB).
-pretrained_models/
+ml/liveness/data/
 
-# Voice recordings. Raw audio must never be committed (see README).
+# Audio: raw recordings must never be committed, wherever they're saved
 *.wav
+*.flac
+*.mp3
 *.webm
 *.m4a
-*.mp3
-*.mp4
 *.ogg
-*.flac
-
-# Editors and operating systems
-.vscode/
-.idea/
-.DS_Store
-Thumbs.db
 
 # Context files
 CLAUDE.md
