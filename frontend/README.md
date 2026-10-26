@@ -1,75 +1,66 @@
-# React + TypeScript + Vite
+# VoiceGuard frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+The VoiceGuard web app: React + TypeScript, built with Vite. It is deployed
+to Vercel from `main` at https://voiceguard-nu.vercel.app/.
 
-Currently, two official plugins are available:
+## Run locally
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+You need Node.js 22 or newer (see `.nvmrc` at the repository root).
 
-## React Compiler
+From the `frontend/` folder:
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-
+```bash
+npm install
+npm run dev
 ```
 
-You can also install [eslint-plugin-react-x](https://npmx.dev/package/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://npmx.dev/package/eslint-plugin-react-dom) for React-specific lint rules:
+Open the address it prints (usually http://localhost:5173). In
+development the app talks to the backend at http://localhost:8000, so start
+the backend first (see [../backend/README.md](../backend/README.md)).
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+To use a different backend, create `frontend/.env.local` with:
 
 ```
+VITE_API_BASE_URL=https://voiceguard-83cj.onrender.com
+```
+
+If `VITE_API_BASE_URL` isn't set, a production build falls back to the
+Render backend (see `src/api/client.ts`).
+
+## Scripts
+
+| Command | What it does |
+|---|---|
+| `npm run dev` | Start the dev server with hot reload |
+| `npm test` | Run the tests once (Vitest + Testing Library, in jsdom) |
+| `npm run lint` | Check the code with ESLint |
+| `npm run build` | Type-check and build for production into `dist/` |
+| `npm run preview` | Serve the production build locally |
+
+The tests need no backend or microphone: `src/test/fakeMicrophone.ts` stands
+in for the browser's recording APIs.
+
+## Screens
+
+| Route | Screen |
+|---|---|
+| `/signup` | Create an account |
+| `/verify` | Read the challenge passage aloud and submit the recording (signed in only) |
+| `/result` | Result of the voice check, with a breakdown per check (signed in only) |
+
+Any other address redirects to `/signup`.
+
+## Code layout
+
+```
+src/
+  api/          calls to the backend (one file per endpoint group) and error wording
+  components/   reusable pieces of the UI, each with its own CSS module
+  hooks/        useChallenge (fetch and count down the passage), useRecorder (microphone)
+  pages/        one component per screen
+  utils/        small helpers: countdown, passage formatting, result wording
+  assets/icons/ SVG icons exported from Figma
+  test/         test setup and fakes
+```
+
+Tests sit next to the code they cover, as `*.test.ts(x)`.
