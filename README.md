@@ -294,10 +294,10 @@ green CI before it merges.
 
 | Name | Role |
 |---|---|
-| Sumehra Saif | Backend engineer |
-| Nicole | <!-- role --> |
-| Tulika | <!-- role --> |
-| Gabriel | <!-- role --> |
+| Sumehra Saif | Technical Innovator & Backend Engineer |
+| Nicole Debow | UX Designer |
+| Tulika Roy | UX Designer |
+| Gabriel Ginsberg | Technical Teammate & Frontend Engineer |
 | **Technical mentors** | |
 | Sesha Varanasi | Technical mentor |
 | Duo Xu | Technical mentor |
