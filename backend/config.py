@@ -5,8 +5,27 @@ from dotenv import load_dotenv
 # Read the local .env file (if there is one) into environment variables.
 load_dotenv()
 
+
+class NotConfigured(RuntimeError):
+    """A setting the server needs (e.g. MONGO_URI) is missing. Answered
+    with a 503 rather than a crash; the log names the missing setting."""
+
+
 MONGO_URI = os.getenv("MONGO_URI", "")
 MONGO_DB_NAME = os.getenv("MONGO_DB_NAME", "voiceguard")
+
+# Websites allowed to call this API from a browser (CORS), comma-separated.
+# The default covers local development and the live frontend.
+ALLOWED_ORIGINS = [
+    origin.strip().rstrip("/")
+    for origin in os.getenv("ALLOWED_ORIGINS", "http://localhost:5173,https://voiceguard-nu.vercel.app").split(",")
+    if origin.strip()
+]
+# Also allowed: Vercel's preview deployments of the frontend (one per
+# branch and commit), whose addresses all end in our Vercel team's name.
+# Set to empty to turn off. Sign-in tokens travel in a header, not a
+# cookie, so CORS is a second line of defence here, not the only one.
+ALLOWED_ORIGIN_REGEX = os.getenv("ALLOWED_ORIGIN_REGEX", r"https://voiceguard-[a-z0-9-]+-voice-guard2\.vercel\.app") or None
 
 JWT_SECRET = os.getenv("JWT_SECRET", "")
 JWT_ALGORITHM = "HS256"
@@ -71,8 +90,16 @@ if not -1.0 <= IDENTITY_THRESHOLD <= 1.0:
 RATE_LIMIT_WINDOW_SECONDS = int(os.getenv("RATE_LIMIT_WINDOW_SECONDS", "3600"))
 CHALLENGE_RATE_LIMIT = int(os.getenv("CHALLENGE_RATE_LIMIT", "20"))
 VERIFY_RATE_LIMIT = int(os.getenv("VERIFY_RATE_LIMIT", "10"))
-if RATE_LIMIT_WINDOW_SECONDS <= 0 or CHALLENGE_RATE_LIMIT <= 0 or VERIFY_RATE_LIMIT <= 0:
-    raise RuntimeError("RATE_LIMIT_WINDOW_SECONDS, CHALLENGE_RATE_LIMIT and VERIFY_RATE_LIMIT must be more than 0.")
+# New accounts per window, from everyone together. Each account gets its
+# own voice-check allowance above, so without this one person could open
+# many accounts to multiply the paid calls. Counted across everyone, not
+# per address: behind Render's proxy the caller's address is either the
+# proxy's or taken from a header that can be faked.
+SIGNUP_RATE_LIMIT = int(os.getenv("SIGNUP_RATE_LIMIT", "30"))
+if RATE_LIMIT_WINDOW_SECONDS <= 0 or CHALLENGE_RATE_LIMIT <= 0 or VERIFY_RATE_LIMIT <= 0 or SIGNUP_RATE_LIMIT <= 0:
+    raise RuntimeError(
+        "RATE_LIMIT_WINDOW_SECONDS, CHALLENGE_RATE_LIMIT, VERIFY_RATE_LIMIT and SIGNUP_RATE_LIMIT must be more than 0."
+    )
 
 # Enrollment. Provisional limits: set them from the evaluation harness and
 # the per-sample log lines once there are real recordings.
