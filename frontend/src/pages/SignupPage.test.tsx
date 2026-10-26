@@ -17,6 +17,7 @@ function renderApp(start = "/signup") {
     <MemoryRouter initialEntries={[start]}>
       <Routes>
         <Route path="/signup" element={<SignupPage />} />
+        <Route path="/signin" element={<p>sign-in screen</p>} />
         <Route
           path="/verify"
           element={
@@ -136,9 +137,18 @@ describe("Create account screen", () => {
 });
 
 describe("Session guard", () => {
-  it("sends you back to signup without a token", () => {
+  it("sends you to sign in without a token", () => {
     renderApp("/verify");
 
-    expect(screen.getByRole("button", { name: /create account/i })).toBeInTheDocument();
+    expect(screen.getByText("sign-in screen")).toBeInTheDocument();
+  });
+});
+
+describe("Sign in link", () => {
+  it("takes an existing member to sign in", async () => {
+    renderApp();
+    await userEvent.setup().click(screen.getByRole("link", { name: /already a member\? sign in/i }));
+
+    expect(screen.getByText("sign-in screen")).toBeInTheDocument();
   });
 });
