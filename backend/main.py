@@ -29,6 +29,9 @@ app.add_middleware(
     allow_origin_regex=config.ALLOWED_ORIGIN_REGEX,
     allow_methods=["*"],
     allow_headers=["*"],
+    # Browsers hide most response headers from another site's code. The
+    # frontend reads Retry-After to say how long a lockout or rate limit lasts.
+    expose_headers=["Retry-After"],
 )
 
 app.include_router(auth.router)

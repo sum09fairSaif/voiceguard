@@ -23,7 +23,7 @@ function renderResult(state?: { result: VerifyResult }) {
       <Routes>
         <Route path="/result" element={<ResultPage />} />
         <Route path="/verify" element={<p>passage screen</p>} />
-        <Route path="/signup" element={<p>signup screen</p>} />
+        <Route path="/signin" element={<p>sign-in screen</p>} />
       </Routes>
     </MemoryRouter>,
   );
@@ -87,7 +87,7 @@ describe("Result page", () => {
 
     await userEvent.setup().click(screen.getByRole("button", { name: /done/i }));
 
-    expect(screen.getByText("signup screen")).toBeInTheDocument();
+    expect(screen.getByText("sign-in screen")).toBeInTheDocument();
     expect(getToken()).toBeNull();
   });
 
