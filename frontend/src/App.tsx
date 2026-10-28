@@ -2,12 +2,14 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { RequireSession } from "./components/RequireSession";
 import { PassagePage } from "./pages/PassagePage";
 import { ResultPage } from "./pages/ResultPage";
+import { SignInPage } from "./pages/SignInPage";
 import { SignupPage } from "./pages/SignupPage";
 
 function App() {
   return (
     <BrowserRouter>
       <Routes>
+        <Route path="/signin" element={<SignInPage />} />
         <Route path="/signup" element={<SignupPage />} />
         <Route
           path="/verify"
@@ -25,8 +27,8 @@ function App() {
             </RequireSession>
           }
         />
-        {/* "/" and any unknown address start at signup. */}
-        <Route path="*" element={<Navigate to="/signup" replace />} />
+        {/* "/" and any unknown address start at sign in: most visits are returning users. */}
+        <Route path="*" element={<Navigate to="/signin" replace />} />
       </Routes>
     </BrowserRouter>
   );
