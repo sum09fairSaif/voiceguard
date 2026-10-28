@@ -12,7 +12,7 @@ const MAX_NAME_LENGTH = 100;
 const MIN_PASSWORD_LENGTH = 8;
 // bcrypt only reads the first 72 bytes of a password.
 const MAX_PASSWORD_BYTES = 72;
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+export const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function validateSignup(form: SignupForm): SignupErrors {
   const errors: SignupErrors = {};
