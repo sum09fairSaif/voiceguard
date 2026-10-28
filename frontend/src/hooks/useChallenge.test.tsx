@@ -29,7 +29,7 @@ function renderChallenge() {
       <MemoryRouter initialEntries={["/verify"]}>
         <Routes>
           <Route path="/verify" element={children} />
-          <Route path="/signup" element={<p>signup screen</p>} />
+          <Route path="/signin" element={<p>sign-in screen</p>} />
         </Routes>
       </MemoryRouter>
     </StrictMode>
@@ -105,12 +105,12 @@ describe("useChallenge", () => {
     expect(result.current.challenge?.attempt_id).toBe("newest");
   });
 
-  it("sends a signed-out user back to signup and clears the session", async () => {
+  it("sends a signed-out user back to sign in and clears the session", async () => {
     saveToken("expired-token");
     mockRequest.mockRejectedValue(apiError(401));
     renderChallenge();
 
-    expect(await screen.findByText("signup screen")).toBeInTheDocument();
+    expect(await screen.findByText("sign-in screen")).toBeInTheDocument();
     expect(getToken()).toBeNull();
   });
 
