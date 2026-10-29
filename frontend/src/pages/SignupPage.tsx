@@ -47,7 +47,8 @@ export function SignupPage() {
         password: form.password,
       });
       saveToken(result.access_token);
-      navigate("/verify", { replace: true });
+      // A new account has no Voice ID yet, so set one up first (#10).
+      navigate("/enroll", { replace: true });
     } catch (error) {
       const rejected = invalidFields(error);
       if (rejected.length > 0) {

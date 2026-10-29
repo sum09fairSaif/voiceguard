@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { WRONG_CREDENTIALS, logIn } from "../api/auth";
+import { getEnrollment, type Enrollment } from "../api/enroll";
 import { MESSAGES } from "../api/errors";
 import { getToken } from "../api/session";
 import { RequireSession } from "../components/RequireSession";
@@ -15,6 +16,11 @@ vi.mock("../api/auth", async (importOriginal) => ({
   logIn: vi.fn(),
 }));
 const mockLogIn = vi.mocked(logIn);
+vi.mock("../api/enroll", () => ({ getEnrollment: vi.fn() }));
+const mockGetEnrollment = vi.mocked(getEnrollment);
+
+const ENROLLED: Enrollment = { status: "enrolled", samples_accepted: 3, samples_required: 3, prompt: null };
+const NOT_ENROLLED: Enrollment = { status: "not_started", samples_accepted: 0, samples_required: 3, prompt: "amber lantern" };
 
 const account = {
   user: { id: "u1", full_name: "Sam Lee", email: "sam@example.com", created_at: "2026-10-22T12:00:00Z" },
@@ -28,6 +34,7 @@ function renderApp() {
       <Routes>
         <Route path="/signin" element={<SignInPage />} />
         <Route path="/signup" element={<p>signup screen</p>} />
+        <Route path="/enroll" element={<p>enroll screen</p>} />
         <Route
           path="/verify"
           element={
@@ -51,6 +58,7 @@ async function fillAndSubmit(email = " sam@example.com ", password = "Correct-ho
 
 beforeEach(() => {
   mockLogIn.mockReset();
+  mockGetEnrollment.mockReset().mockResolvedValue(ENROLLED);
 });
 
 describe("SignInPage", () => {
@@ -63,7 +71,26 @@ describe("SignInPage", () => {
     expect(screen.queryByText(/voice id/i)).not.toBeInTheDocument();
   });
 
-  it("signs in, saves the token and goes on to the voice check", async () => {
+  it("sends someone without a Voice ID to set one up", async () => {
+    mockLogIn.mockResolvedValue(account);
+    mockGetEnrollment.mockResolvedValue(NOT_ENROLLED);
+    renderApp();
+    await fillAndSubmit();
+
+    expect(await screen.findByText("enroll screen")).toBeInTheDocument();
+    expect(getToken()).toBe("token-1");
+  });
+
+  it("sends people to the enrollment page if their Voice ID status can't be read", async () => {
+    mockLogIn.mockResolvedValue(account);
+    mockGetEnrollment.mockRejectedValue(apiError(503));
+    renderApp();
+    await fillAndSubmit();
+
+    expect(await screen.findByText("enroll screen")).toBeInTheDocument();
+  });
+
+  it("signs in, saves the token and, with a Voice ID, goes on to the voice check", async () => {
     mockLogIn.mockResolvedValue(account);
     renderApp();
     await fillAndSubmit();
