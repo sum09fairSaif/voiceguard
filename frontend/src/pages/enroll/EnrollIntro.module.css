@@ -1,0 +1,94 @@
+.progress {
+  margin-top: 47px;
+}
+
+.heading {
+  margin-top: 35px;
+}
+
+/* Figma 1:208: the soft teal card with the large V-wave mark. */
+.mark {
+  margin-top: 26px;
+  height: 115px;
+  border-radius: 17px;
+  background: var(--color-accent-soft);
+  display: grid;
+  place-items: center;
+}
+
+.features {
+  margin-top: 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  list-style: none;
+  padding: 0;
+}
+
+.feature {
+  display: grid;
+  grid-template-columns: 45px 1fr;
+  align-items: start;
+}
+
+.featureIcon {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 20px;
+}
+
+.featureTitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.featureText {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--color-muted);
+}
+
+/* Figma 1:220 / 1:241: a real checkbox, drawn as the design's teal square. */
+.consent {
+  margin-top: 40px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  font-size: 10px;
+  line-height: 16px;
+  color: var(--color-muted);
+  cursor: pointer;
+}
+
+.consentInput {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+}
+
+.box {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  margin-left: 1px;
+  border-radius: 3px;
+  border: 1.5px solid var(--color-accent);
+  display: grid;
+  place-items: center;
+}
+
+.consentInput:checked + .box {
+  background: var(--color-accent);
+}
+
+.consentInput:focus-visible + .box {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.action {
+  margin-top: 20px;
+}
