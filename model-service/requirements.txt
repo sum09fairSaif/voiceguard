@@ -6,4 +6,4 @@
 # (see encode() in app.py); it's small enough for either.
 torch==2.8.0
 torchaudio==2.8.0
-speechbrain==1.1.1
+speechbrain==1.1.2
