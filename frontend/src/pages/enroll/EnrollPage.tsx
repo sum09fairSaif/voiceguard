@@ -5,6 +5,7 @@ import { describeEnrollError, getEnrollment, type Enrollment } from "../../api/e
 import { clearToken } from "../../api/session";
 import { Logo } from "../../components/Logo";
 import { Page } from "../../components/Page";
+import { EnrollDone } from "./EnrollDone";
 import { EnrollIntro } from "./EnrollIntro";
 import { EnrollRecord } from "./EnrollRecord";
 import styles from "../PassagePage.module.css";
@@ -78,8 +79,7 @@ export function EnrollPage() {
           onSignedOut={signOut}
         />
       )}
-      {/* The confirmation screen comes in the next step of this work. */}
-      {step === "done" && <p role="status">Your Voice ID is ready.</p>}
+      {step === "done" && <EnrollDone onContinue={() => navigate("/verify")} />}
     </Page>
   );
 }
