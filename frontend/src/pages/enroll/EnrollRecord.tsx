@@ -1,11 +1,12 @@
 import { isAxiosError } from "axios";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { addSample, describeEnrollError, getEnrollment, isAlreadyEnrolled, startOver, type Enrollment } from "../../api/enroll";
 import { Button } from "../../components/Button";
 import { PageHeading } from "../../components/PageHeading";
 import { RecordButton } from "../../components/RecordButton";
 import { StepProgress } from "../../components/StepProgress";
 import { useRecorder } from "../../hooks/useRecorder";
+import { useStillShown } from "../../hooks/useStillShown";
 import { formatCountdown } from "../../utils/countdown";
 import { displayPassage } from "../../utils/passage";
 // Same layout as the passage screen (Figma 1:244 matches 1:327).
@@ -27,13 +28,7 @@ export function EnrollRecord({ enrollment, onChange, onEnrolled, onSignedOut }: 
   const [error, setError] = useState("");
   const [saved, setSaved] = useState("");
   // A reply that arrives after the user has left this screen is ignored.
-  const shown = useRef(true);
-  useEffect(() => {
-    shown.current = true;
-    return () => {
-      shown.current = false;
-    };
-  }, []);
+  const shown = useStillShown();
 
   const microphoneBusy = recorder.status === "recording" || recorder.status === "requesting";
   const recording = recorder.status === "recording";

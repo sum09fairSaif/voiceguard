@@ -3,12 +3,13 @@ import { Link, useNavigate } from "react-router-dom";
 import { describeLoginError, logIn } from "../api/auth";
 import { getEnrollment } from "../api/enroll";
 import { invalidFields } from "../api/errors";
-import { saveToken } from "../api/session";
+import { clearToken, saveToken } from "../api/session";
 import { Button } from "../components/Button";
 import { Logo } from "../components/Logo";
 import { Page } from "../components/Page";
 import { PageHeading } from "../components/PageHeading";
 import { TextField } from "../components/TextField";
+import { useStillShown } from "../hooks/useStillShown";
 import styles from "./SignInPage.module.css";
 import { validateSignIn, type SignInErrors, type SignInForm } from "./signInValidation";
 
@@ -20,6 +21,7 @@ export function SignInPage() {
   const [errors, setErrors] = useState<SignInErrors>({});
   const [formError, setFormError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const shown = useStillShown();
 
   function update(field: keyof SignInForm, value: string) {
     setForm((current) => ({ ...current, [field]: value }));
@@ -36,6 +38,8 @@ export function SignInPage() {
     setSubmitting(true);
     try {
       const result = await logIn({ email: form.email.trim(), password: form.password });
+      // The user may have gone to Create account while this was running.
+      if (!shown.current) return;
       saveToken(result.access_token);
       // People without a Voice ID set one up first (#10). If the status can't
       // be read, the enrollment page explains, retries, and shows enrolled
@@ -47,8 +51,13 @@ export function SignInPage() {
       } catch {
         // Handled on the enrollment page.
       }
+      if (!shown.current) {
+        clearToken();
+        return;
+      }
       navigate(destination, { replace: true });
     } catch (error) {
+      if (!shown.current) return;
       const rejected = invalidFields(error);
       const fieldErrors: SignInErrors = {};
       for (const name of rejected) {

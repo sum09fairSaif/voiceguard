@@ -153,3 +153,20 @@ describe("Sign in link", () => {
     expect(screen.getByText("sign-in screen")).toBeInTheDocument();
   });
 });
+
+describe("Leaving while the account is being created", () => {
+  it("ignores a signup that finishes after the user went to Sign in", async () => {
+    let finish!: (value: typeof SIGNED_UP) => void;
+    mockSignup.mockReturnValue(new Promise((r) => (finish = r)));
+    renderApp();
+    await fillAndSubmit();
+
+    await userEvent.setup().click(screen.getByRole("link", { name: /already a member\? sign in/i }));
+    expect(screen.getByText("sign-in screen")).toBeInTheDocument();
+    finish(SIGNED_UP);
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(screen.getByText("sign-in screen")).toBeInTheDocument();
+    expect(getToken()).toBeNull();
+  });
+});
