@@ -35,6 +35,7 @@ function renderPage() {
       <Routes>
         <Route path="/enroll" element={<EnrollPage />} />
         <Route path="/signin" element={<p>sign-in screen</p>} />
+        <Route path="/verify" element={<p>voice check screen</p>} />
       </Routes>
     </MemoryRouter>,
   );
@@ -90,7 +91,19 @@ describe("EnrollPage: where it starts", () => {
   it("goes straight to the end for an enrolled account", async () => {
     mockGet.mockResolvedValue(status(3));
     renderPage();
-    expect(await screen.findByRole("status")).toHaveTextContent("Your Voice ID is ready.");
+    expect(await screen.findByRole("heading", { name: "One voice. All yours." })).toBeInTheDocument();
+  });
+
+  it("shows the confirmation and sends the user on to try their Voice ID", async () => {
+    mockGet.mockResolvedValue(status(3));
+    renderPage();
+    const user = userEvent.setup();
+
+    expect(await screen.findByRole("heading", { name: "One voice. All yours." })).toBeInTheDocument();
+    expect(screen.getByRole("list", { name: "Your Voice ID" })).toHaveTextContent("Voice IDConfirmed");
+    expect(screen.getByRole("list", { name: "Your Voice ID" })).toHaveTextContent("ProtectionEncrypted");
+    await user.click(screen.getByRole("button", { name: /try your voice id/i }));
+    expect(screen.getByText("voice check screen")).toBeInTheDocument();
   });
 
   it("sends a signed-out user to sign in", async () => {
@@ -140,7 +153,7 @@ describe("EnrollPage: recording samples", () => {
     await record(user);
     await user.click(screen.getByRole("button", { name: /save sample/i }));
 
-    expect(await screen.findByRole("status")).toHaveTextContent("Your Voice ID is ready.");
+    expect(await screen.findByRole("heading", { name: "One voice. All yours." })).toBeInTheDocument();
   });
 
   it("explains a rejected sample in our own words and lets the user try again", async () => {
@@ -171,7 +184,7 @@ describe("EnrollPage: recording samples", () => {
     await record(user);
     await user.click(screen.getByRole("button", { name: /save sample/i }));
 
-    expect(await screen.findByRole("status")).toHaveTextContent("Your Voice ID is ready.");
+    expect(await screen.findByRole("heading", { name: "One voice. All yours." })).toBeInTheDocument();
   });
 
   it("locks the buttons while a sample is being saved", async () => {
