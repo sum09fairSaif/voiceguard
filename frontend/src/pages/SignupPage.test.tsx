@@ -17,6 +17,7 @@ function renderApp(start = "/signup") {
     <MemoryRouter initialEntries={[start]}>
       <Routes>
         <Route path="/signup" element={<SignupPage />} />
+        <Route path="/enroll" element={<p>enroll screen</p>} />
         <Route path="/signin" element={<p>sign-in screen</p>} />
         <Route
           path="/verify"
@@ -60,12 +61,12 @@ describe("Create account screen", () => {
     expect(mockSignup).not.toHaveBeenCalled();
   });
 
-  it("signs up, keeps the token and moves on", async () => {
+  it("signs up, keeps the token and goes on to set up a Voice ID", async () => {
     mockSignup.mockResolvedValue(SIGNED_UP);
     renderApp();
     await fillAndSubmit();
 
-    expect(await screen.findByText("verify screen")).toBeInTheDocument();
+    expect(await screen.findByText("enroll screen")).toBeInTheDocument();
     expect(mockSignup).toHaveBeenCalledWith({
       full_name: "Alex Morgan",
       email: "alex@example.com",

@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { describeLoginError, logIn } from "../api/auth";
+import { getEnrollment } from "../api/enroll";
 import { invalidFields } from "../api/errors";
 import { saveToken } from "../api/session";
 import { Button } from "../components/Button";
@@ -36,9 +37,17 @@ export function SignInPage() {
     try {
       const result = await logIn({ email: form.email.trim(), password: form.password });
       saveToken(result.access_token);
-      // Straight to the voice check for now; once enrollment has a screen
-      // (#10), people without a voiceprint go there first.
-      navigate("/verify", { replace: true });
+      // People without a Voice ID set one up first (#10). If the status can't
+      // be read, the enrollment page explains, retries, and shows enrolled
+      // users the way on.
+      let destination = "/enroll";
+      try {
+        const enrollment = await getEnrollment();
+        if (enrollment.status === "enrolled") destination = "/verify";
+      } catch {
+        // Handled on the enrollment page.
+      }
+      navigate(destination, { replace: true });
     } catch (error) {
       const rejected = invalidFields(error);
       const fieldErrors: SignInErrors = {};
