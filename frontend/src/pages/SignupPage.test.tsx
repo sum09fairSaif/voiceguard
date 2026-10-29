@@ -17,6 +17,7 @@ function renderApp(start = "/signup") {
     <MemoryRouter initialEntries={[start]}>
       <Routes>
         <Route path="/signup" element={<SignupPage />} />
+        <Route path="/enroll" element={<p>enroll screen</p>} />
         <Route path="/signin" element={<p>sign-in screen</p>} />
         <Route
           path="/verify"
@@ -60,12 +61,12 @@ describe("Create account screen", () => {
     expect(mockSignup).not.toHaveBeenCalled();
   });
 
-  it("signs up, keeps the token and moves on", async () => {
+  it("signs up, keeps the token and goes on to set up a Voice ID", async () => {
     mockSignup.mockResolvedValue(SIGNED_UP);
     renderApp();
     await fillAndSubmit();
 
-    expect(await screen.findByText("verify screen")).toBeInTheDocument();
+    expect(await screen.findByText("enroll screen")).toBeInTheDocument();
     expect(mockSignup).toHaveBeenCalledWith({
       full_name: "Alex Morgan",
       email: "alex@example.com",
@@ -150,5 +151,22 @@ describe("Sign in link", () => {
     await userEvent.setup().click(screen.getByRole("link", { name: /already a member\? sign in/i }));
 
     expect(screen.getByText("sign-in screen")).toBeInTheDocument();
+  });
+});
+
+describe("Leaving while the account is being created", () => {
+  it("ignores a signup that finishes after the user went to Sign in", async () => {
+    let finish!: (value: typeof SIGNED_UP) => void;
+    mockSignup.mockReturnValue(new Promise((r) => (finish = r)));
+    renderApp();
+    await fillAndSubmit();
+
+    await userEvent.setup().click(screen.getByRole("link", { name: /already a member\? sign in/i }));
+    expect(screen.getByText("sign-in screen")).toBeInTheDocument();
+    finish(SIGNED_UP);
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(screen.getByText("sign-in screen")).toBeInTheDocument();
+    expect(getToken()).toBeNull();
   });
 });

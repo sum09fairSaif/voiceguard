@@ -8,6 +8,7 @@ import { Logo } from "../components/Logo";
 import { Page } from "../components/Page";
 import { PageHeading } from "../components/PageHeading";
 import { TextField } from "../components/TextField";
+import { useStillShown } from "../hooks/useStillShown";
 import styles from "./SignupPage.module.css";
 import { validateSignup, type SignupErrors, type SignupForm } from "./signupValidation";
 
@@ -26,6 +27,7 @@ export function SignupPage() {
   const [errors, setErrors] = useState<SignupErrors>({});
   const [formError, setFormError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const shown = useStillShown();
 
   function update(field: keyof SignupForm, value: string) {
     setForm((current) => ({ ...current, [field]: value }));
@@ -46,9 +48,13 @@ export function SignupPage() {
         email: form.email.trim(),
         password: form.password,
       });
+      // The user may have gone to Sign in while this was running.
+      if (!shown.current) return;
       saveToken(result.access_token);
-      navigate("/verify", { replace: true });
+      // A new account has no Voice ID yet, so set one up first (#10).
+      navigate("/enroll", { replace: true });
     } catch (error) {
+      if (!shown.current) return;
       const rejected = invalidFields(error);
       if (rejected.length > 0) {
         const fieldErrors: SignupErrors = {};
