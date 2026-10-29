@@ -174,4 +174,45 @@ describe("SignInPage", () => {
 
     expect(screen.getByText("signup screen")).toBeInTheDocument();
   });
+
+  describe("leaving while signing in", () => {
+    function deferred<T>() {
+      let resolve!: (value: T) => void;
+      const promise = new Promise<T>((r) => (resolve = r));
+      return { promise, resolve };
+    }
+
+    it("ignores a sign-in that succeeds after the user went to Create account", async () => {
+      const pending = deferred<typeof account>();
+      mockLogIn.mockReturnValue(pending.promise);
+      renderApp();
+      const user = await fillAndSubmit();
+
+      await user.click(screen.getByRole("link", { name: /create account/i }));
+      expect(screen.getByText("signup screen")).toBeInTheDocument();
+      pending.resolve(account);
+      await new Promise((r) => setTimeout(r, 0));
+
+      expect(screen.getByText("signup screen")).toBeInTheDocument();
+      expect(getToken()).toBeNull();
+      expect(mockGetEnrollment).not.toHaveBeenCalled();
+    });
+
+    it("drops the session if the user left while their Voice ID status was loading", async () => {
+      mockLogIn.mockResolvedValue(account);
+      const pending = deferred<typeof ENROLLED>();
+      mockGetEnrollment.mockReturnValue(pending.promise);
+      renderApp();
+      const user = await fillAndSubmit();
+      await screen.findByRole("button", { name: /signing in/i });
+      await new Promise((r) => setTimeout(r, 0));
+
+      await user.click(screen.getByRole("link", { name: /create account/i }));
+      pending.resolve(ENROLLED);
+      await new Promise((r) => setTimeout(r, 0));
+
+      expect(screen.getByText("signup screen")).toBeInTheDocument();
+      expect(getToken()).toBeNull();
+    });
+  });
 });
