@@ -48,7 +48,7 @@ Each row is a user story (see the
 | #13 Show a challenge passage | ✅ Done | ✅ Done |
 | #14 Record and submit the attempt | ✅ Done | ✅ Done |
 | #15 Content check | ✅ Done (OpenAI Whisper) | — |
-| #10 Enroll voice profile | ✅ Done | ⏳ Enrollment screen to do |
+| #10 Enroll voice profile | ✅ Done | ✅ Enrollment screens (after signup, or after sign-in until enrolled) |
 | #16 Identity check | ✅ Done (SpeechBrain ECAPA) | — |
 | #17 Liveness / anti-spoof check | ⏳ Not started | — |
 | #18 Combine the three checks | 🟡 Content + identity combined; answers "incomplete" until liveness exists | — |
