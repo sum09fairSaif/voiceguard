@@ -1,9 +1,11 @@
+import type { ReactNode } from "react";
 import shieldCheck from "../assets/icons/shield-check.svg";
 import styles from "./PageHeading.module.css";
 
 type Props = {
   eyebrow: string;
-  title: string;
+  // A node so a screen can break the title where the design does.
+  title: ReactNode;
   subtitle: string;
   // The voice screens in the designs have no shield badge.
   showBadge?: boolean;
