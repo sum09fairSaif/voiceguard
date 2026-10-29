@@ -22,9 +22,9 @@ export function ResultPage() {
       navigate("/verify", { replace: true });
       return;
     }
-    // Done: there's no home screen in MVP1, so finish the session and start over.
+    // Done: there's no home screen yet, so finish the session and go back to sign in.
     clearToken();
-    navigate("/signup", { replace: true });
+    navigate("/signin", { replace: true });
   }
 
   return (

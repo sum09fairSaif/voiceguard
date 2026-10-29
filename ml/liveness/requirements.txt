@@ -1,6 +1,8 @@
 # Data tools for the liveness check: loading, checking and (later)
 # preprocessing datasets. Not deployed anywhere; run on whichever machine
-# holds the audio. soundfile reads FLAC, WAV and MP3.
+# holds the audio. soundfile reads FLAC, WAV and MP3; huggingface_hub
+# downloads the datasets hosted there (download.py).
+huggingface_hub==0.26.2
 numpy==1.26.4
 pandas==2.2.3
 pyarrow==23.0.1

@@ -56,7 +56,7 @@ export function PassagePage() {
     } catch (err) {
       if (isAxiosError(err) && err.response?.status === 401) {
         clearToken();
-        navigate("/signup", { replace: true });
+        navigate("/signin", { replace: true });
         return;
       }
       const status = isAxiosError(err) ? err.response?.status : undefined;
