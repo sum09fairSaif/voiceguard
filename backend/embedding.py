@@ -51,7 +51,10 @@ def embed(url: str, token: str, audio: bytes, filename: str) -> Embedding:
             finished = client.get(f"{call_url}/{started.json()['event_id']}")
             finished.raise_for_status()
     except httpx.HTTPError as exc:
-        raise IdentityUnavailable("The model service can't be reached.") from exc
+        # The type and status only: the error's text could carry the URL.
+        response = getattr(exc, "response", None)
+        status = response.status_code if response is not None else "-"
+        raise IdentityUnavailable(f"The model service can't be reached: {type(exc).__name__} status={status}.") from exc
     except (ValueError, KeyError, TypeError) as exc:
         raise IdentityUnavailable("The model service sent an unexpected answer.") from exc
 

@@ -285,6 +285,18 @@ def test_model_service_outage_returns_503(client, embedder):
     assert send(client).status_code == 503
 
 
+def test_model_service_outage_logs_which_part_failed_and_why(client, embedder, caplog):
+    embedder.error = IdentityUnavailable("The model service can't be reached: ConnectError status=-.")
+
+    with caplog.at_level(logging.WARNING, logger="voiceguard"):
+        response = send(client)
+
+    assert "ConnectError" not in response.text
+    [line] = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING and r.name == "voiceguard"]
+    assert "path=/api/enroll/samples part=voice-model" in line
+    assert "ConnectError status=-" in line
+
+
 def test_model_service_too_old_to_measure_quality_returns_503(client, embedder, enrollments):
     embedder.speech_seconds = None
 
