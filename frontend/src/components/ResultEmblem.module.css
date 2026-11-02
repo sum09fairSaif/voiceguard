@@ -62,8 +62,8 @@
 }
 
 .partial {
-  --strong: var(--color-accent);
-  --soft: var(--color-accent-soft);
-  --ring: var(--color-accent-border);
-  --dot: var(--color-accent-border);
+  --strong: var(--color-brand);
+  --soft: var(--color-brand-soft);
+  --ring: var(--color-brand-border);
+  --dot: var(--color-brand-border);
 }

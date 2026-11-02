@@ -16,7 +16,7 @@
 
 .eyebrow.success,
 .eyebrow.partial {
-  color: var(--color-accent);
+  color: var(--color-gold);
 }
 
 .eyebrow.failure {

@@ -11,7 +11,7 @@
   margin-top: 26px;
   height: 115px;
   border-radius: 17px;
-  background: var(--color-accent-soft);
+  background: var(--color-brand-soft);
   display: grid;
   place-items: center;
 }
@@ -75,17 +75,17 @@
   height: 15px;
   margin-left: 1px;
   border-radius: 3px;
-  border: 1.5px solid var(--color-accent);
+  border: 1.5px solid var(--color-gold);
   display: grid;
   place-items: center;
 }
 
 .consentInput:checked + .box {
-  background: var(--color-accent);
+  background: var(--color-gold);
 }
 
 .consentInput:focus-visible + .box {
-  outline: 2px solid var(--color-accent);
+  outline: 2px solid var(--color-primary);
   outline-offset: 2px;
 }
 
