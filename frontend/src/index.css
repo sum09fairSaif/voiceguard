@@ -1,18 +1,25 @@
-/* Design tokens from the Figma production frames (teal theme, e.g. node 1:47).
+/* Design tokens from the Figma Production frames (e.g. node 19:49).
    Every screen uses these instead of hard-coded values. */
 :root {
   --color-text: #292d2e;
   --color-muted: #697172;
-  --color-accent: #007f7b;
-  --color-accent-soft: #e9f5f3;
+  /* Buttons and the microphone. */
+  --color-primary: #526c19;
+  /* Small labels, links, the step bar and the checkbox. */
+  --color-gold: #c9a227;
+  --color-gold-soft: #f7f3e8;
+  --color-gold-border: #e6d9b8;
+  /* The logo, the intro icons and the summary cards. */
+  --color-brand: #007f7b;
+  --color-brand-soft: #e9f5f3;
+  --color-brand-border: #7cbeb8;
   --color-border: #cbd2dc;
-  --color-accent-border: #cde7e3;
-  --color-accent-faint: #f5faf9;
+  --color-tile: #f3f4f6;
   --color-track: #e5e9f0;
   --color-surface: #ffffff;
   /* Not in the Figma frames: frames the phone column on wider screens. */
   --color-backdrop: #f2f4f6;
-  /* Success colours from the Figma "Verified" frame (1:369). */
+  /* Success colours from the Figma "Verified" frame (19:371). */
   --color-success: #526c19;
   --color-success-soft: #edf2df;
   --color-success-ring: #e3eacd;
@@ -33,9 +40,12 @@
   --page-padding-x: 36px;
   --column-max-width: 390px;
 
-  --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  /* Headings, field labels, buttons and the logo. */
+  --font-heading: "SN Pro", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  /* Everything else. */
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 
-  font-family: var(--font-sans);
+  font-family: var(--font-body);
   color: var(--color-text);
   background: var(--color-surface);
   -webkit-font-smoothing: antialiased;

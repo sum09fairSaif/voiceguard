@@ -4,7 +4,7 @@
   height: 54px;
   border: none;
   border-radius: var(--radius-button);
-  background: var(--color-accent);
+  background: var(--color-primary);
   color: #ffffff;
   font: inherit;
   font-size: 14px;
