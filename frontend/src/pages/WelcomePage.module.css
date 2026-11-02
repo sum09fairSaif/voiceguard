@@ -37,15 +37,20 @@
   left: 47px;
 }
 
+/* Sized by its text rather than Figma's fixed 102px, so it still fits if a
+   browser enforces a larger minimum font size. It also covers the outer
+   shield's point. */
 .badge {
-  top: 234px;
-  left: 65px;
-  width: 102px;
-  height: 26px;
+  top: 235px;
+  left: 50%;
+  transform: translateX(-50%);
+  min-height: 26px;
+  padding: 0 10px;
   border-radius: 13px;
   background: var(--color-gold-badge);
   display: grid;
   place-items: center;
+  white-space: nowrap;
   font-family: var(--font-heading);
   font-size: 9px;
   font-weight: 600;
