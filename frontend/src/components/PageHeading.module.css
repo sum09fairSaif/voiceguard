@@ -27,6 +27,7 @@
   font-size: 36px;
   line-height: 40px;
   font-weight: 700;
+  text-wrap: balance;
   color: var(--color-text);
 }
 

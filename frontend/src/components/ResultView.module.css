@@ -8,9 +8,9 @@
 
 .eyebrow {
   margin-top: 40px;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1.1px;
   text-transform: uppercase;
 }
 
@@ -24,43 +24,39 @@
 }
 
 .title {
-  margin-top: 8px;
+  margin-top: 7px;
   max-width: 260px;
-  font-size: 38px;
+  font-family: var(--font-heading);
+  font-size: 36px;
   line-height: 43px;
   font-weight: 700;
-  letter-spacing: -0.01em;
   color: var(--color-text);
 }
 
 .subtitle {
-  margin-top: 22px;
+  margin-top: 30px;
   max-width: 280px;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 22px;
   color: var(--color-muted);
 }
 
 .checks {
-  margin: 30px 0 0;
-  padding: 4px 18px;
+  margin: 22px 0 0;
+  padding: 7px 18px;
   width: 100%;
   list-style: none;
-  border: 1px solid var(--color-card-border);
+  border: 1px solid var(--color-brand-border);
   border-radius: var(--radius-status-card);
-  background: var(--color-surface);
+  background: var(--color-brand-soft);
 }
 
 .check {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 15px 0;
-  font-size: 12px;
-}
-
-.check + .check {
-  border-top: 1px solid var(--color-card-border);
+  padding: 14.5px 0;
+  font-size: 14px;
 }
 
 .checkLabel {
@@ -71,11 +67,12 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  font-family: var(--font-heading);
   font-weight: 600;
 }
 
 .passed {
-  color: var(--color-success);
+  color: var(--color-text);
 }
 
 .failed {
