@@ -5,11 +5,13 @@ import { PassagePage } from "./pages/PassagePage";
 import { ResultPage } from "./pages/ResultPage";
 import { SignInPage } from "./pages/SignInPage";
 import { SignupPage } from "./pages/SignupPage";
+import { WelcomePage } from "./pages/WelcomePage";
 
 function App() {
   return (
     <BrowserRouter>
       <Routes>
+        <Route path="/" element={<WelcomePage />} />
         <Route path="/signin" element={<SignInPage />} />
         <Route path="/signup" element={<SignupPage />} />
         <Route
@@ -36,8 +38,7 @@ function App() {
             </RequireSession>
           }
         />
-        {/* "/" and any unknown address start at sign in: most visits are returning users. */}
-        <Route path="*" element={<Navigate to="/signin" replace />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
   );
