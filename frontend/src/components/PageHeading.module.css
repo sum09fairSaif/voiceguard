@@ -34,5 +34,7 @@
   margin-top: 28px;
   font-size: 14px;
   line-height: 21px;
+  /* The designs break these lines by hand; this gets close without hard-coding them. */
+  text-wrap: balance;
   color: var(--color-muted);
 }
