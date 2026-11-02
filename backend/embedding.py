@@ -1,9 +1,9 @@
 import base64
 import json
 import os
+from collections.abc import Callable
 from dataclasses import dataclass
 from functools import partial
-from typing import Callable
 
 import httpx
 

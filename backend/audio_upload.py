@@ -34,7 +34,7 @@ def read_recording(audio: UploadFile) -> tuple[bytes, str]:
     recording = audio.file.read(MAX_AUDIO_BYTES + 1)
     if len(recording) > MAX_AUDIO_BYTES:
         raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
             detail="The recording is too long. Please read just the passage.",
         )
     if not recording:

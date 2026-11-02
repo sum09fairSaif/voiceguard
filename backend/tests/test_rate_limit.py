@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -6,7 +6,7 @@ from rate_limit import RateLimited, count_request
 
 # 20 past the hour, a day ahead: the test database deletes counters whose
 # window has already ended, so the window must still be open in real time.
-NEXT_DAY_HOUR = (datetime.now(timezone.utc) + timedelta(days=1)).replace(minute=0, second=0, microsecond=0)
+NEXT_DAY_HOUR = (datetime.now(UTC) + timedelta(days=1)).replace(minute=0, second=0, microsecond=0)
 NOW = NEXT_DAY_HOUR + timedelta(minutes=20)
 HOUR = 3600
 
@@ -56,5 +56,5 @@ def test_counter_is_deleted_when_its_window_ends(rate_limits):
     hit(rate_limits)
 
     counter = rate_limits.find_one()
-    assert counter["expires_at"].replace(tzinfo=timezone.utc) == NEXT_DAY_HOUR + timedelta(hours=1)
+    assert counter["expires_at"].replace(tzinfo=UTC) == NEXT_DAY_HOUR + timedelta(hours=1)
     assert rate_limits.index_information()["expires_at_1"]["expireAfterSeconds"] == 0

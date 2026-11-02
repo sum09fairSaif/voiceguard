@@ -1,5 +1,5 @@
 import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from functools import lru_cache
 
 import bcrypt
@@ -41,7 +41,7 @@ def check_password(password: str, password_hash: str | None) -> bool:
 def create_access_token(user_id: str) -> str:
     if not config.JWT_SECRET:
         raise config.NotConfigured("JWT_SECRET is not set. Add it to your .env file.")
-    now =datetime.now(timezone.utc)
+    now =datetime.now(UTC)
     payload = {
         "sub": user_id,
         "iat": now,
