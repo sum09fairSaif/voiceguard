@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from pymongo import ReturnDocument
 from pymongo.collection import Collection
@@ -22,13 +22,13 @@ def _current(user_id: str, now: datetime) -> dict:
 
 def accepted_samples(enrollments: Collection, user_id: str) -> list[list[float]]:
     """The user's accepted samples so far, decrypted."""
-    record = enrollments.find_one(_current(user_id, datetime.now(timezone.utc)))
+    record = enrollments.find_one(_current(user_id, datetime.now(UTC)))
     return [decrypt_embedding(sample) for sample in record["samples"]] if record else []
 
 
 def count_samples(enrollments: Collection, user_id: str) -> int:
     """How many samples the user has given so far. Needs no key."""
-    record = enrollments.find_one(_current(user_id, datetime.now(timezone.utc)), {"samples": 1})
+    record = enrollments.find_one(_current(user_id, datetime.now(UTC)), {"samples": 1})
     return len(record["samples"]) if record else 0
 
 
@@ -51,7 +51,7 @@ def sample_problem(sample: Embedding, earlier: list[list[float]]) -> tuple[str |
 def add_sample(enrollments: Collection, user_id: str, embedding: list[float]) -> int:
     """Store one accepted sample, encrypted, and return how many the user
     has now. Each sample gives the user another ENROLL_SESSION_TTL_SECONDS."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     # Clear out an expired or other-model enrollment first, so its samples
     # aren't mixed in with this one.
     enrollments.delete_many({"_id": user_id, "$nor": [_current(user_id, now)]})
@@ -71,7 +71,7 @@ def add_sample(enrollments: Collection, user_id: str, embedding: list[float]) ->
 def take_samples(enrollments: Collection, user_id: str) -> list[list[float]] | None:
     """Remove the user's samples and return them, decrypted. Done in one
     step, so if two requests finish at once only one builds the voiceprint."""
-    record = enrollments.find_one_and_delete(_current(user_id, datetime.now(timezone.utc)))
+    record = enrollments.find_one_and_delete(_current(user_id, datetime.now(UTC)))
     return [decrypt_embedding(sample) for sample in record["samples"]] if record else None
 
 

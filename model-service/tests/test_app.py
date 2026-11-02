@@ -19,6 +19,7 @@ def make_audio(seconds=1.0, fmt="wav", codec="pcm_s16le", source=None):
         [FFMPEG, "-nostdin", "-loglevel", "error", "-f", "lavfi", "-i", source,
          "-ar", "48000", "-c:a", codec, "-f", fmt, "-"],
         capture_output=True,
+        check=False,
     )
     assert result.returncode == 0, result.stderr.decode()
     return result.stdout

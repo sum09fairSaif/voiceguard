@@ -1,10 +1,10 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from login_lockout import clear_failures, record_failure, seconds_locked
 
 # A day ahead: the test database deletes records whose expiry has already
 # passed in real time, so the times used here must still be in the future.
-NOW = (datetime.now(timezone.utc) + timedelta(days=1)).replace(microsecond=0)
+NOW = (datetime.now(UTC) + timedelta(days=1)).replace(microsecond=0)
 MAX, WINDOW, LOCKOUT = 3, 900, 1800
 
 
@@ -77,5 +77,5 @@ def test_record_is_kept_until_the_lockout_ends(login_failures):
         fail(login_failures)
 
     record = login_failures.find_one()
-    assert record["expires_at"].replace(tzinfo=timezone.utc) == NOW + timedelta(seconds=LOCKOUT)
+    assert record["expires_at"].replace(tzinfo=UTC) == NOW + timedelta(seconds=LOCKOUT)
     assert login_failures.index_information()["expires_at_1"]["expireAfterSeconds"] == 0

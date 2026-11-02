@@ -18,7 +18,8 @@ import os
 import secrets
 import subprocess
 import tempfile
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 try:
     # Hugging Face's ZeroGPU package. It must be imported before anything
@@ -143,7 +144,7 @@ def decode_audio(audio: bytes, demuxer: str) -> np.ndarray:
             "-ac", "1", "-ar", str(SAMPLE_RATE), "-f", "f32le", "-",
         ]
         # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit, python.lang.security.audit.dangerous-subprocess-use-tainted-env-args
-        result = subprocess.run(command, capture_output=True, timeout=30)
+        result = subprocess.run(command, capture_output=True, timeout=30, check=False)
     finally:
         os.remove(path)
     if result.returncode != 0:

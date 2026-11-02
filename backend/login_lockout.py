@@ -1,6 +1,6 @@
 import hashlib
 import math
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from pymongo import ReturnDocument
 from pymongo.collection import Collection
@@ -15,12 +15,12 @@ def _key(email: str) -> str:
 
 def _utc(moment: datetime) -> datetime:
     # MongoDB hands dates back without a time zone; they are UTC.
-    return moment if moment.tzinfo else moment.replace(tzinfo=timezone.utc)
+    return moment if moment.tzinfo else moment.replace(tzinfo=UTC)
 
 
 def seconds_locked(login_failures: Collection, email: str, now: datetime | None = None) -> int:
     """How many seconds until this email may try again; 0 if it isn't locked."""
-    now = now or datetime.now(timezone.utc)
+    now = now or datetime.now(UTC)
     record = login_failures.find_one({"_id": _key(email), "locked_until": {"$gt": now}})
     if record is None:
         return 0
@@ -38,7 +38,7 @@ def record_failure(
     """Count one wrong password for this email. Returns how many seconds it
     is now locked for: 0 unless this failure reached `max_failures` within
     `window_seconds` of the first one."""
-    now = now or datetime.now(timezone.utc)
+    now = now or datetime.now(UTC)
     key = _key(email)
     window_end = now + timedelta(seconds=window_seconds)
     record = None
