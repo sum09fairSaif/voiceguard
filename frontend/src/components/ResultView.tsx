@@ -10,7 +10,7 @@ import styles from "./ResultView.module.css";
 // content from describeResult changes.
 export function ResultView({ view, onAction }: { view: View; onAction: () => void }) {
   return (
-    <div className={styles.result}>
+    <div className={`${styles.result} ${styles.verdict}`}>
       <ResultEmblem tone={view.tone} />
       <p className={`${styles.eyebrow} ${styles[view.tone]}`}>{view.eyebrow}</p>
       <h1 className={styles.title}>{view.title}</h1>
