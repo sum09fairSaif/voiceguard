@@ -6,6 +6,20 @@
   text-align: center;
 }
 
+/* Figma 19:371: the emblem sits lower here than on "Voice ID ready" (19:287),
+   with the text in the same place. */
+.verdict {
+  margin-top: 71px;
+}
+
+.verdict .eyebrow {
+  margin-top: 21px;
+}
+
+.verdict .checkLabel {
+  color: var(--color-text);
+}
+
 .eyebrow {
   margin-top: 40px;
   font-size: 11px;

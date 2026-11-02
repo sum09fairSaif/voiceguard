@@ -15,6 +15,11 @@
   text-align: center;
 }
 
+/* Figma 19:329: this screen's two-line title leaves less room above the card. */
+.tightCard {
+  margin-top: 22px;
+}
+
 .cardLabel {
   font-size: 11px;
   font-weight: 600;
