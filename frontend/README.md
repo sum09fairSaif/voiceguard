@@ -44,7 +44,7 @@ in for the browser's recording APIs.
 
 | Route | Screen |
 |---|---|
-| `/signin` | Sign in with email and password, then go on to the voice check |
+| `/signin` | Sign in with email and password, then go on to the voice check (enrolled accounts) or enrollment (everyone else) |
 | `/signup` | Create an account |
 | `/enroll` | Set up a Voice ID: consent, three recorded samples, confirmation (signed in only) |
 | `/verify` | Read the challenge passage aloud and submit the recording (signed in only) |
