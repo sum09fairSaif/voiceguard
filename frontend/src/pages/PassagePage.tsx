@@ -79,12 +79,12 @@ export function PassagePage() {
         <PageHeading
           showBadge={false}
           eyebrow="Secure sign in"
-          title="Just say the word."
+          title="Just say the phrase."
           subtitle="Find a quiet spot and read the phrase below in your natural voice."
         />
       </div>
 
-      <section className={styles.card} aria-labelledby="phrase-label">
+      <section className={`${styles.card} ${styles.tightCard}`} aria-labelledby="phrase-label">
         <p id="phrase-label" className={styles.cardLabel}>
           Your secure phrase
         </p>

@@ -7,32 +7,35 @@
   width: 48px;
   height: 48px;
   border-radius: var(--radius-badge);
-  background: var(--color-accent-soft);
+  background: var(--color-tile);
   display: grid;
   place-items: center;
   margin-bottom: 23px;
 }
 
 .eyebrow {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1.1px;
   text-transform: uppercase;
-  color: var(--color-accent);
+  color: var(--color-gold);
 }
 
 .title {
-  margin-top: 6px;
+  margin-top: 3px;
+  font-family: var(--font-heading);
   font-size: 36px;
   line-height: 40px;
   font-weight: 700;
-  letter-spacing: -0.01em;
+  text-wrap: balance;
   color: var(--color-text);
 }
 
 .subtitle {
-  margin-top: 22px;
-  font-size: 13px;
+  margin-top: 28px;
+  font-size: 14px;
   line-height: 21px;
+  /* The designs break these lines by hand; this gets close without hard-coding them. */
+  text-wrap: balance;
   color: var(--color-muted);
 }

@@ -3,7 +3,7 @@ import styles from "./ResultEmblem.module.css";
 
 export type EmblemTone = "success" | "failure" | "partial";
 
-// The big circular badge at the top of the result screen (Figma 1:386-1:391).
+// The big circular badge at the top of the result screen (Figma 19:371).
 // Only the success version is in the designs; failure and partial reuse its
 // shape in the error and teal colours, with simple icons of our own.
 export function ResultEmblem({ tone }: { tone: EmblemTone }) {

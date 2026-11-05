@@ -13,7 +13,7 @@ import { useStillShown } from "../hooks/useStillShown";
 import styles from "./SignInPage.module.css";
 import { validateSignIn, type SignInErrors, type SignInForm } from "./signInValidation";
 
-// Figma 1:95 "Sign in". The "Sign in with Voice ID" button is left out for now:
+// Figma 19:97 "Sign in". The "Sign in with Voice ID" button is left out for now:
 // a voice check needs a token, which needs the password first.
 export function SignInPage() {
   const navigate = useNavigate();

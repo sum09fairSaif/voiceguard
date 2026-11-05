@@ -15,7 +15,7 @@ const FEATURES = [
   { icon: featureShield, width: 16.23, height: 18.06, title: "Built for peace of mind", text: "An extra layer for your identity." },
 ];
 
-// Figma 1:188 "Set up Voice ID": step 1 of enrollment. Voice is biometric
+// Figma 19:190 "Set up Voice ID": step 1 of enrollment. Voice is biometric
 // data, so the consent box must be ticked before recording can start.
 export function EnrollIntro({ onStart }: { onStart: () => void }) {
   const [agreed, setAgreed] = useState(false);
@@ -29,13 +29,7 @@ export function EnrollIntro({ onStart }: { onStart: () => void }) {
         <PageHeading
           showBadge={false}
           eyebrow="Voice ID / 01"
-          title={
-            <>
-              Meet your{" "}
-              <br />
-              new key.
-            </>
-          }
+          title="Meet your new key."
           subtitle="No two voices are alike. Set up your Voice ID in just a few seconds."
         />
       </div>
