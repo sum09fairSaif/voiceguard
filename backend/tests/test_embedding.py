@@ -103,6 +103,17 @@ def test_refusals_are_reported_as_unavailable(service, error):
         embed(URL, TOKEN, RECORDING, "attempt.webm")
 
 
+def test_unreachable_service_says_why_without_the_address_or_token(service):
+    service.start = httpx.Response(503)
+
+    with pytest.raises(IdentityUnavailable) as caught:
+        embed(URL, TOKEN, RECORDING, "attempt.webm")
+
+    assert "HTTPStatusError status=503" in str(caught.value)
+    assert URL not in str(caught.value)
+    assert TOKEN not in str(caught.value)
+
+
 def test_failed_job_is_reported_as_unavailable(service):
     service.result = httpx.Response(200, text='event: error\ndata: {"error": null}\n\n')
 
