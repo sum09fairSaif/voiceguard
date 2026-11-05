@@ -4,11 +4,12 @@ import styles from "./Button.module.css";
 
 type Props = ButtonHTMLAttributes<HTMLButtonElement> & {
   showArrow?: boolean;
+  variant?: "primary" | "secondary";
 };
 
-export function Button({ showArrow = false, children, ...buttonProps }: Props) {
+export function Button({ showArrow = false, variant = "primary", children, ...buttonProps }: Props) {
   return (
-    <button className={styles.button} {...buttonProps}>
+    <button className={`${styles.button} ${styles[variant]}`} {...buttonProps}>
       {children}
       {showArrow && (
         <img className={styles.arrow} src={arrowRight} alt="" width={12.4292} height={9.2625} />
