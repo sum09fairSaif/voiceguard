@@ -1,7 +1,7 @@
 import pytest
 
 import manifest
-from sources import asvspoof2019_la, common_voice, in_the_wild, team
+from sources import asvspoof2019_la, asvspoof2019_pa, common_voice, in_the_wild, team
 
 
 def by_id(rows):
@@ -29,6 +29,33 @@ def test_asvspoof_reads_labels_attacks_and_splits(asvspoof):
 def test_asvspoof_explains_a_missing_download(tmp_path):
     with pytest.raises(FileNotFoundError, match="unzip LA.zip"):
         asvspoof2019_la.load(tmp_path)
+
+
+def test_asvspoof_pa_reads_replay_attacks(tmp_path):
+    protocols = tmp_path / "PA" / "ASVspoof2019_PA_cm_protocols"
+    protocols.mkdir(parents=True)
+    (protocols / "ASVspoof2019.PA.cm.train.trn.txt").write_text(
+        "PA_0079 PA_T_0000001 aaa - bonafide\nPA_0079 PA_T_0000010 aaa AA spoof\n"
+    )
+    (protocols / "ASVspoof2019.PA.cm.dev.trl.txt").write_text("PA_0069 PA_D_0000001 abc - bonafide\n")
+    (protocols / "ASVspoof2019.PA.cm.eval.trl.txt").write_text("PA_0029 PA_E_0000002 bab BB spoof\n")
+
+    rows = by_id(asvspoof2019_pa.load(tmp_path))
+    manifest.check_rows(list(rows.values()), "asvspoof2019_pa")
+
+    assert len(rows) == 4
+    replay = rows["asvspoof2019_pa/PA_T_0000010"]
+    assert (replay["label"], replay["attack_type"], replay["split"]) == ("spoof", "AA", "train")
+    assert replay["path"] == "PA/ASVspoof2019_PA_train/flac/PA_T_0000010.flac"
+    assert replay["speaker_id"] == "asvspoof2019_pa/PA_0079"
+    assert replay["source"] == "asvspoof2019_pa"
+    assert rows["asvspoof2019_pa/PA_E_0000002"]["split"] == "test"
+    assert rows["asvspoof2019_pa/PA_D_0000001"]["attack_type"] == ""
+
+
+def test_asvspoof_pa_explains_a_missing_download(tmp_path):
+    with pytest.raises(FileNotFoundError, match="unzip PA.zip"):
+        asvspoof2019_pa.load(tmp_path)
 
 
 def test_in_the_wild_is_test_only(tmp_path):
@@ -73,6 +100,30 @@ def test_common_voice_takes_a_few_clips_per_speaker(tmp_path, monkeypatch):
     assert {r["label"] for r in rows} == {"bonafide"}
     assert train[0]["path"].startswith("cv-corpus-20.0-2024-12-06/en/clips/")
     assert [r["split"] for r in rows].count("dev") == 1
+
+
+def test_common_voice_reads_the_2017_release(tmp_path, monkeypatch):
+    header = "filename,text,up_votes,down_votes,age,gender,accent,duration\n"
+    for split in ["train", "dev", "test"]:
+        lines = [f"cv-valid-{split}/sample-{i:06d}.mp3,hello there,2,0,,,," for i in range(5)]
+        (tmp_path / f"cv-valid-{split}.csv").write_text(header + "\n".join(lines) + "\n")
+    monkeypatch.setitem(common_voice.MAX_CLIPS, "train", 3)
+
+    rows = common_voice.load(tmp_path)
+    manifest.check_rows(rows, "common_voice")
+
+    train = [r for r in rows if r["split"] == "train"]
+    assert len(train) == 3
+    assert [r["split"] for r in rows].count("dev") == 5
+    # The same sample on every run.
+    assert train == [r for r in common_voice.load(tmp_path) if r["split"] == "train"]
+    clip = train[0]
+    assert clip["path"].startswith("cv-valid-train/sample-")
+    assert clip["utt_id"] == "common_voice/" + clip["path"].removesuffix(".mp3")
+    # No speaker ids in this release: each clip is its own "speaker".
+    assert clip["speaker_id"] == "common_voice/unknown/" + clip["path"].removesuffix(".mp3")
+    # Every split numbers its clips from 000000, so ids include the split.
+    assert len({r["utt_id"] for r in rows}) == len(rows)
 
 
 def test_team_reads_metadata(team_dir):

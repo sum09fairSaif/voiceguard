@@ -4,8 +4,8 @@ From ml/liveness/, after build_manifest.py:
 
     python validate.py
 
-Decodes each clip and flags ones that are missing, unreadable, too short,
-silent or badly clipped. Also finds duplicate files and speakers that
+Decodes each clip and flags ones that are missing, unreadable, corrupt, too
+short, silent or badly clipped. Also finds duplicate files and speakers that
 appear in more than one split (which would let a model pass the test by
 recognizing voices it trained on).
 
@@ -32,6 +32,9 @@ MIN_SECONDS = 1.0  # shorter than this isn't enough to judge liveness
 SPEECH_LEVEL = 0.01  # a clip whose loudest sample is quieter than this is silent
 CLIPPED_LEVEL = 0.99  # a sample this close to full scale was cut off
 MAX_CLIPPED_SHARE = 0.01  # more than 1% cut-off samples is badly clipped
+# Audio can't go past 1.0, apart from MP3 decoding overshooting slightly, so a
+# sample beyond this means the file is damaged.
+MAX_VALID_PEAK = 2.0
 
 
 def check_clip(path: Path) -> str:
@@ -44,9 +47,11 @@ def check_clip(path: Path) -> str:
         return "unreadable"
     if not np.isfinite(samples).all():
         return "not_finite"
+    peak = np.abs(samples).max()
+    if peak > MAX_VALID_PEAK:
+        return "corrupt"
     if len(samples) / rate < MIN_SECONDS:
         return "too_short"
-    peak = np.abs(samples).max()
     if peak < SPEECH_LEVEL:
         return "silent"
     if (np.abs(samples) >= CLIPPED_LEVEL).mean() > MAX_CLIPPED_SHARE:

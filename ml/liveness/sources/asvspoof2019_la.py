@@ -19,39 +19,45 @@ from manifest import BONAFIDE, SPOOF
 NAME = "asvspoof2019_la"
 LICENSE = "ODC-By-1.0"
 
-# The dataset's split names, mapped to ours, with each split's protocol file
-# (the list of clips and their labels).
-SPLITS = {
-    "train": ("train", "ASVspoof2019.LA.cm.train.trn.txt"),
-    "dev": ("dev", "ASVspoof2019.LA.cm.dev.trl.txt"),
-    "eval": ("test", "ASVspoof2019.LA.cm.eval.trl.txt"),
-}
+# The dataset's split names, mapped to ours.
+SPLITS = {"train": "train", "dev": "dev", "eval": "test"}
+# Each split's protocol file (the list of clips and their labels).
+PROTOCOLS = {"train": "trn", "dev": "trl", "eval": "trl"}
+
+
+def read_protocols(root: Path, part: str, name: str, license_name: str) -> list[dict]:
+    """Rows for one half of ASVspoof 2019: part is "LA" or "PA".
+
+    Both halves have the same layout and the same five protocol columns.
+    """
+    folder = root / part if (root / part).is_dir() else root
+    protocols = folder / f"ASVspoof2019_{part}_cm_protocols"
+    if not protocols.is_dir():
+        raise FileNotFoundError(f"{protocols} not found; unzip {part}.zip into {root}")
+    prefix = folder.relative_to(root)  # e.g. "LA", or "." if root is that folder itself
+
+    rows = []
+    for their_split, our_split in SPLITS.items():
+        protocol = protocols / f"ASVspoof2019.{part}.cm.{their_split}.{PROTOCOLS[their_split]}.txt"
+        # Each line: speaker, clip name, a third column, attack ("-" if bonafide), label.
+        # e.g. "LA_0079 LA_T_1138215 - - bonafide" or "PA_0079 PA_T_0000010 aaa AA spoof"
+        for line in protocol.read_text().splitlines():
+            if not line.strip():
+                continue
+            speaker, clip, _, attack, key = line.split()
+            label = BONAFIDE if key == "bonafide" else SPOOF
+            rows.append({
+                "utt_id": f"{name}/{clip}",
+                "path": (prefix / f"ASVspoof2019_{part}_{their_split}" / "flac" / f"{clip}.flac").as_posix(),
+                "source": name,
+                "speaker_id": f"{name}/{speaker}",
+                "label": label,
+                "attack_type": attack if label == SPOOF else "",
+                "split": our_split,
+                "license": license_name,
+            })
+    return rows
 
 
 def load(root: Path) -> list[dict]:
-    la = root / "LA" if (root / "LA").is_dir() else root
-    protocols = la / "ASVspoof2019_LA_cm_protocols"
-    if not protocols.is_dir():
-        raise FileNotFoundError(f"{protocols} not found; unzip LA.zip into {root}")
-    prefix = la.relative_to(root)  # "LA", or "." if root is the LA folder itself
-
-    rows = []
-    for their_split, (our_split, protocol) in SPLITS.items():
-        # Each line: speaker, clip name, "-", attack system ("-" if bonafide), label.
-        # e.g. "LA_0079 LA_T_1138215 - - bonafide"
-        for line in (protocols / protocol).read_text().splitlines():
-            if not line.strip():
-                continue
-            speaker, clip, _, system, key = line.split()
-            label = BONAFIDE if key == "bonafide" else SPOOF
-            rows.append({
-                "utt_id": f"{NAME}/{clip}",
-                "path": (prefix / f"ASVspoof2019_LA_{their_split}" / "flac" / f"{clip}.flac").as_posix(),
-                "source": NAME,
-                "speaker_id": f"{NAME}/{speaker}",
-                "label": label,
-                "attack_type": system if label == SPOOF else "",
-                "split": our_split,
-                "license": LICENSE,
-            })
-    return rows
+    return read_protocols(root, "LA", NAME, LICENSE)
