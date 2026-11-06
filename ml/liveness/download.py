@@ -7,6 +7,7 @@ From ml/liveness/:
     python download.py asvspoof5 --train    # adds train (~37 GB), for fine-tuning
     python download.py codecfake            # 1 shard per codec, 16 shards (~10 GB)
     python download.py deepfake_eval_2024   # all of the audio (~4 GB)
+    python download.py rirs_noises          # room echoes and noise for augmentation (~1.3 GB)
 
 Each takes a manageable slice instead of the whole dataset (several are over
 100 GB); the options above take more. Downloads resume where they stopped,
@@ -27,6 +28,9 @@ import hashlib
 import sys
 import tarfile
 import time
+import urllib.error
+import urllib.request
+import zipfile
 from pathlib import Path
 
 import pyarrow.parquet as pq
@@ -53,6 +57,64 @@ def fetch(repo: str, filename: str, out: Path) -> Path:
             wait = min(60, 2 ** attempt)
             print(f"  {filename}: {type(error).__name__}; retrying in {wait}s ({attempt}/{ATTEMPTS})")
             time.sleep(wait)
+
+
+def fetch_url(url: str, path: Path) -> Path:
+    """Download a file from a plain web server, resuming and retrying like fetch()."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    partial = path.with_name(path.name + ".partial")
+    for attempt in range(1, ATTEMPTS + 1):
+        have = partial.stat().st_size if partial.exists() else 0
+        request = urllib.request.Request(url, headers={"Range": f"bytes={have}-"} if have else {})
+        try:
+            with urllib.request.urlopen(request, timeout=60) as response:
+                if have and response.status != 206:  # the server ignored the range: start again
+                    have = 0
+                total = have + int(response.headers.get("Content-Length", 0))
+                with open(partial, "ab" if have else "wb") as f:
+                    while chunk := response.read(1 << 20):
+                        f.write(chunk)
+            if partial.stat().st_size >= total:
+                partial.replace(path)
+                return path
+        except urllib.error.HTTPError as error:
+            if error.code == 416:  # nothing left to fetch: the partial file is complete
+                partial.replace(path)
+                return path
+            if attempt == ATTEMPTS:
+                raise
+        except Exception as error:  # network errors come in many types
+            # A bad certificate won't fix itself by retrying.
+            if attempt == ATTEMPTS or "CERTIFICATE_VERIFY_FAILED" in str(error):
+                raise
+        wait = min(60, 2 ** attempt)
+        print(f"  {path.name}: interrupted; retrying in {wait}s ({attempt}/{ATTEMPTS})")
+        time.sleep(wait)
+    sys.exit(f"couldn't download {url}")
+
+
+def rirs_noises(out: Path) -> None:
+    """OpenSLR 28: room impulse responses and background noises (Apache 2.0),
+    for augmentation in training. Not a dataset of real or fake speech, so it
+    goes in data/augment/, not data/raw/."""
+    if (out / "RIRS_NOISES").is_dir():
+        print("already unpacked")
+        return
+    path = out / "rirs_noises.zip"
+    if not path.exists():  # also lets you download it by hand and put it there
+        try:
+            fetch_url("https://www.openslr.org/resources/28/rirs_noises.zip", path)
+        except urllib.error.URLError as error:
+            if "CERTIFICATE_VERIFY_FAILED" not in str(error):
+                raise
+            sys.exit(f"openslr.org's security certificate isn't valid right now, so it isn't safe to "
+                     f"download from. Try again later, or download rirs_noises.zip from "
+                     f"https://www.openslr.org/28/ yourself, save it as {path} and run this again.")
+    with zipfile.ZipFile(path) as z:
+        if (bad := z.testzip()) is not None:
+            sys.exit(f"{path} is corrupt ({bad}); delete it and run again")
+        z.extractall(out)
+    path.unlink()
 
 
 def md5(path: Path) -> str:
@@ -171,14 +233,16 @@ def deepfake_eval_2024(out: Path) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("source", choices=["asvspoof5", "codecfake", "deepfake_eval_2024"])
+    parser.add_argument("source", choices=["asvspoof5", "codecfake", "deepfake_eval_2024", "rirs_noises"])
     parser.add_argument("--data-dir", type=Path, default=DEFAULT_DATA_DIR)
     parser.add_argument("--eval-parts", type=int, default=1, help="asvspoof5: eval tars, 1-10")
     parser.add_argument("--train", action="store_true", help="asvspoof5: also the train set (37 GB)")
     args = parser.parse_args()
 
     out = args.data_dir / "raw" / args.source
-    if args.source == "asvspoof5":
+    if args.source == "rirs_noises":
+        rirs_noises(args.data_dir / "augment")
+    elif args.source == "asvspoof5":
         asvspoof5(out, args.eval_parts, args.train)
     elif args.source == "codecfake":
         codecfake(out)
