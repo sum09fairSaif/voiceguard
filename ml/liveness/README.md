@@ -146,14 +146,153 @@ Write a module in `sources/` with a `NAME` and a `load(root)` that returns
 manifest rows (copy an existing one), add it to `sources/__init__.py`, and
 add a test in `tests/test_sources.py` with a miniature copy of its layout.
 
+## Scoring the pretrained model
+
+`score_baseline.py` scores public AASIST checkpoints on a sample of test clips,
+before we train anything, so every later model has a number to beat. The model
+code is in `models/aasist.py`, copied unchanged from the official ASVspoof 5
+baseline (MIT licence). The weights come from two public repos, cloned into the
+git-ignored `data/external/`:
+
+```
+pip install -r requirements-model.txt --extra-index-url https://download.pytorch.org/whl/cpu
+git clone --depth 1 https://github.com/asvspoof-challenge/asvspoof5 data/external/asvspoof5
+git clone --depth 1 https://github.com/clovaai/aasist data/external/clovaai-aasist
+python score_baseline.py \
+  --model asvspoof5=data/external/asvspoof5/Baseline-AASIST/models/weights/AASIST/best.pth \
+  --model aasist2019=data/external/clovaai-aasist/models/weights/AASIST.pth
+```
+
+Each clip is scored twice, as raw audio (only made 16 kHz mono, as the
+checkpoints were trained) and as preprocessed audio. On a CPU it scores about 5
+clips a second. Results go to `data/baseline/report.md`. The clips come from
+the clean manifest, so validate.py's 1-second limit leaves out some official
+ASVspoof 2019 test clips: don't compare these numbers directly with published
+ones.
+
+First results (November 2026; EER %, 500 test clips per dataset and label, so
+give or take about 3 points; 50 is guessing):
+
+| Dataset | ASVspoof 5 model, raw | processed | 2019 LA model, raw | processed |
+|---|---|---|---|---|
+| ASVspoof 2019 LA | 35.2 | 43.0 | **0.8** | 29.4 |
+| ASVspoof 2019 PA (replay) | 47.8 | 49.8 | 43.2 | 46.2 |
+| ASVspoof 5 | **27.6** | 31.6 | 36.6 | 32.6 |
+| CodecFake | 49.6 | 50.2 | 47.2 | 48.4 |
+| In-the-Wild | 28.8 | 32.2 | 44.2 | 42.6 |
+| Common Voice, real clips rejected | 35.8 | 16.0 | 34.2 | 45.2 |
+
+Each model does well only on the dataset it was trained on (in bold), and is
+close to guessing on replay and codec fakes. Neither is good enough to use as
+it is, so we fine-tune on our own data. Both do worse on processed audio
+because they were trained with the silence left in: the 2019 model's 0.8%
+rises to 29.4% once the silence is trimmed, so much of that score came from the
+silence, not the voice.
+
+## Training
+
+`train.py` fine-tunes AASIST from a public checkpoint (it needs a GPU to be
+practical; on a CPU it runs, slowly, for testing):
+
+```
+python download.py rirs_noises   # room echoes and noise, once
+python train.py --init data/external/asvspoof5/Baseline-AASIST/models/weights/AASIST/best.pth --name first-try
+```
+
+- **Sampling** (`training_data.py`): every batch is half real and half fake.
+  Within each half, a dataset is drawn in proportion to the square root of its
+  size, so ASVspoof 5 doesn't swamp the rest.
+- **Augmentation** (`augment.py`), on real and fake clips with the same chances:
+  room echo (25%), background noise at 5-25 dB below the speech (30%), and
+  Opus or MP3 compression at 7-120 kbps (50%). Compression matters most:
+  browsers record in Opus, and Common Voice's real clips are MP3, so without
+  it "sounds compressed" would pass for "real". Run with `--no-noise` to skip
+  the echo and noise if RIRS_NOISES isn't downloaded.
+- **Checking**: after each epoch, the EER on a fixed dev sample, averaged
+  over datasets. The best epoch is kept as `data/runs/<name>/best.pth`, which
+  `score_baseline.py` can then score on the test split.
+- **Stopping**: `last.pth` is saved after every epoch; `--resume` carries on.
+
+### Training on Kaggle's free GPUs
+
+Kaggle gives about 30 free GPU hours a week, in sessions of up to 9-12 hours.
+`kaggle_pack.py` gets everything ready (see its docstring for details):
+
+1. Make a Kaggle account, verify a phone number (needed for GPUs), and under
+   Settings > API create a token. Save it as `access_token` (the newer
+   `KGAT_` tokens) or `kaggle.json` (older ones) in `C:\Users\<you>\.kaggle\`
+   (Windows) or `~/.kaggle/`. Never put it in the repo.
+2. `pip install -r requirements-model.txt` (includes the Kaggle CLI). On
+   Windows, run the `kaggle` commands below from inside the folder with
+   `-p .`: Kaggle CLI 2.2.5 breaks on Windows paths given to `-p`.
+3. `python kaggle_pack.py --user <kaggle-username>` packs the training clips
+   and a dev sample into about 15 GB under `data/kaggle/data/` (clips cut to 5
+   seconds, ASVspoof 5's fakes thinned to 80,000).
+4. `kaggle datasets create -p data/kaggle/data`, once. It's private.
+5. `kaggle kernels push -p data/kaggle/script` starts training on a GPU. The
+   code goes inside the script, so after a code change only this step and
+   `kaggle_pack.py --script-only` are needed, not another upload.
+6. `kaggle kernels status <kaggle-username>/voiceguard-liveness-train`, then
+   `kaggle kernels output <kaggle-username>/voiceguard-liveness-train -p data/kaggle/output`
+   to download `runs/<name>/best.pth` and `log.csv`.
+7. If a session stopped before the last epoch, `python kaggle_pack.py --user
+   <kaggle-username> --script-only --resume` and push again: the next session
+   carries on from the last one's `last.pth`. Kaggle only attaches the output
+   of the last version that finished without an error, so after a crash
+   there's nothing to carry on from: the script then stops at once and lists
+   what it found, rather than starting over.
+
+On Kaggle's GPU it trains about 17 clips a second, about 65-75 minutes an
+epoch, so 10 epochs need two sessions. The GPU is mostly waiting: Opus and MP3
+compression on Kaggle's 4 CPU cores is the bottleneck.
+
+Caution: CodecFake and ASVspoof 2019 both use VCTK speakers under different
+ids, so a speaker can be in one's train split and the other's test split.
+In-the-Wild shares no speakers or data with training, so it's the fairest
+test.
+
+### First fine-tuned model
+
+`first-try` (November 2026): 10 epochs on Kaggle from the ASVspoof 5
+checkpoint, compression only (no echo or noise: RIRS_NOISES wasn't
+downloadable). Its best dev EER, averaged over datasets, was 17.8%, at the
+last epoch. Scored on processed test audio with:
+
+```
+python score_baseline.py --audio processed --per-group 500 --out-folder finetuned \
+  --title "Fine-tuned vs pretrained" --model first-try=data/models/first-try.pth \
+  --model asvspoof5=... --model aasist2019=...
+```
+
+| Dataset (EER %, processed audio) | 2019 LA model | ASVspoof 5 model | first-try |
+|---|---|---|---|
+| All, pooled | 40.5 | 39.9 | **27.3** |
+| ASVspoof 2019 LA | 29.4 | 43.0 | **27.4** |
+| ASVspoof 2019 PA (replay) | 46.2 | 49.8 | **25.8** |
+| ASVspoof 5 | 32.6 | 31.6 | **22.8** |
+| CodecFake | 48.4 | 50.2 | **30.2** |
+| In-the-Wild | 42.6 | 32.2 | **22.4** |
+| Common Voice, real clips rejected | 45.2 | 16.0 | **1.6** |
+
+It beats both checkpoints everywhere, including In-the-Wild, which it never
+trained on. But about one fake in four still passes, so it isn't good enough to
+rely on yet. Test scores are worse than dev ones (ASVspoof 2019 LA: 27% against
+14%) because LA's test set uses attack types not in training.
+
+Known problem: soundfile 0.13.1 (needed for its `compression_level`) bundles
+libsndfile 1.2.2, which rejects about half of the raw ASVspoof 2019 PA FLAC
+files that 1.2.0 read. The processed data was made with the old version and is
+fine, but rerunning preprocessing, or scoring raw audio, fails on those files
+until this is fixed.
+
 ## Next steps
 
-Speaker-safe splits for team data, augmentation (browser codecs, RawBoost,
-noise) and scoring pretrained AASIST on ASVspoof 2019 LA and In-the-Wild.
-AASIST was trained on untrimmed audio, so score it on both the raw and the
-processed clips to see what preprocessing changes. To compare with published
-scores, use the raw clips in `manifest.parquet`: validate.py's 1-second limit
-removes some official ASVspoof 2019 test clips from the clean manifest.
+- Fix reading the raw ASVspoof 2019 PA files with the current soundfile.
+- Train with room echo and noise once RIRS_NOISES can be downloaded.
+- Team recordings (live and replayed), to test against our own microphones.
+- Try a stronger front end (wav2vec 2.0 + AASIST), which generalises much
+  better in published results but is heavier to train and host.
+- Add the liveness check to the model service and `/api/verify`.
 
 ## Tests
 
