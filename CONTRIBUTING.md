@@ -61,5 +61,7 @@ cd model-service && python -m pytest && ruff check .
 cd ml/liveness && python -m pytest
 ```
 
-Never commit secrets (`.env`, API keys, tokens) or voice recordings. Both
-are git-ignored; if `git status` shows one, stop and check why.
+Never commit secrets (`.env`, API keys, tokens) or voice recordings. `.env`
+files and audio files are git-ignored, but a key pasted into any other file
+isn't, so check `git diff` before you commit. If `git status` shows a `.env`
+or a recording, stop and check why.

@@ -46,17 +46,19 @@ as soon as the voiceprint is built or the checks have run.
 
 ## Key features
 
-- **Password, then voice:** voice is a second factor on top of a password,
-  not a replacement for it.
-- **Single-use passages:** each passage is a random sentence (one of about 5
-  billion), can be used once, and expires after two minutes, so an old
-  recording can't be replayed.
+- **Password, then voice:** the intended flow makes voice a second factor on
+  top of a password, not a replacement for it. This isn't enforced yet:
+  sign-in issues a token after the password alone, and nothing requires a
+  passed voice check until a voice check can be approved (#17 and #18).
+- **Single-use passages:** each passage is a random sentence (about 508
+  million combinations of the six words that are checked), can be used once,
+  and expires after two minutes, so an old recording can't be replayed.
 - **Encrypted voiceprints:** only a numeric summary of the voice is kept,
   encrypted at rest. Recordings are never saved.
 - **Scores stay on the server:** the identity check answers only pass or
   fail, never its score, so nobody can tune a voice clone against it.
-- **Abuse limits:** sign-in locks for 30 minutes after 5 wrong passwords, and
-  per-user limits cap the paid speech-to-text calls.
+- **Abuse limits:** sign-in locks for 30 minutes after 5 wrong passwords
+  within 15 minutes, and per-user limits cap the paid speech-to-text calls.
 - **Fallback:** after 3 failed voice attempts, an email code (planned, #20).
 
 ## Project status
@@ -136,7 +138,7 @@ curl -X POST $API/api/verify -H "Authorization: Bearer <access_token>" \
 |---|---|---|---|
 | GET | `/health` | Is the server up? | No |
 | POST | `/api/auth/signup` | Create an account; returns an access token | No |
-| POST | `/api/auth/login` | Sign in with email and password; locks for 30 min after 5 wrong tries | No |
+| POST | `/api/auth/login` | Sign in with email and password; locks for 30 min after 5 wrong tries within 15 min | No |
 | POST | `/api/challenge` | Get a fresh, single-use passage to read (expires in 2 min) | Yes |
 | POST | `/api/verify` | Send a recording of the passage; runs the checks and returns the decision | Yes |
 | GET | `/api/enroll` | Enrollment progress, and a sentence to read for the next sample | Yes |
@@ -281,11 +283,11 @@ runs the tests, lint and the frontend build on every pull request.
 | Problem | Fix |
 |---|---|
 | `pip install` fails building packages | Use Python 3.11 (`py -3.11 -m venv venv` on Windows). Newer versions, such as 3.14, have no ready-built packages for some pins. |
-| `/health` works but other calls answer 503 "The service is temporarily unavailable" | `MONGO_URI` or `JWT_SECRET` is missing from `.env`. The server log names the missing setting. |
-| Voice checks answer "Voice checks are temporarily unavailable" | `OPENAI_API_KEY` (content check) or the model service settings (identity check, enrollment) are missing, or the model service is asleep: try again in a minute. |
+| `/health` works but other calls answer 503 "The service is temporarily unavailable" | `MONGO_URI` or `JWT_SECRET` is missing from `.env` (the server log names the missing setting), or the database can't be reached (check `MONGO_URI`, and that your IP is allowed under **Network Access** in Atlas). An unreachable database gives the same message, and the log doesn't name a setting for it. |
+| Voice checks answer "Voice checks are temporarily unavailable" | `OPENAI_API_KEY` (content check), `VOICEPRINT_KEY` (enrollment, identity check) or the model service settings (identity check, enrollment) are missing, or the model service is asleep: try again in a minute. |
 | The browser shows a CORS error | Add the frontend's address (e.g. `http://localhost:5173`) to `ALLOWED_ORIGINS` in `.env`, then restart the backend. |
 | The frontend talks to the wrong backend | Set `VITE_API_BASE_URL` in `frontend/.env.local` (not the root `.env`) and restart `npm run dev`. |
-| Model service tests fail with "ffmpeg not found" | Install ffmpeg, or point `FFMPEG_BINARY` at it (`pip install imageio-ffmpeg` provides one). |
+| Model service tests fail with "ffmpeg not found" | Install ffmpeg, or set `FFMPEG_BINARY` to the full path of an ffmpeg file. `pip install imageio-ffmpeg` provides one; print its path with `python -c "import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())"`. |
 | The microphone doesn't start | Allow microphone access for the site in the browser. Browsers only allow it on `https://` or `localhost`. |
 | The first request to the live app takes a minute | The free hosting sleeps when idle; later requests are quick. |
 
