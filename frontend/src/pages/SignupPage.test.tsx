@@ -148,7 +148,7 @@ describe("Session guard", () => {
 describe("Sign in link", () => {
   it("takes an existing member to sign in", async () => {
     renderApp();
-    await userEvent.setup().click(screen.getByRole("link", { name: /already a member\? sign in/i }));
+    await userEvent.setup().click(screen.getByRole("link", { name: "Sign in" }));
 
     expect(screen.getByText("sign-in screen")).toBeInTheDocument();
   });
@@ -161,7 +161,7 @@ describe("Leaving while the account is being created", () => {
     renderApp();
     await fillAndSubmit();
 
-    await userEvent.setup().click(screen.getByRole("link", { name: /already a member\? sign in/i }));
+    await userEvent.setup().click(screen.getByRole("link", { name: "Sign in" }));
     expect(screen.getByText("sign-in screen")).toBeInTheDocument();
     finish(SIGNED_UP);
     await new Promise((r) => setTimeout(r, 0));

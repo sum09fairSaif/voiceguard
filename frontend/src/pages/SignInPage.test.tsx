@@ -170,7 +170,7 @@ describe("SignInPage", () => {
   it("links to Create account", async () => {
     renderApp();
     const user = userEvent.setup();
-    await user.click(screen.getByRole("link", { name: /create account/i }));
+    await user.click(screen.getByRole("link", { name: "Create account" }));
 
     expect(screen.getByText("signup screen")).toBeInTheDocument();
   });

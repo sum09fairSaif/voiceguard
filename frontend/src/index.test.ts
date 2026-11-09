@@ -46,4 +46,13 @@ describe("color contrast", () => {
   it("keeps the filled progress segments distinct from the empty ones", () => {
     expect(contrast(token("color-gold"), token("color-track"))).toBeGreaterThanOrEqual(3);
   });
+
+  it("keeps the edge of an input field visible on white", () => {
+    expect(contrast(token("color-input-border"), token("color-surface"))).toBeGreaterThanOrEqual(3);
+  });
+
+  it("keeps the switch links and the sentence around them readable", () => {
+    expect(contrast(token("color-primary"), token("color-surface"))).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(token("color-muted"), token("color-surface"))).toBeGreaterThanOrEqual(4.5);
+  });
 });

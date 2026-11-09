@@ -125,7 +125,7 @@ export function SignInPage() {
       </form>
 
       <p className={styles.switch}>
-        <Link to="/signup">New to VoiceGuard? Create account</Link>
+        New to VoiceGuard? <Link to="/signup">Create account</Link>
       </p>
     </Page>
   );
