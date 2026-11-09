@@ -76,7 +76,8 @@ def test_new_user_has_not_started(client):
     assert body["status"] == "not_started"
     assert body["samples_accepted"] == 0
     assert body["samples_required"] == 3
-    assert len(body["prompt"].split()) == 6
+    assert body["prompt"].startswith("The ") and body["prompt"].endswith(".")
+    assert len(body["prompt"].split()) == 10
 
 
 def test_each_good_sample_counts_towards_enrollment(client, embedder, voiceprints):

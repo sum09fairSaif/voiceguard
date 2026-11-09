@@ -1,6 +1,6 @@
 from fastapi import HTTPException, UploadFile, status
 
-# Reading six words is a few seconds of compressed audio, around 100 KB.
+# Reading one passage sentence is a few seconds of compressed audio, around 100 KB.
 # 1 MB is plenty, and uploads that size stay in memory instead of being
 # written to a temporary file.
 MAX_AUDIO_BYTES = 1024 * 1024
