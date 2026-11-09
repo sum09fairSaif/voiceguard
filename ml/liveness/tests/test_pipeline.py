@@ -2,6 +2,7 @@ import shutil
 
 import pandas as pd
 import pytest
+import soundfile as sf
 
 import manifest
 from build_manifest import build
@@ -61,6 +62,17 @@ def test_validate_flags_bad_clips(data_dir, asvspoof, team_dir):
         "team/spk01/live_01": "missing",
     }
     assert list(clean["utt_id"]) == ["team/spk01/replay_01"]
+
+
+def test_validate_flags_impossible_sample_values(data_dir, team_dir):
+    path = team_dir / "spk01" / "live_01.wav"
+    samples, rate = sf.read(str(path), dtype="float32")
+    samples[100] = 2300.0
+    sf.write(str(path), samples, rate, subtype="FLOAT")
+
+    df = build(data_dir, ["team"], workers=1)
+    _, issues, _ = validate(df, data_dir, workers=1)
+    assert dict(zip(issues["utt_id"], issues["issue"])) == {"team/spk01/live_01": "corrupt"}
 
 
 def test_validate_keeps_one_copy_of_a_duplicate(data_dir, team_dir):

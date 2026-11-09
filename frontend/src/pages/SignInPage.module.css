@@ -3,13 +3,13 @@
 }
 
 .form {
-  margin-top: 20px;
+  margin-top: 26px;
   display: flex;
   flex-direction: column;
   gap: 18px;
 }
 
-/* Figma 1:139: right-aligned under the password field. */
+/* Figma 19:141: right-aligned under the password field. */
 .forgot {
   align-self: flex-end;
   margin-top: -5px;
@@ -17,9 +17,10 @@
   border: none;
   background: none;
   font: inherit;
+  font-family: var(--font-heading);
   font-size: 11px;
   font-weight: 600;
-  color: var(--color-accent);
+  color: var(--color-gold);
   cursor: pointer;
 }
 
@@ -32,15 +33,16 @@
   margin-top: 10px;
 }
 
-/* Figma 1:143. */
+/* Figma 19:145. */
 .switch {
-  margin-top: 24px;
-  font-size: 11px;
-  font-weight: 500;
+  margin-top: 19px;
+  font-size: 14px;
   text-align: center;
+  color: var(--color-muted);
 }
 
+/* Olive and underlined so the link stands out from the sentence (#118). */
 .switch a {
-  color: var(--color-accent);
-  text-decoration: none;
+  color: var(--color-primary);
+  text-decoration: underline;
 }

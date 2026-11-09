@@ -9,3 +9,7 @@ src = ["backend", "model-service"]
 # Ruff's defaults (real errors: unused imports, undefined names, ...)
 # plus import sorting.
 extend-select = ["I"]
+
+[lint.flake8-bugbear]
+# FastAPI's way of declaring what an endpoint needs, not a shared default.
+extend-immutable-calls = ["fastapi.Depends", "fastapi.File", "fastapi.Form"]

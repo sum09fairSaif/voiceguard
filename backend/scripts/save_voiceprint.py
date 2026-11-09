@@ -18,9 +18,9 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from db import get_users_collection, get_voiceprints_collection  # noqa: E402
-from embedding import get_embedder  # noqa: E402
-from voiceprints import build_voiceprint, save_voiceprint  # noqa: E402
+from db import get_users_collection, get_voiceprints_collection
+from embedding import get_embedder
+from voiceprints import build_voiceprint, save_voiceprint
 
 
 def main(email: str, paths: list[str]) -> None:

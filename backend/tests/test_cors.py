@@ -44,3 +44,11 @@ def test_other_websites_may_not(origin):
     response = preflight(origin)
 
     assert "access-control-allow-origin" not in response.headers
+
+
+def test_our_frontend_may_read_retry_after():
+    # Without this the browser hides Retry-After, and lockout and rate-limit
+    # messages can't say how long to wait.
+    response = client.get("/health", headers={"Origin": "https://voiceguard-nu.vercel.app"})
+
+    assert response.headers["access-control-expose-headers"] == "Retry-After"

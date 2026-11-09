@@ -29,6 +29,9 @@ app.add_middleware(
     allow_origin_regex=config.ALLOWED_ORIGIN_REGEX,
     allow_methods=["*"],
     allow_headers=["*"],
+    # Browsers hide most response headers from another site's code. The
+    # frontend reads Retry-After to say how long a lockout or rate limit lasts.
+    expose_headers=["Retry-After"],
 )
 
 app.include_router(auth.router)
@@ -42,7 +45,7 @@ def validation_error(request: Request, exc: RequestValidationError) -> JSONRespo
     # Say which field is wrong, but never echo back what was sent:
     # it could be a password.
     errors = [{key: e[key] for key in ("type", "loc", "msg")} for e in exc.errors()]
-    return JSONResponse(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, content={"detail": errors})
+    return JSONResponse(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, content={"detail": errors})
 
 
 @app.exception_handler(PyMongoError)
@@ -56,6 +59,9 @@ def database_error(request: Request, exc: PyMongoError) -> JSONResponse:
 @app.exception_handler(TranscriptionUnavailable)
 @app.exception_handler(IdentityUnavailable)
 def voice_check_unavailable(request: Request, exc: Exception) -> JSONResponse:
+    # The log says which part failed and why; the user just hears it's down.
+    part = "speech-to-text" if isinstance(exc, TranscriptionUnavailable) else "voice-model"
+    logger.warning("voice_check_unavailable path=%s part=%s reason=%s", request.url.path, part, exc)
     return JSONResponse(
         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
         content={"detail": "Voice checks are temporarily unavailable. Please try again shortly."},
@@ -66,7 +72,7 @@ def voice_check_unavailable(request: Request, exc: Exception) -> JSONResponse:
 def audio_not_understood(request: Request, exc: AudioNotUnderstood) -> JSONResponse:
     # The passage was already used up, so the user needs a fresh one.
     return JSONResponse(
-        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
         content={"detail": "We couldn't process that recording. Please get a new passage and record again."},
     )
 

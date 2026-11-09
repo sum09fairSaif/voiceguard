@@ -1,5 +1,5 @@
 import math
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from pymongo import ReturnDocument
 from pymongo.collection import Collection
@@ -25,9 +25,9 @@ def count_request(
     for the current window. Windows are fixed blocks of time (e.g. each
     clock hour), so a user can make up to 2 x limit requests either side
     of a window edge; that's fine for capping cost."""
-    now = now or datetime.now(timezone.utc)
+    now = now or datetime.now(UTC)
     window_start = math.floor(now.timestamp() / window_seconds) * window_seconds
-    window_end = datetime.fromtimestamp(window_start + window_seconds, timezone.utc)
+    window_end = datetime.fromtimestamp(window_start + window_seconds, UTC)
     # Add one and read the new count in a single step, so requests arriving
     # at the same moment can't all slip under the limit.
     counter = rate_limits.find_one_and_update(

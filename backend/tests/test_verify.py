@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from bson import ObjectId
@@ -162,7 +162,7 @@ def test_same_passage_cannot_be_checked_twice(client, transcriber, attempt):
 def test_expired_passage_is_refused(client, challenges, transcriber, attempt):
     challenges.update_one(
         {"_id": ObjectId(attempt["id"])},
-        {"$set": {"expires_at": datetime.now(timezone.utc) - timedelta(seconds=1)}},
+        {"$set": {"expires_at": datetime.now(UTC) - timedelta(seconds=1)}},
     )
 
     assert submit(client, attempt["id"]).status_code == 400
@@ -313,6 +313,45 @@ def test_failed_transcription_is_logged_too(client, transcriber, attempt, caplog
 
     [line] = [r.getMessage() for r in caplog.records if r.name == "voiceguard.verify"]
     assert f"outcome={outcome}" in line
+
+
+def test_failed_transcription_logs_what_openai_answered(client, transcriber, attempt, caplog):
+    transcriber.error = TranscriptionUnavailable("down", "RateLimitError status=429 code=insufficient_quota")
+
+    with caplog.at_level(logging.INFO, logger="voiceguard.verify"):
+        submit(client, attempt["id"])
+
+    [line] = [r.getMessage() for r in caplog.records if r.name == "voiceguard.verify"]
+    assert line.endswith("error=RateLimitError status=429 code=insufficient_quota")
+
+
+def test_speech_to_text_outage_logs_one_warning_without_private_data(client, transcriber, attempt, caplog):
+    transcriber.error = TranscriptionUnavailable("Speech-to-text request failed: RateLimitError status=429.")
+
+    with caplog.at_level(logging.WARNING, logger="voiceguard"):
+        response = submit(client, attempt["id"])
+
+    assert response.status_code == 503
+    assert "temporarily unavailable" in response.json()["detail"]
+    [line] = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING and r.name == "voiceguard"]
+    assert "path=/api/verify part=speech-to-text" in line
+    assert "RateLimitError status=429" in line
+    assert "RateLimitError" not in response.text
+    for word in attempt["passage"].split():
+        assert word not in line
+    assert RECORDING.decode() not in caplog.text
+
+
+def test_missing_openai_key_logs_a_clear_warning(client, attempt, caplog, monkeypatch):
+    monkeypatch.setattr(config, "OPENAI_API_KEY", "")
+    get_openai_client.cache_clear()
+
+    with caplog.at_level(logging.WARNING, logger="voiceguard"):
+        response = submit(client, attempt["id"])
+    get_openai_client.cache_clear()
+
+    assert response.status_code == 503
+    assert "part=speech-to-text reason=OPENAI_API_KEY is not set." in caplog.text
 
 
 def test_refused_requests_are_not_logged_as_transcriptions(client, transcriber, attempt, caplog):

@@ -1,6 +1,6 @@
 import logging
 import math
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -38,7 +38,7 @@ def signup(
         "full_name": body.full_name,
         "email": body.email.lower(),
         "password_hash": hash_password(body.password),
-        "created_at": datetime.now(timezone.utc),
+        "created_at": datetime.now(UTC),
     }
     try:
         users.insert_one(user)
@@ -95,7 +95,7 @@ def _public(user: dict) -> UserPublic:
     # MongoDB hands dates back without a time zone; they are UTC. Without
     # this, the app would read the time as its own local time.
     if created_at.tzinfo is None:
-        created_at = created_at.replace(tzinfo=timezone.utc)
+        created_at = created_at.replace(tzinfo=UTC)
     return UserPublic(
         id=str(user["_id"]),
         full_name=user["full_name"],

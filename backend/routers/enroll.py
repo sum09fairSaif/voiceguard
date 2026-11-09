@@ -81,7 +81,7 @@ def add_enrollment_sample(
         sample = embed(recording, f"sample.{extension}")
     except AudioNotUnderstood:
         _log(user_id, "unreadable", None, None)
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=UNREADABLE_MESSAGE)
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=UNREADABLE_MESSAGE)
     # The recording isn't needed past this point and is never stored.
     del recording
 
@@ -93,7 +93,7 @@ def add_enrollment_sample(
     problem, similarity = sample_problem(sample, earlier)
     _log(user_id, problem or "accepted", sample, similarity)
     if problem is not None:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=RETRY_MESSAGES[problem])
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=RETRY_MESSAGES[problem])
 
     if add_sample(enrollments, user_id, sample.vector) >= config.ENROLL_SAMPLES_REQUIRED:
         samples = take_samples(enrollments, user_id)
