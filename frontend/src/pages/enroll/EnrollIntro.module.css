@@ -1,0 +1,104 @@
+.progress {
+  margin-top: 47px;
+}
+
+.heading {
+  margin-top: 35px;
+}
+
+/* Figma 19:233 fits this title on one line, running just past the margin.
+   Narrower phones let it wrap instead of clipping. */
+@media (min-width: 375px) {
+  .heading h1 {
+    white-space: nowrap;
+  }
+}
+
+/* Figma 19:210: the soft teal card with the large V-wave mark. */
+.mark {
+  margin-top: 34px;
+  height: 155px;
+  border: 1px solid var(--color-brand-border);
+  border-radius: 17px;
+  background: var(--color-brand-soft);
+  display: grid;
+  place-items: center;
+}
+
+.features {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  list-style: none;
+  padding: 0;
+}
+
+.feature {
+  display: grid;
+  grid-template-columns: 45px 1fr;
+  align-items: start;
+}
+
+.featureIcon {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 20px;
+}
+
+.featureTitle {
+  font-family: var(--font-heading);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.featureText {
+  margin-top: 4px;
+  font-size: 14px;
+  color: var(--color-muted);
+}
+
+/* Figma 19:223 / 19:243: a real checkbox, drawn as the design's gold square. */
+.consent {
+  margin-top: 20px;
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  font-size: 14px;
+  line-height: 18px;
+  color: var(--color-muted);
+  cursor: pointer;
+}
+
+.consentInput {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+}
+
+.box {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  margin-left: 8px;
+  border-radius: 3px;
+  border: 1.5px solid var(--color-gold);
+  display: grid;
+  place-items: center;
+}
+
+.consentInput:checked + .box {
+  background: var(--color-gold);
+}
+
+.consentInput:focus-visible + .box {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.action {
+  margin-top: 28px;
+}

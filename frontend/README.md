@@ -44,12 +44,14 @@ in for the browser's recording APIs.
 
 | Route | Screen |
 |---|---|
-| `/signin` | Sign in with email and password, then go on to the voice check |
+| `/` | Welcome screen for signed-out visitors; anyone signed in goes to `/enroll` |
+| `/signin` | Sign in with email and password, then go on to the voice check (enrolled accounts) or enrollment (everyone else) |
 | `/signup` | Create an account |
+| `/enroll` | Set up a Voice ID: consent, three recorded samples, confirmation (signed in only) |
 | `/verify` | Read the challenge passage aloud and submit the recording (signed in only) |
 | `/result` | Result of the voice check, with a breakdown per check (signed in only) |
 
-Any other address, and a signed-out visit to a signed-in screen, redirects to `/signin`.
+Any other address redirects to `/`. A signed-out visit to a signed-in screen redirects to `/signin`.
 
 ## Code layout
 

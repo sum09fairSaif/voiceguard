@@ -10,11 +10,20 @@ import config
 Transcriber = Callable[[bytes, str], str]
 
 
-class TranscriptionUnavailable(Exception):
+class TranscriptionError(Exception):
+    """`details` says what OpenAI answered, for the logs. It never holds the
+    audio, the transcript or OpenAI's message text."""
+
+    def __init__(self, message: str, details: str = "-"):
+        super().__init__(message)
+        self.details = details
+
+
+class TranscriptionUnavailable(TranscriptionError):
     """Speech-to-text isn't set up or can't be reached right now."""
 
 
-class AudioNotUnderstood(Exception):
+class AudioNotUnderstood(TranscriptionError):
     """Speech-to-text received the recording but couldn't read it as audio."""
 
 
@@ -24,6 +33,14 @@ def get_openai_client() -> openai.OpenAI:
         raise TranscriptionUnavailable("OPENAI_API_KEY is not set.")
     # Fail fast rather than leave the user staring at "checking..." for minutes.
     return openai.OpenAI(api_key=config.OPENAI_API_KEY, timeout=20, max_retries=1)
+
+
+def _describe(exc: openai.OpenAIError) -> str:
+    # e.g. "RateLimitError status=429 code=insufficient_quota": enough to tell
+    # no credit from a bad key, a wrong model or an outage.
+    status = getattr(exc, "status_code", None) or "-"
+    code = getattr(exc, "code", None) or "-"
+    return f"{type(exc).__name__} status={status} code={code}"
 
 
 def transcribe(client: openai.OpenAI, audio: bytes, filename: str) -> str:
@@ -40,9 +57,11 @@ def transcribe(client: openai.OpenAI, audio: bytes, filename: str) -> str:
         )
     except openai.BadRequestError as exc:
         # The service is fine; the file itself is broken or not really audio.
-        raise AudioNotUnderstood("Speech-to-text couldn't read the recording.") from exc
+        details = _describe(exc)
+        raise AudioNotUnderstood("Speech-to-text couldn't read the recording.", details) from exc
     except openai.OpenAIError as exc:
-        raise TranscriptionUnavailable("Speech-to-text request failed.") from exc
+        details = _describe(exc)
+        raise TranscriptionUnavailable(f"Speech-to-text request failed: {details}.", details) from exc
     return result.text
 
 
