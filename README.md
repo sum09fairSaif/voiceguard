@@ -45,19 +45,24 @@ Each row is a user story (see the
 |---|---|---|
 | #11 Create an account | ✅ Done | ✅ Done |
 | #12 Log in with voice | ✅ Password sign-in with lockout | ✅ Sign-in screen (voice-only sign-in not built) |
-| #13 Show a challenge passage | ✅ Done | ✅ Done |
+| #13 Show a challenge passage | ✅ Done (a random, readable sentence) | ✅ Done |
 | #14 Record and submit the attempt | ✅ Done | ✅ Done |
 | #15 Content check | ✅ Done (OpenAI Whisper) | — |
 | #10 Enroll voice profile | ✅ Done | ✅ Enrollment screens (after signup, or after sign-in until enrolled) |
 | #16 Identity check | ✅ Done (SpeechBrain ECAPA) | — |
-| #17 Liveness / anti-spoof check | ⏳ Not started | — |
+| #17 Liveness / anti-spoof check | 🟡 First model trained ([`ml/liveness/`](ml/liveness/README.md)); not used by the app yet | — |
 | #18 Combine the three checks | 🟡 Content + identity combined; answers "incomplete" until liveness exists | — |
 | #19 Result screen with retry | — | ✅ Done |
 | #20 Account recovery (email code) | ⏳ Not started | ⏳ Not started |
 
-Because liveness isn't built yet, a correct reading currently ends as
+Until the liveness check is part of the app, a correct reading ends as
 **"Almost there" (incomplete)** rather than approved. That is deliberate:
 without liveness, a recording of the user could pass the other two checks.
+
+The first liveness model is trained but not yet good enough to rely on: on
+held-out test data, about 1 fake in 4 still gets through (In-the-Wild error
+rate 22.4%, against 32.2% for the best public checkpoint). Training tools
+and results are in [ml/liveness/README.md](ml/liveness/README.md).
 
 ## Screenshots
 
@@ -119,7 +124,7 @@ Full request and response details are in the interactive docs at `/docs`.
 | Voiceprints | MongoDB, encrypted with Fernet, one per user |
 | Content check | OpenAI Whisper (hosted API, `whisper-1`) |
 | Identity check | SpeechBrain ECAPA, in a separate model service on Hugging Face Spaces |
-| Liveness check | AASIST (planned) |
+| Liveness check | AASIST, fine-tuned on public spoofing datasets (training in `ml/liveness/`, on Kaggle's free GPUs); not in the app yet |
 | Hosting | Vercel (frontend), Render (backend), Hugging Face Spaces (model service) |
 | CI/CD | GitHub Actions (lint, tests and build on every PR); Vercel and Render deploy `main` automatically |
 
@@ -152,6 +157,7 @@ backend/        FastAPI app: accounts, passages, voice checks, enrollment
   tests/        pytest tests (run against a fake in-memory database)
 frontend/       React + TypeScript app (Vite)
 model-service/  voice-embedding service, deployed as a Hugging Face Space
+ml/liveness/    liveness model: datasets, preprocessing, training and scoring
 docs/           architecture diagram and screenshots
 .github/        CI workflow and pull request template
 LICENSE         MIT license
@@ -233,10 +239,12 @@ cd backend && python -m pytest         # backend
 cd frontend && npm test                # frontend
 cd frontend && npm run lint            # frontend lint
 cd model-service && python -m pytest   # model service (needs ffmpeg)
+cd ml/liveness && python -m pytest     # liveness data and training tools
 ```
 
-CI runs all of these, plus `ruff check` on the Python code, on every pull
-request.
+Each Python folder has its own `requirements-dev.txt` to install first. CI
+runs all of these, plus `ruff check` on the backend and model service, on
+every pull request.
 
 ## MVP scope
 
@@ -266,14 +274,16 @@ request.
 - **MongoDB Atlas:** database
 - **OpenAI API:** speech-to-text for the content check (paid per call; capped per user by rate limits)
 - **Hugging Face Spaces:** hosts the model service (free ZeroGPU hardware)
+- **Kaggle:** free GPUs for training the liveness model (not needed to run the app)
 - **Vercel:** frontend hosting
 - **Render:** backend hosting
 
 ## Top risks and mitigations
 
 1. Liveness / deepfake detection may not generalize to new attack types.
-   Mitigation: start with a published anti-spoofing model, keep a held-out
-   test set of attacks, and treat liveness as a veto so a weak pass never
+   Mitigation: start from a published anti-spoofing model, test on a
+   dataset kept out of training (In-the-Wild) and, once collected, on our
+   own recordings, and treat liveness as a veto so a weak pass never
    approves on its own.
 2. Voice data is sensitive. Mitigation: store only encrypted voiceprints,
    never raw audio, and keep secrets out of the repo via environment variables.
