@@ -5,9 +5,9 @@ import soundfile as sf
 
 pytest.importorskip("torch")  # CI doesn't install it (see requirements-model.txt)
 
-import audio  # noqa: E402
-from augment import Augmenter  # noqa: E402
-from training_data import ClipDataset, balanced_sampler, even_sample, sampling_weights  # noqa: E402
+import audio
+from augment import Augmenter
+from training_data import ClipDataset, balanced_sampler, even_sample, sampling_weights
 
 
 def manifest(counts):

@@ -1,9 +1,12 @@
-# Python lint settings for backend/ and model-service/, run in CI.
+# Python lint settings for backend/, model-service/ and ml/liveness/, run in CI.
 target-version = "py311"
 line-length = 120
 # Where our own modules live, so imports like `import config` are sorted
 # as ours rather than as installed packages.
-src = ["backend", "model-service"]
+src = ["backend", "model-service", "ml/liveness"]
+# Third-party model code, kept exactly as published so it can be compared
+# with the original.
+extend-exclude = ["ml/liveness/models/aasist.py"]
 
 [lint]
 # Ruff's defaults (real errors: unused imports, undefined names, ...)

@@ -4,7 +4,7 @@ import pytest
 
 pytest.importorskip("torch")  # CI doesn't install it (see requirements-model.txt)
 
-from score_baseline import eer, summarise  # noqa: E402
+from score_baseline import eer, summarise
 
 
 def test_eer_is_zero_when_real_and_fake_are_apart():

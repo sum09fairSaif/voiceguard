@@ -3,10 +3,10 @@ import shutil
 import pandas as pd
 import pytest
 import soundfile as sf
+from conftest import write_tone
 
 import manifest
 from build_manifest import build
-from conftest import write_tone
 from validate import validate, write_report
 
 
@@ -107,7 +107,7 @@ def test_report_warns_about_speakers_in_two_splits(data_dir, team_dir):
         f.write("spk01/live_09.wav,spk01,bonafide,,test\n")
 
     df = build(data_dir, ["team"], workers=1)
-    clean, issues, leaks = validate(df, data_dir, workers=1)
+    _clean, issues, leaks = validate(df, data_dir, workers=1)
     assert dict(leaks) == {"team/spk01": "dev, test"}
 
     write_report(df, issues, leaks, data_dir / "report.md")
