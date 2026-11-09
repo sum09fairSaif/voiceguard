@@ -93,6 +93,41 @@ def test_a_fifth_extra_word_fails():
     assert not result.passed
 
 
+SENTENCE = "The sleepy tiger polished the rusty lantern near the bridge."
+
+
+def test_reading_a_sentence_checks_only_its_key_words():
+    result = check_content(SENTENCE, "The sleepy tiger polished the rusty lantern near the bridge.")
+
+    assert result.passed
+    assert result.matched == result.total == 6
+    assert result.extra == 0
+
+
+def test_dropped_or_swapped_small_words_dont_matter():
+    # Speech-to-text often drops "the", or hears "near" as "under".
+    result = check_content(SENTENCE, "Sleepy tiger polished a rusty lantern under bridge")
+
+    assert result.passed
+    assert result.matched == 6
+    assert result.extra == 0
+
+
+def test_a_wrong_key_word_in_a_sentence_still_counts():
+    result = check_content(SENTENCE, "The sleepy tiger polished the dusty candle near the bridge.")
+
+    assert not result.passed
+    assert result.matched == 4
+
+
+def test_small_words_alone_dont_pass():
+    result = check_content(SENTENCE, "the the near the under the")
+
+    assert not result.passed
+    assert result.matched == 0
+    assert result.extra == 0
+
+
 def test_limits_come_from_settings(monkeypatch):
     monkeypatch.setattr(config, "CONTENT_MAX_MISSED_WORDS", 0)
     assert not check_content(PASSAGE, "quilt tiger ocean people winter planet").passed

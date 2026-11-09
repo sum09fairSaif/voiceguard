@@ -2,10 +2,12 @@ import re
 from dataclasses import dataclass
 
 import config
+from passages import UNCHECKED_WORDS
 
 
 @dataclass(frozen=True)
 class ContentResult:
+    # Key words only: "the", "near" and the like aren't counted on either side.
     matched: int
     total: int
     passed: bool
@@ -22,9 +24,11 @@ class ContentResult:
 
 
 def _words(text: str) -> list[str]:
-    # Speech-to-text adds capitals and punctuation ("Tulip, river.") that
-    # the passage doesn't have, so compare bare lowercase words only.
-    return re.findall(r"[a-z]+", text.lower())
+    # Capitals and punctuation can differ between the passage and what
+    # speech-to-text writes, so compare bare lowercase words only. Small
+    # words like "the" are left out: speech-to-text drops or swaps them
+    # easily, and they say nothing about whether the passage was read.
+    return [word for word in re.findall(r"[a-z]+", text.lower()) if word not in UNCHECKED_WORDS]
 
 
 def _in_order_matches(expected: list[str], heard: list[str]) -> int:

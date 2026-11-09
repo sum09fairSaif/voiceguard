@@ -37,7 +37,7 @@ import soundfile as sf
 
 import audio
 import manifest
-from validate import DEFAULT_DATA_DIR, MAX_VALID_PEAK, markdown_table
+from validate import DEFAULT_DATA_DIR, MAX_VALID_PEAK, markdown_table, read_audio
 
 OUT_FOLDER = "processed"
 # Lower than validate.py's 1 second: that limit counts silence, this one
@@ -66,8 +66,8 @@ def process_clip(job: tuple[str, str, Path]) -> dict:
     out_path = processed_path(raw_path)
     row = dict.fromkeys(FIELDS, "") | {"utt_id": utt_id, "path": out_path}
     try:
-        samples, rate = sf.read(str(data_dir / raw_path), dtype="float32", always_2d=True)
-    except (RuntimeError, sf.LibsndfileError):
+        samples, rate = read_audio(data_dir / raw_path)
+    except RuntimeError:  # soundfile's errors are RuntimeErrors too
         return row | {"issue": "unreadable"}
     if not np.isfinite(samples).all() or np.abs(samples).max() > MAX_VALID_PEAK:
         return row | {"issue": "corrupt"}

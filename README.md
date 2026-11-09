@@ -71,7 +71,7 @@ docs/screenshots/result.png (result with the check breakdown). -->
 ## How to use it
 
 1. Open the [live app](https://voiceguard-nu.vercel.app/) and create an account (or sign in, if you already have one).
-2. Read the six-word phrase on screen aloud: tap the microphone, read, tap again to stop, then **Submit**.
+2. Read the sentence on screen aloud (for example "The sleepy tiger polished the rusty lantern near the bridge."): tap the microphone, read, tap again to stop, then **Submit**.
 3. The result screen shows whether the words and voice matched. Each phrase can be used once and expires after two minutes; **New phrase** gets another.
 
 You can also call the API directly. For example, with `curl`:
@@ -85,7 +85,7 @@ curl -X POST $API/api/auth/signup -H "Content-Type: application/json" \
 
 # Get a passage to read (use the access_token from above).
 curl -X POST $API/api/challenge -H "Authorization: Bearer <access_token>"
-# -> {"attempt_id": "...", "passage": "tulip river candle ...", "expires_at": "..."}
+# -> {"attempt_id": "...", "passage": "The sleepy tiger polished the rusty lantern near the bridge.", "expires_at": "..."}
 
 # Send a recording of the passage being read.
 curl -X POST $API/api/verify -H "Authorization: Bearer <access_token>" \
