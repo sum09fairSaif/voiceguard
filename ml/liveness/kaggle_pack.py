@@ -148,7 +148,8 @@ work = Path("/kaggle/working")
 code = work / "code"
 with tarfile.open(fileobj=io.BytesIO(base64.b64decode(CODE))) as t:
     t.extractall(code, filter="data")
-subprocess.run([sys.executable, "-m", "pip", "install", "-q", "soxr==0.5.0.post1", "soundfile==0.13.1"], check=True)
+subprocess.run([sys.executable, "-m", "pip", "install", "-q", "soxr==0.5.0.post1", "soundfile==0.13.1", "miniaudio==1.71"],
+               check=True)
 
 data = Path(find("manifest.processed.parquet")[0]).parent
 args = ["--name", NAME, "--data-dir", str(data), "--out-dir", str(work / "runs"), "--epochs", str(EPOCHS),

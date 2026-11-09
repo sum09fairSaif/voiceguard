@@ -2,5 +2,5 @@
 # from requirements.txt so CI and the data tools don't need PyTorch. CPU build:
 #   pip install -r requirements-model.txt --extra-index-url https://download.pytorch.org/whl/cpu
 -r requirements.txt
-torch==2.5.1
+torch==2.8.0
 kaggle==2.2.5  # uploads the pack and starts training on Kaggle (kaggle_pack.py)
