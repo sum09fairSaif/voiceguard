@@ -30,12 +30,11 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-import soundfile as sf
 import torch
 
 import audio
 from models.aasist import Model
-from validate import DEFAULT_DATA_DIR, markdown_table
+from validate import DEFAULT_DATA_DIR, markdown_table, read_audio
 
 OUT_FOLDER = "baseline"
 BATCH = 32
@@ -56,7 +55,7 @@ def load_model(weights: Path) -> torch.nn.Module:
 
 def read_clip(data_dir: Path, path: str, raw: bool) -> np.ndarray:
     """One clip as AASIST's 4-second input. Raw clips are only made 16 kHz mono."""
-    samples, rate = sf.read(str(data_dir / path), dtype="float32", always_2d=True)
+    samples, rate = read_audio(data_dir / path)
     clip = audio.to_mono_16k(samples, rate) if raw else samples[:, 0]
     return audio.fix_length(clip)
 

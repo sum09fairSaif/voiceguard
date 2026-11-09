@@ -279,15 +279,15 @@ trained on. But about one fake in four still passes, so it isn't good enough to
 rely on yet. Test scores are worse than dev ones (ASVspoof 2019 LA: 27% against
 14%) because LA's test set uses attack types not in training.
 
-Known problem: soundfile 0.13.1 (needed for its `compression_level`) bundles
-libsndfile 1.2.2, which rejects about half of the raw ASVspoof 2019 PA FLAC
-files that 1.2.0 read. The processed data was made with the old version and is
-fine, but rerunning preprocessing, or scoring raw audio, fails on those files
-until this is fixed.
+soundfile 0.13.1 (needed for its `compression_level`) bundles libsndfile
+1.2.2, which fails partway through about half of the raw ASVspoof 2019 PA FLAC
+files. The files aren't damaged: they match their stored MD5 checksums, and
+libsndfile 1.2.0 read them. So `validate.read_audio` decodes a FLAC file that
+soundfile can't read again with miniaudio, and validation, preprocessing and
+raw scoring all read through it.
 
 ## Next steps
 
-- Fix reading the raw ASVspoof 2019 PA files with the current soundfile.
 - Train with room echo and noise once RIRS_NOISES can be downloaded.
 - Team recordings (live and replayed), to test against our own microphones.
 - Try a stronger front end (wav2vec 2.0 + AASIST), which generalises much
