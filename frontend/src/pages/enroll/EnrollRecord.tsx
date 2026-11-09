@@ -9,7 +9,7 @@ import { useRecorder } from "../../hooks/useRecorder";
 import { useStillShown } from "../../hooks/useStillShown";
 import { formatCountdown } from "../../utils/countdown";
 import { displayPassage } from "../../utils/passage";
-// Same layout as the passage screen (Figma 1:244 matches 1:327).
+// Same layout as the passage screen (Figma 19:246 matches 19:329).
 import styles from "../PassagePage.module.css";
 
 type Props = {
@@ -19,7 +19,7 @@ type Props = {
   onSignedOut: () => void;
 };
 
-// Figma 1:244 "Record voice": step 2 of enrollment. The user reads a phrase
+// Figma 19:246 "Record voice": step 2 of enrollment. The user reads a phrase
 // and sends it as one sample, until the backend has enough to build the
 // voiceprint. Each recording is sent once and not kept.
 export function EnrollRecord({ enrollment, onChange, onEnrolled, onSignedOut }: Props) {

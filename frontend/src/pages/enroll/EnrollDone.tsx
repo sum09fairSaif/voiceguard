@@ -1,9 +1,9 @@
 import { Button } from "../../components/Button";
 import { ResultEmblem } from "../../components/ResultEmblem";
-// Same layout as the result screen (Figma 1:285 matches 1:369 "Verified").
+// Same layout as the result screen (Figma 19:287 matches 19:371 "Verified").
 import styles from "../../components/ResultView.module.css";
 
-// Figma 1:285 "Voice ID ready": step 3 of enrollment. Figma's button says
+// Figma 19:287 "Voice ID ready": step 3 of enrollment. Figma's button says
 // "Continue to home"; there's no home screen yet, so it goes to the voice
 // check instead, where the new Voice ID can be tried straight away.
 export function EnrollDone({ onContinue }: { onContinue: () => void }) {
