@@ -10,6 +10,14 @@ Voice-biometric multi-factor authentication with anti-spoofing and deepfake dete
 > The free hosting tiers sleep when idle, so the first request after a
 > while can take up to a minute.
 
+**Contents:** [Problem](#problem-statement) ·
+[What it does](#what-it-does) · [Key features](#key-features) ·
+[Status](#project-status) · [Demo](#demo) · [How to use it](#how-to-use-it) ·
+[Tech stack](#tech-stack) · [Architecture](#architecture) ·
+[Local setup](#local-setup) · [Troubleshooting](#troubleshooting) ·
+[Scope](#mvp-scope) · [Risks](#top-risks-and-mitigations) ·
+[Contributing](#contributing) · [Team](#team-and-mentors)
+
 ## Problem statement
 
 Passwords and one-time codes are weak or alarming: codes can be phished or
@@ -35,6 +43,21 @@ that one recording:
 All three must pass, and the liveness check can veto on its own. Only then is
 the login or transaction approved. Raw audio is never stored: it is deleted
 as soon as the voiceprint is built or the checks have run.
+
+## Key features
+
+- **Password, then voice:** voice is a second factor on top of a password,
+  not a replacement for it.
+- **Single-use passages:** each passage is a random sentence (one of about 5
+  billion), can be used once, and expires after two minutes, so an old
+  recording can't be replayed.
+- **Encrypted voiceprints:** only a numeric summary of the voice is kept,
+  encrypted at rest. Recordings are never saved.
+- **Scores stay on the server:** the identity check answers only pass or
+  fail, never its score, so nobody can tune a voice clone against it.
+- **Abuse limits:** sign-in locks for 30 minutes after 5 wrong passwords, and
+  per-user limits cap the paid speech-to-text calls.
+- **Fallback:** after 3 failed voice attempts, an email code (planned, #20).
 
 ## Project status
 
@@ -64,14 +87,20 @@ held-out test data, about 1 fake in 4 still gets through (In-the-Wild error
 rate 22.4%, against 32.2% for the best public checkpoint). Training tools
 and results are in [ml/liveness/README.md](ml/liveness/README.md).
 
-## Screenshots
+## Demo
+
+<!-- Demo video: in GitHub, edit this README (or any PR comment), drag the
+.mp4 in, and paste the https://github.com/user-attachments/assets/... link
+it creates on its own line here. GitHub shows it as a video player. Keep it
+under 100 MB (10 MB on free plans for comments). -->
 
 | Create account |
 |---|
 | <img src="docs/screenshots/signup.png" alt="Create account screen" width="300"> |
 
-<!-- To add: docs/screenshots/passage.png (read the phrase) and
-docs/screenshots/result.png (result with the check breakdown). -->
+<!-- To add: docs/screenshots/passage.png (read the sentence),
+docs/screenshots/enroll.png (Voice ID setup) and docs/screenshots/result.png
+(result with the check breakdown), each about 300px wide. -->
 
 ## How to use it
 
@@ -225,26 +254,38 @@ npm run dev
 ```
 
 Open the address it prints (usually http://localhost:5173). It talks to
-the backend at http://localhost:8000. To use a different backend, put
-`VITE_API_BASE_URL=<address>` in `frontend/.env.local`.
+the backend at http://localhost:8000. To use a different backend, copy
+`frontend/.env.example` to `frontend/.env.local` and change
+`VITE_API_BASE_URL` (Vite reads settings from `frontend/`, not the root).
 
 ### Running the tests
 
 None of the test suites need a database or API keys.
 
-From the repository root:
+Run each line from the repository root:
 
 ```bash
-cd backend && python -m pytest         # backend
-cd frontend && npm test                # frontend
-cd frontend && npm run lint            # frontend lint
-cd model-service && python -m pytest   # model service (needs ffmpeg)
-cd ml/liveness && python -m pytest     # liveness data and training tools
+cd backend && python -m pytest && ruff check .         # backend
+cd frontend && npm test && npm run lint                # frontend
+cd model-service && python -m pytest && ruff check .   # model service (needs ffmpeg)
+cd ml/liveness && python -m pytest                     # liveness data and training tools
 ```
 
 Each Python folder has its own `requirements-dev.txt` to install first. CI
-runs all of these, plus `ruff check` on the backend and model service, on
-every pull request.
+runs the tests, lint and the frontend build on every pull request.
+
+## Troubleshooting
+
+| Problem | Fix |
+|---|---|
+| `pip install` fails building packages | Use Python 3.11 (`py -3.11 -m venv venv` on Windows). Newer versions, such as 3.14, have no ready-built packages for some pins. |
+| `/health` works but other calls answer 503 "The service is temporarily unavailable" | `MONGO_URI` or `JWT_SECRET` is missing from `.env`. The server log names the missing setting. |
+| Voice checks answer "Voice checks are temporarily unavailable" | `OPENAI_API_KEY` (content check) or the model service settings (identity check, enrollment) are missing, or the model service is asleep: try again in a minute. |
+| The browser shows a CORS error | Add the frontend's address (e.g. `http://localhost:5173`) to `ALLOWED_ORIGINS` in `.env`, then restart the backend. |
+| The frontend talks to the wrong backend | Set `VITE_API_BASE_URL` in `frontend/.env.local` (not the root `.env`) and restart `npm run dev`. |
+| Model service tests fail with "ffmpeg not found" | Install ffmpeg, or point `FFMPEG_BINARY` at it (`pip install imageio-ffmpeg` provides one). |
+| The microphone doesn't start | Allow microphone access for the site in the browser. Browsers only allow it on `https://` or `localhost`. |
+| The first request to the live app takes a minute | The free hosting sleeps when idle; later requests are quick. |
 
 ## MVP scope
 
@@ -297,8 +338,13 @@ every pull request.
 
 Branches, commit messages and pull requests follow
 [CONTRIBUTING.md](CONTRIBUTING.md). Every pull request goes into `dev`,
-fills in the pull request template, and needs one approving review and
-green CI before it merges.
+fills in the [pull request template](.github/pull_request_template.md), and
+needs one approving review and green CI before it merges. New work starts
+as an issue from the [user story or bug report templates](.github/ISSUE_TEMPLATE).
+
+More detail on each part:
+[backend](backend/README.md) · [frontend](frontend/README.md) ·
+[model service](model-service/README.md) · [liveness model](ml/liveness/README.md)
 
 ## Team and mentors
 
