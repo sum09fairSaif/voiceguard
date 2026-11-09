@@ -59,6 +59,9 @@ def database_error(request: Request, exc: PyMongoError) -> JSONResponse:
 @app.exception_handler(TranscriptionUnavailable)
 @app.exception_handler(IdentityUnavailable)
 def voice_check_unavailable(request: Request, exc: Exception) -> JSONResponse:
+    # The log says which part failed and why; the user just hears it's down.
+    part = "speech-to-text" if isinstance(exc, TranscriptionUnavailable) else "voice-model"
+    logger.warning("voice_check_unavailable path=%s part=%s reason=%s", request.url.path, part, exc)
     return JSONResponse(
         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
         content={"detail": "Voice checks are temporarily unavailable. Please try again shortly."},

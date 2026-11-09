@@ -7,7 +7,7 @@ type Props = {
   onClick: () => void;
 };
 
-// The big round microphone button from the designs (Figma 1:348-1:351).
+// The big round microphone button from the designs (Figma 19:246, 19:329).
 // While recording, the rings pulse and the microphone becomes a stop square.
 export function RecordButton({ recording, disabled = false, onClick }: Props) {
   return (
