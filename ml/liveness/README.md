@@ -199,7 +199,8 @@ python download.py rirs_noises   # room echoes and noise, once
 python train.py --init data/external/asvspoof5/Baseline-AASIST/models/weights/AASIST/best.pth --name first-try
 ```
 
-- **Sampling** (`training_data.py`): every batch is half real and half fake.
+- **Sampling** (`training_data.py`): each clip is drawn real or fake with equal
+  chance, so a batch is about half real and half fake.
   Within each half, a dataset is drawn in proportion to the square root of its
   size, so ASVspoof 5 doesn't swamp the rest.
 - **Augmentation** (`augment.py`), on real and fake clips with the same chances:
@@ -274,10 +275,15 @@ python score_baseline.py --audio processed --per-group 500 --out-folder finetune
 | In-the-Wild | 42.6 | 32.2 | **22.4** |
 | Common Voice, real clips rejected | 45.2 | 16.0 | **1.6** |
 
-It beats both checkpoints everywhere, including In-the-Wild, which it never
-trained on. But about one fake in four still passes, so it isn't good enough to
-rely on yet. Test scores are worse than dev ones (ASVspoof 2019 LA: 27% against
-14%) because LA's test set uses attack types not in training.
+It beats both checkpoints clearly on every dataset but ASVspoof 2019 LA, where
+27.4 against 29.4 is within the ±3 points these samples allow. In-the-Wild
+(22.4) is the cleanest number: it never trained on it, and it shares no
+speakers with training, unlike the VCTK-based sets (see the caution above).
+About one fake in four still passes, so it isn't good enough to rely on yet.
+Test scores are worse than dev ones (ASVspoof 2019 LA: 27% against 14%)
+because LA's test set uses attack types not in training. Common Voice has no
+fakes, so its 1.6% may partly be the model learning that dataset's sound as
+"real"; the team recordings will measure real users being rejected better.
 
 soundfile 0.13.1 (needed for its `compression_level`) bundles libsndfile
 1.2.2, which fails partway through about half of the raw ASVspoof 2019 PA FLAC

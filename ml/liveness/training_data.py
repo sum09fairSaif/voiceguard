@@ -4,7 +4,8 @@ The training set is lopsided: about 5 fakes to every real clip, and ASVspoof 5
 alone is over half of it. Sampled as it is, the model would learn that most
 clips are fake and mostly what ASVspoof 5 sounds like. So clips are drawn:
 
-- half real and half fake, so neither answer is right by default;
+- real or fake with equal chance (so about half of each), so neither answer is
+  right by default;
 - within each half, each dataset in proportion to the square root of its
   size, so the small ones (CodecFake's real clips, Common Voice) count for
   more than their share without being repeated over and over.
