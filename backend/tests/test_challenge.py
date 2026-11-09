@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import jwt
 import pytest
@@ -20,14 +20,14 @@ def signed_in(user_id=USER_ID):
 
 
 def in_one_hour():
-    return datetime.now(timezone.utc) + timedelta(hours=1)
+    return datetime.now(UTC) + timedelta(hours=1)
 
 
 # --- Asking for a passage ---------------------------------------------------
 
 
 def test_signed_in_user_gets_a_fresh_passage(client, challenges):
-    before = datetime.now(timezone.utc)
+    before = datetime.now(UTC)
     response = client.post(CHALLENGE_URL, headers=signed_in())
 
     assert response.status_code == 201
@@ -96,7 +96,7 @@ def test_invalid_token_is_refused(client, challenges, make_token):
 
 
 def test_expired_token_is_refused(client, challenges):
-    an_hour_ago = datetime.now(timezone.utc) - timedelta(hours=1)
+    an_hour_ago = datetime.now(UTC) - timedelta(hours=1)
     token = jwt.encode({"sub": USER_ID, "exp": an_hour_ago}, config.JWT_SECRET, algorithm="HS256")
     response = client.post(CHALLENGE_URL, headers={"Authorization": f"Bearer {token}"})
 
@@ -158,7 +158,7 @@ def test_expired_attempt_cannot_be_used(challenges):
     attempt = create_challenge(challenges, USER_ID)
     challenges.update_one(
         {"_id": attempt["_id"]},
-        {"$set": {"expires_at": datetime.now(timezone.utc) - timedelta(seconds=1)}},
+        {"$set": {"expires_at": datetime.now(UTC) - timedelta(seconds=1)}},
     )
 
     assert use_challenge(challenges, str(attempt["_id"]), USER_ID) is None

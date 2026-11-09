@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from bson import ObjectId
@@ -162,7 +162,7 @@ def test_same_passage_cannot_be_checked_twice(client, transcriber, attempt):
 def test_expired_passage_is_refused(client, challenges, transcriber, attempt):
     challenges.update_one(
         {"_id": ObjectId(attempt["id"])},
-        {"$set": {"expires_at": datetime.now(timezone.utc) - timedelta(seconds=1)}},
+        {"$set": {"expires_at": datetime.now(UTC) - timedelta(seconds=1)}},
     )
 
     assert submit(client, attempt["id"]).status_code == 400

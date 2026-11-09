@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from bson import ObjectId
@@ -135,7 +135,7 @@ def test_starting_over_throws_away_the_samples(client, embedder, enrollments):
 def test_unfinished_samples_expire(client, embedder, enrollments):
     send(client)
     enrollments.update_one(
-        {"_id": USER_ID}, {"$set": {"expires_at": datetime.now(timezone.utc) - timedelta(seconds=1)}}
+        {"_id": USER_ID}, {"$set": {"expires_at": datetime.now(UTC) - timedelta(seconds=1)}}
     )
 
     assert client.get(STATUS_URL, headers=signed_in()).json()["status"] == "not_started"
@@ -324,6 +324,5 @@ def test_each_sample_is_logged_without_the_voice(client, embedder, caplog):
     lines = [r.getMessage() for r in caplog.records if r.name == "voiceguard.enroll"]
     assert lines == [
         f"enroll_sample user={USER_ID} outcome=accepted speech_seconds=2.00 clipped_share=0.0000 similarity=-",
-        f"enroll_sample user={USER_ID} outcome=inconsistent speech_seconds=2.00 clipped_share=0.0000 "
-        "similarity=0.000",
+        f"enroll_sample user={USER_ID} outcome=inconsistent speech_seconds=2.00 clipped_share=0.0000 similarity=0.000",
     ]

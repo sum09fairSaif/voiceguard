@@ -45,7 +45,7 @@ def validation_error(request: Request, exc: RequestValidationError) -> JSONRespo
     # Say which field is wrong, but never echo back what was sent:
     # it could be a password.
     errors = [{key: e[key] for key in ("type", "loc", "msg")} for e in exc.errors()]
-    return JSONResponse(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, content={"detail": errors})
+    return JSONResponse(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, content={"detail": errors})
 
 
 @app.exception_handler(PyMongoError)
@@ -72,7 +72,7 @@ def voice_check_unavailable(request: Request, exc: Exception) -> JSONResponse:
 def audio_not_understood(request: Request, exc: AudioNotUnderstood) -> JSONResponse:
     # The passage was already used up, so the user needs a fresh one.
     return JSONResponse(
-        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
         content={"detail": "We couldn't process that recording. Please get a new passage and record again."},
     )
 

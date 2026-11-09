@@ -1,6 +1,6 @@
 import json
 import math
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from cryptography.fernet import Fernet, InvalidToken
 from pymongo.collection import Collection
@@ -53,7 +53,7 @@ def save_voiceprint(voiceprints: Collection, user_id: str, embedding: list[float
             "voiceprint": encrypted,
             # A voiceprint only compares with embeddings from the same model.
             "model": config.EMBEDDING_MODEL,
-            "created_at": datetime.now(timezone.utc),
+            "created_at": datetime.now(UTC),
         },
         upsert=True,
     )

@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from bson import ObjectId
 from pymongo.collection import Collection
@@ -8,7 +8,7 @@ from passages import generate_passage
 
 
 def create_challenge(challenges: Collection, user_id: str) -> dict:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     # Keep one active passage per user: asking for a new one cancels any
     # earlier passage they haven't used yet.
     challenges.update_many(
@@ -32,7 +32,7 @@ def use_challenge(challenges: Collection, attempt_id: str, user_id: str) -> str 
     attempt doesn't exist, belongs to someone else, has expired or was used."""
     if not ObjectId.is_valid(attempt_id):
         return None
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     # Find and mark used in one step, so two requests can't both use it.
     challenge = challenges.find_one_and_update(
         {
