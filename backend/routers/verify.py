@@ -97,19 +97,22 @@ def _transcribe_and_log(
     passage or what was heard."""
     started = time.monotonic()
     outcome = "error"
+    error = "-"
     try:
         transcript = transcribe(recording, f"attempt.{extension}")
         outcome = "ok"
         return transcript
-    except AudioNotUnderstood:
+    except AudioNotUnderstood as exc:
         outcome = "unreadable"
+        error = exc.details
         raise
-    except TranscriptionUnavailable:
+    except TranscriptionUnavailable as exc:
         outcome = "unavailable"
+        error = exc.details
         raise
     finally:
         logger.info(
-            "transcription user=%s attempt=%s model=%s format=%s bytes=%d outcome=%s seconds=%.2f",
+            "transcription user=%s attempt=%s model=%s format=%s bytes=%d outcome=%s seconds=%.2f error=%s",
             user_id,
             attempt_id,
             config.WHISPER_MODEL,
@@ -117,4 +120,5 @@ def _transcribe_and_log(
             len(recording),
             outcome,
             time.monotonic() - started,
+            error,
         )

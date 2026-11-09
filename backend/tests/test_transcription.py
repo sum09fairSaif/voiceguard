@@ -90,6 +90,37 @@ def test_outage_is_reported_as_unavailable():
         transcribe(fake_client(transcriptions), b"audio-bytes", "attempt.webm")
 
 
+@pytest.mark.parametrize(
+    "error_type, status, code",
+    [
+        (openai.RateLimitError, 429, "insufficient_quota"),
+        (openai.AuthenticationError, 401, "invalid_api_key"),
+        (openai.NotFoundError, 404, "model_not_found"),
+    ],
+    ids=["no-credit", "bad-key", "wrong-model"],
+)
+def test_outage_says_what_openai_answered(error_type, status, code):
+    # These all look the same to the user, but need very different fixes.
+    response = httpx.Response(status, request=httpx.Request("POST", "https://api.openai.com/v1/audio/transcriptions"))
+    error = error_type("private detail from OpenAI", response=response, body={"code": code})
+
+    with pytest.raises(TranscriptionUnavailable) as caught:
+        transcribe(fake_client(FakeTranscriptions(error=error)), b"audio-bytes", "attempt.webm")
+
+    assert caught.value.details == f"{error_type.__name__} status={status} code={code}"
+    assert "private detail" not in str(caught.value)
+
+
+def test_unreadable_audio_says_what_openai_answered():
+    response = httpx.Response(400, request=httpx.Request("POST", "https://api.openai.com/v1/audio/transcriptions"))
+    error = openai.BadRequestError("private detail", response=response, body={"code": "invalid_value"})
+
+    with pytest.raises(AudioNotUnderstood) as caught:
+        transcribe(fake_client(FakeTranscriptions(error=error)), b"audio-bytes", "attempt.webm")
+
+    assert caught.value.details == "BadRequestError status=400 code=invalid_value"
+
+
 def test_missing_api_key_is_reported_as_unavailable(monkeypatch):
     monkeypatch.setattr(config, "OPENAI_API_KEY", "")
 
