@@ -89,10 +89,12 @@ and results are in [ml/liveness/README.md](ml/liveness/README.md).
 
 ## Demo
 
-<!-- Demo video: in GitHub, edit this README (or any PR comment), drag the
-.mp4 in, and paste the https://github.com/user-attachments/assets/... link
-it creates on its own line here. GitHub shows it as a video player. Keep it
-under 100 MB (10 MB on free plans for comments). -->
+**▶️ [Watch the demo video](https://drive.google.com/file/d/14AqnUB6rfSYT_SV3lG3SPtbhkcH2KzDZ/view?usp=drive_link)**
+(Google Drive): a walkthrough of VoiceGuard.
+
+<!-- To play the video inside this README instead, edit the README on
+GitHub, drag the .mp4 in, and put the https://github.com/user-attachments/assets/...
+link it creates on its own line here. GitHub shows that as a video player. -->
 
 | Create account |
 |---|
