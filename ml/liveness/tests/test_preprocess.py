@@ -2,11 +2,11 @@ import numpy as np
 import pandas as pd
 import pytest
 import soundfile as sf
+from conftest import write_tone
 
 import audio
 import manifest
 from build_manifest import build
-from conftest import write_tone
 from preprocess import OUT_FOLDER, collect, processed_path, run_jobs, write_report
 
 
