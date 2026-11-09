@@ -5,8 +5,9 @@
   --color-muted: #697172;
   /* Buttons and the microphone. */
   --color-primary: #526c19;
-  /* Small labels, links, the step bar and the checkbox. */
-  --color-gold: #c9a227;
+  /* Small labels, links, the step bar and the checkbox. Darker than Figma's
+     #c9a227, which is 2.4:1 on white, so it meets WCAG AA (#118). */
+  --color-gold: #866a11;
   --color-gold-soft: #f7f3e8;
   --color-gold-border: #e6d9b8;
   --color-gold-badge: #f6edce;
