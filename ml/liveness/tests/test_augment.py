@@ -95,9 +95,47 @@ def test_a_failing_codec_leaves_the_clip_unchanged(monkeypatch):
     assert np.array_equal(augment.compress(clean, np.random.default_rng(0)), clean)
 
 
-def test_without_noise_files_only_compression_happens():
+@pytest.fixture
+def applied(monkeypatch):
+    """Records which effects the augmenter really applies, in order."""
+    names = []
+    for name in ["reverberate", "add_noise", "compress"]:
+        effect = getattr(augment, name)
+
+        def record(*args, _name=name, _effect=effect):
+            names.append(_name)
+            return _effect(*args)
+
+        monkeypatch.setattr(augment, name, record)
+    return names
+
+
+def always(monkeypatch):
+    for name in ["REVERB_CHANCE", "NOISE_CHANCE", "CODEC_CHANCE"]:
+        monkeypatch.setattr(augment, name, 1.0)
+
+
+def test_without_noise_files_only_compression_happens(monkeypatch, applied):
+    always(monkeypatch)
     aug = augment.Augmenter()
     assert aug.rirs == [] and aug.noises == []
+
+    out = aug(speech(), np.random.default_rng(0))
+
+    assert applied == ["compress"]
+    assert out.shape == speech().shape
+
+
+def test_with_no_chances_nothing_is_applied(noise_dir, monkeypatch, applied):
+    for name in ["REVERB_CHANCE", "NOISE_CHANCE", "CODEC_CHANCE"]:
+        monkeypatch.setattr(augment, name, 0.0)
+    clean = speech()
+
+    out = augment.Augmenter(noise_dir)(clean, np.random.default_rng(0))
+
+    assert applied == []
+    # Only brought back to the usual level.
+    assert np.allclose(out / np.abs(out).max(), clean / np.abs(clean).max(), atol=1e-5)
 
 
 @pytest.fixture
@@ -124,11 +162,11 @@ def test_echoes_and_noises_are_told_apart(noise_dir):
     assert sorted(p.name for p in aug.noises) == ["RVB2014_type1_noise_largeroom1_1.wav", "noise-free-sound-0001.wav"]
 
 
-def test_every_effect_can_be_applied(noise_dir, monkeypatch):
-    for name in ["REVERB_CHANCE", "NOISE_CHANCE", "CODEC_CHANCE"]:
-        monkeypatch.setattr(augment, name, 1.0)
+def test_every_effect_can_be_applied(noise_dir, monkeypatch, applied):
+    always(monkeypatch)
     clean = speech()
     out = augment.Augmenter(noise_dir)(clean, np.random.default_rng(0))
+    assert applied == ["reverberate", "add_noise", "compress"]
     assert out.shape == clean.shape
     assert snr_db(clean / np.abs(clean).max(), out / np.abs(out).max()) < 20
 
