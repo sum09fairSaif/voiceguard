@@ -32,7 +32,8 @@ def test_signed_in_user_gets_a_fresh_passage(client, challenges):
 
     assert response.status_code == 201
     body = response.json()
-    assert len(body["passage"].split(" ")) == 6
+    assert body["passage"].startswith("The ") and body["passage"].endswith(".")
+    assert len(body["passage"].split()) == 10
     expires_at = datetime.fromisoformat(body["expires_at"])
     assert timedelta(seconds=115) < expires_at - before < timedelta(seconds=125)
 

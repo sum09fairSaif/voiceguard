@@ -105,8 +105,8 @@ if RATE_LIMIT_WINDOW_SECONDS <= 0 or CHALLENGE_RATE_LIMIT <= 0 or VERIFY_RATE_LI
 # the per-sample log lines once there are real recordings.
 # How many good samples make a voiceprint.
 ENROLL_SAMPLES_REQUIRED = int(os.getenv("ENROLL_SAMPLES_REQUIRED", "3"))
-# Least voice (not silence) a sample must hold. Reading a six-word passage
-# gives about 2 seconds.
+# Least voice (not silence) a sample must hold. Even the six-word passages
+# that came before the current sentences gave about 2 seconds.
 ENROLL_MIN_SPEECH_SECONDS = float(os.getenv("ENROLL_MIN_SPEECH_SECONDS", "1.5"))
 # Most of a sample that may be cut off at full volume (0.01 = 1%).
 ENROLL_MAX_CLIPPED_SHARE = float(os.getenv("ENROLL_MAX_CLIPPED_SHARE", "0.01"))
