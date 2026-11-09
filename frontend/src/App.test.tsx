@@ -24,4 +24,10 @@ describe("App routes", () => {
     render(<App />);
     expect(screen.getByRole("heading", { name: "Your security starts here." })).toBeInTheDocument();
   });
+
+  it("needs a session for the enrollment page", () => {
+    window.history.pushState({}, "", "/enroll");
+    render(<App />);
+    expect(screen.getByRole("heading", { name: "Welcome back." })).toBeInTheDocument();
+  });
 });

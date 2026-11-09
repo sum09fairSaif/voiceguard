@@ -5,12 +5,12 @@ import { CheckStatusIcon } from "./CheckStatusIcon";
 import { ResultEmblem } from "./ResultEmblem";
 import styles from "./ResultView.module.css";
 
-// The result screen's body (Figma 1:369 "Verified" and our versions of it for
+// The result screen's body (Figma 19:371 "Verified" and our versions of it for
 // a failed or partly verified check). One layout for every outcome: only the
 // content from describeResult changes.
 export function ResultView({ view, onAction }: { view: View; onAction: () => void }) {
   return (
-    <div className={styles.result}>
+    <div className={`${styles.result} ${styles.verdict}`}>
       <ResultEmblem tone={view.tone} />
       <p className={`${styles.eyebrow} ${styles[view.tone]}`}>{view.eyebrow}</p>
       <h1 className={styles.title}>{view.title}</h1>
