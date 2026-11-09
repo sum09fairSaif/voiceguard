@@ -38,9 +38,11 @@
   margin-top: 19px;
   font-size: 14px;
   text-align: center;
+  color: var(--color-muted);
 }
 
+/* Olive and underlined so the link stands out from the sentence (#118). */
 .switch a {
-  color: var(--color-muted);
-  text-decoration: none;
+  color: var(--color-primary);
+  text-decoration: underline;
 }

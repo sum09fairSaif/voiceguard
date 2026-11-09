@@ -134,7 +134,7 @@ export function SignupPage() {
       </form>
 
       <p className={styles.switch}>
-        <Link to="/signin">Already a member? Sign in</Link>
+        Already a member? <Link to="/signin">Sign in</Link>
       </p>
       <p className={styles.terms}>By continuing, you agree to our Terms &amp; Privacy Policy.</p>
     </Page>
