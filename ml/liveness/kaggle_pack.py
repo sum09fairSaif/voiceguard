@@ -90,7 +90,9 @@ def write_data(data_dir: Path, out: Path, workers: int | None) -> None:
                 if handle:
                     handle.close()
                 shard, offset = shard + 1, 0
-                handle = open(out / f"shard_{shard:03d}.bin", "wb")
+                # One shard file at a time, swapped partway through the loop,
+                # so a with-block would close it too early.
+                handle = open(out / f"shard_{shard:03d}.bin", "wb")  # noqa: SIM115
             handle.write(data)
             where.append((f"shard_{shard:03d}.bin", offset, len(data), seconds))
             offset += len(data)

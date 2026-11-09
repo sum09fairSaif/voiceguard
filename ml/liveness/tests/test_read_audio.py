@@ -1,9 +1,9 @@
 import numpy as np
 import pytest
 import soundfile as sf
+from conftest import write_tone
 
 import validate
-from conftest import write_tone
 from validate import check_clip, read_audio
 
 

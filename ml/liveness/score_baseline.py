@@ -67,7 +67,7 @@ def score(model: torch.nn.Module, clips: pd.DataFrame, data_dir: Path, raw: bool
     batches = [paths[i : i + BATCH] for i in range(0, len(paths), BATCH)]
     out = []
     with ThreadPoolExecutor(8) as pool, torch.inference_mode():
-        read = lambda batch: np.stack([read_clip(data_dir, p, raw) for p in batch])  # noqa: E731
+        read = lambda batch: np.stack([read_clip(data_dir, p, raw) for p in batch])
         pending = pool.submit(read, batches[0]) if batches else None
         for n in range(len(batches)):
             x = pending.result()
@@ -156,8 +156,8 @@ def main() -> None:
     counts = clips.groupby(["source", "label"]).size().unstack(fill_value=0).reset_index()
     report = [
         f"# {args.title}",
-        f"EER (%) on {len(clips)} {args.split} clips, up to {args.per_group} per dataset and label. "
-        "0 is perfect, 50 is guessing.",
+        (f"EER (%) on {len(clips)} {args.split} clips, up to {args.per_group} per dataset and label. "
+         "0 is perfect, 50 is guessing."),
         markdown_table(flat.reset_index()),
         "## Clips scored", markdown_table(counts),
         "## Models", json.dumps(dict(s.split("=", 1) for s in args.model), indent=2),

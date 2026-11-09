@@ -10,9 +10,9 @@ import soundfile as sf
 
 pytest.importorskip("torch")  # CI doesn't install it (see requirements-model.txt)
 
-import audio  # noqa: E402
-import kaggle_pack  # noqa: E402
-from training_data import ClipDataset  # noqa: E402
+import audio
+import kaggle_pack
+from training_data import ClipDataset
 
 
 @pytest.fixture

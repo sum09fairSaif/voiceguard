@@ -63,8 +63,12 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
-      - run: pip install -r requirements-dev.txt
-      - run: python -m pytest
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+      - name: Lint
+        run: ruff check .
+      - name: Test
+        run: python -m pytest
 
   frontend:
     runs-on: ubuntu-latest
