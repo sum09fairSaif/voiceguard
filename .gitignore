@@ -5,7 +5,13 @@ __pycache__/
 *.pyc
 .pytest_cache/
 .ruff_cache/
+.coverage
+htmlcov/
+
+# Secrets: real settings files, but not the examples
 .env
+.env.*
+!.env.example
 
 # Node
 node_modules/
@@ -31,3 +37,14 @@ ml/liveness/data/
 CLAUDE.md
 /backend/CLAUDE.md
 /frontend/CLAUDE.md
+.claude/settings.local.json
+
+# Operating system and editor files
+.DS_Store
+Thumbs.db
+/.vscode/
+/.idea/
+*.swp
+
+# Logs
+*.log
