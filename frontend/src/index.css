@@ -9,6 +9,7 @@
   --color-gold: #c9a227;
   --color-gold-soft: #f7f3e8;
   --color-gold-border: #e6d9b8;
+  --color-gold-badge: #f6edce;
   /* The logo, the intro icons and the summary cards. */
   --color-brand: #007f7b;
   --color-brand-soft: #e9f5f3;
@@ -41,6 +42,8 @@
 
   /* Headings, field labels, buttons and the logo. */
   --font-heading: "SN Pro", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  /* Labels the Figma still sets in Inter, until the design team updates them. */
+  --font-inter: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   /* Everything else. */
   --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 

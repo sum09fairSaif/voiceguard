@@ -1,0 +1,80 @@
+/* Figma 19:5: the mark sits inside three nested shields, with the badge on
+   the outer shield's point. */
+.hero {
+  position: relative;
+  flex: none;
+  align-self: center;
+  width: 233px;
+  height: 261px;
+  margin-top: 69px;
+}
+
+.outer,
+.middle,
+.inner,
+.mark,
+.badge {
+  position: absolute;
+}
+
+.outer {
+  top: 0;
+  left: 0;
+}
+
+.middle {
+  top: 30px;
+  left: 27px;
+}
+
+.inner {
+  top: 57px;
+  left: 59px;
+}
+
+.mark {
+  top: 76px;
+  left: 47px;
+}
+
+/* Sized by its text rather than Figma's fixed 102px, so it still fits if a
+   browser enforces a larger minimum font size. It also covers the outer
+   shield's point. */
+.badge {
+  top: 235px;
+  left: 50%;
+  transform: translateX(-50%);
+  min-height: 26px;
+  padding: 0 8px;
+  border-radius: 13px;
+  background: var(--color-gold-badge);
+  display: grid;
+  place-items: center;
+  white-space: nowrap;
+  font-family: var(--font-inter);
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--color-primary);
+}
+
+.heading {
+  margin-top: 35px;
+}
+
+.actions {
+  margin-top: 31px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.footer {
+  margin-top: 14px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-heading);
+  font-size: 10px;
+  color: var(--color-muted);
+}
