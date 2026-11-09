@@ -20,6 +20,7 @@ import argparse
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
+import miniaudio
 import numpy as np
 import pandas as pd
 import soundfile as sf
@@ -37,13 +38,34 @@ MAX_CLIPPED_SHARE = 0.01  # more than 1% cut-off samples is badly clipped
 MAX_VALID_PEAK = 2.0
 
 
+def read_audio(path: Path | str) -> tuple[np.ndarray, int]:
+    """A file as a float32 (frames, channels) array and its sample rate.
+
+    libsndfile 1.2.2 (in soundfile 0.13 and up) fails partway through about
+    half of ASVspoof 2019 PA's FLAC files, which 1.2.0 read correctly: they
+    match their stored MD5 checksums. So a FLAC file libsndfile can't read is
+    decoded again with miniaudio. A file neither can read raises RuntimeError.
+    """
+    try:
+        return sf.read(str(path), dtype="float32", always_2d=True)
+    except (RuntimeError, sf.LibsndfileError):
+        if Path(path).suffix.lower() != ".flac":
+            raise
+    try:
+        decoded = miniaudio.flac_read_s32(Path(path).read_bytes())
+    except miniaudio.DecodeError as error:
+        raise RuntimeError(f"{path}: {error}") from error
+    samples = np.frombuffer(decoded.samples, dtype=np.int32).reshape(-1, decoded.nchannels)
+    return (samples / 2.0**31).astype(np.float32), decoded.sample_rate
+
+
 def check_clip(path: Path) -> str:
     """The problem with one clip, or "" if it's fine."""
     if not path.is_file():
         return "missing"
     try:
-        samples, rate = sf.read(str(path), dtype="float32", always_2d=True)
-    except (RuntimeError, sf.LibsndfileError):
+        samples, rate = read_audio(path)
+    except RuntimeError:  # soundfile's errors are RuntimeErrors too
         return "unreadable"
     if not np.isfinite(samples).all():
         return "not_finite"
