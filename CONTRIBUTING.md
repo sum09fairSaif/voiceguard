@@ -6,8 +6,10 @@
 - `dev` is the integration branch. Everything merges here first.
 - Work happens on a short-lived branch off `dev`, named by type:
   - `feature/<story-number>-short-name` for a user story, e.g. `feature/12-log-in-with-voice`
-  - `fix/short-name` for a bug fix
+    (`feature/`, not `feat/`: `feat` is the commit type, `feature/` the branch prefix)
+  - `fix/<issue-number>-short-name` for a bug fix, e.g. `fix/118-contrast-small-screens`
   - `chore/short-name`, `docs/short-name` or `ci/short-name` for upkeep
+- Branch names are lowercase words joined by hyphens.
 - Delete the branch once its pull request has merged.
 
 ## Commit messages
@@ -49,9 +51,15 @@ Releasing to `main`: open a pull request from `dev` into `main` titled
 
 ## Before you push
 
-From the repository root:
+Run the checks for each folder you changed, each line from the repository
+root. CI runs the same ones on every pull request.
 
 ```
 cd backend && python -m pytest && ruff check .
-cd frontend && npm run lint && npm test
+cd frontend && npm run lint && npm test && npm run build
+cd model-service && python -m pytest && ruff check .
+cd ml/liveness && python -m pytest
 ```
+
+Never commit secrets (`.env`, API keys, tokens) or voice recordings. Both
+are git-ignored; if `git status` shows one, stop and check why.
