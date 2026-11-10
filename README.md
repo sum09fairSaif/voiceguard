@@ -98,14 +98,6 @@ and results are in [ml/liveness/README.md](ml/liveness/README.md).
 GitHub, drag the .mp4 in, and put the https://github.com/user-attachments/assets/...
 link it creates on its own line here. GitHub shows that as a video player. -->
 
-| Create account |
-|---|
-| <img src="docs/screenshots/signup.png" alt="Create account screen" width="300"> |
-
-<!-- To add: docs/screenshots/passage.png (read the sentence),
-docs/screenshots/enroll.png (Voice ID setup) and docs/screenshots/result.png
-(result with the check breakdown), each about 300px wide. -->
-
 ## How to use it
 
 1. Open the [live app](https://voiceguard-nu.vercel.app/) and create an account (or sign in, if you already have one).
