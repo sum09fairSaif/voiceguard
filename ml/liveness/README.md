@@ -242,6 +242,20 @@ Kaggle gives about 30 free GPU hours a week, in sessions of up to 9-12 hours.
    of the last version that finished without an error, so after a crash
    there's nothing to carry on from: the script then stops at once and lists
    what it found, rather than starting over.
+8. For room echo and noise, after `python download.py rirs_noises`:
+   `python kaggle_pack.py --user <kaggle-username> --noise-only` packs them
+   (about 1.3 GB) under `data/kaggle/noise/`, and `kaggle datasets create -p
+   data/kaggle/noise` uploads them once as their own private dataset, so the
+   15 GB data pack doesn't have to go up again. Then add `--noise` to every
+   `kaggle_pack.py --script-only` for that run, resumes included: it attaches
+   the noise dataset, and the run stops at once on Kaggle if it can't find
+   it, rather than spending GPU hours training without it.
+
+If `download.py rirs_noises` says openslr.org's certificate isn't valid
+while a browser opens the site fine, Python's certificate list is out of
+date rather than the site being unsafe: download `rirs_noises.zip` in the
+browser (or with `curl`), save it as `data/augment/rirs_noises.zip`, and run
+the command again to unpack and check it.
 
 On Kaggle's GPU it trains about 17 clips a second, about 65-75 minutes an
 epoch, so 10 epochs need two sessions. The GPU is mostly waiting: Opus and MP3

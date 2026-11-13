@@ -5,6 +5,8 @@ From ml/liveness/, after preprocess.py:
     python kaggle_pack.py --user <kaggle-username>                  # the data and the script
     python kaggle_pack.py --user <kaggle-username> --script-only    # after changing the code
     python kaggle_pack.py --user <kaggle-username> --script-only --resume   # next session
+    python kaggle_pack.py --user <kaggle-username> --noise-only     # echoes and noises, once
+    python kaggle_pack.py --user <kaggle-username> --script-only --noise --name <run>   # train with them
 
 Writes, in data/kaggle/:
 - data/: the training clips and a dev sample, packed into a few big files
@@ -15,6 +17,11 @@ Writes, in data/kaggle/:
 - script/: what Kaggle runs, with our training code bundled inside, so a code
   change only needs this pushed again, not the data:
       kaggle kernels push -p data/kaggle/script
+- noise/ (with --noise-only): the room echoes and noises for augmentation,
+  about 1.3 GB, as their own private dataset, so a data pack made without
+  them doesn't have to be uploaded again:
+      kaggle datasets create -p data/kaggle/noise
+  Then pack the script with --noise to attach it.
 
 To keep the upload small, without losing anything training would use:
 - clips are cut to their first 5 seconds (training takes 4-second windows);
@@ -43,6 +50,7 @@ MAX_PER_GROUP = 80_000
 DEV_PER_GROUP = 500
 SHARD_BYTES = 2_000_000_000
 DATASET = "voiceguard-liveness-data"
+NOISE_DATASET = "voiceguard-liveness-noise"
 SCRIPT = "voiceguard-liveness-train"
 WEIGHTS = "asvspoof5_aasist.pth"  # the starting point: the ASVspoof 5 baseline
 WEIGHTS_SOURCE = "external/asvspoof5/Baseline-AASIST/models/weights/AASIST/best.pth"
@@ -106,14 +114,30 @@ def write_data(data_dir: Path, out: Path, workers: int | None) -> None:
     index.to_parquet(out / "manifest.processed.parquet", index=False)
     shutil.copyfile(data_dir / WEIGHTS_SOURCE, out / WEIGHTS)
 
-    noise = data_dir / NOISE_SOURCE
-    if noise.is_dir():
-        with tarfile.open(out / "rirs_noises.tar", "w") as tar:
-            tar.add(noise, arcname="RIRS_NOISES")
-    else:
-        print(f"no {noise}: training on Kaggle will skip echo and noise (compression still applies)")
+    if not write_noise(data_dir, out):
+        print(f"no {data_dir / NOISE_SOURCE}: training on Kaggle will skip echo and noise "
+              "unless the noise dataset is attached (see --noise-only)")
     gb = sum(f.stat().st_size for f in out.iterdir()) / 1e9
     print(f"{out}: {gb:.1f} GB, {index.groupby('split').size().to_dict()}")
+
+
+def write_noise(data_dir: Path, out: Path) -> bool:
+    """RIRS_NOISES as one tar file in out. False if it hasn't been downloaded."""
+    noise = data_dir / NOISE_SOURCE
+    if not noise.is_dir():
+        return False
+    out.mkdir(parents=True, exist_ok=True)
+    with tarfile.open(out / "rirs_noises.tar", "w") as tar:
+        tar.add(noise, arcname="RIRS_NOISES")
+    return True
+
+
+def write_noise_metadata(out: Path, user: str) -> None:
+    (out / "dataset-metadata.json").write_text(json.dumps({
+        "title": NOISE_DATASET, "id": f"{user}/{NOISE_DATASET}", "licenses": [{"name": "apache-2.0"}],
+        "description": "Room echoes and background noises for augmenting VoiceGuard liveness training "
+                       "(private). OpenSLR 28, RIRS_NOISES, Apache 2.0.",
+    }, indent=2))
 
 
 def write_dataset_metadata(out: Path, user: str) -> None:
@@ -134,7 +158,7 @@ run's output is attached (kaggle_pack.py --resume), it carries on from there.
 import base64, glob, io, subprocess, sys, tarfile
 from pathlib import Path
 
-NAME, EPOCHS, MAX_HOURS, RESUME = {name!r}, {epochs}, {max_hours}, {resume}
+NAME, EPOCHS, MAX_HOURS, RESUME, NOISE = {name!r}, {epochs}, {max_hours}, {resume}, {noise}
 CODE = {code!r}
 
 
@@ -157,11 +181,17 @@ data = Path(find("manifest.processed.parquet")[0]).parent
 args = ["--name", NAME, "--data-dir", str(data), "--out-dir", str(work / "runs"), "--epochs", str(EPOCHS),
         "--max-hours", str(MAX_HOURS), "--workers", "4"]
 
+# The echoes and noises: unpacked if Kaggle unpacked them, or a tar file, in
+# the data pack or in the separate noise dataset.
 noise = find("RIRS_NOISES/pointsource_noises")
-if not noise and (data / "rirs_noises.tar").exists():
-    with tarfile.open(data / "rirs_noises.tar") as t:  # into /tmp: /kaggle/working is kept as output
+tars = find("rirs_noises.tar")
+if not noise and tars:
+    with tarfile.open(tars[0]) as t:  # into /tmp: /kaggle/working is kept as output
         t.extractall("/tmp/noise", filter="data")
     noise = ["/tmp/noise/RIRS_NOISES/pointsource_noises"]
+if NOISE and not noise:
+    # Asked for echo and noise: don't spend GPU hours on a run without them.
+    sys.exit("no RIRS_NOISES or rirs_noises.tar in /kaggle/input; is the noise dataset attached?")
 args += ["--noise-dir", str(Path(noise[0]).parent)] if noise else ["--no-noise"]
 
 previous = find(f"runs/{{NAME}}/last.pth")
@@ -183,24 +213,26 @@ subprocess.run([sys.executable, "train.py", *args], cwd=code, check=True)
 '''
 
 
-def write_script(here: Path, out: Path, user: str, name: str, epochs: int, max_hours: float, resume: bool) -> None:
+def write_script(here: Path, out: Path, user: str, name: str, epochs: int, max_hours: float, resume: bool,
+                 noise: bool = False) -> None:
     buffer = io.BytesIO()
     with tarfile.open(fileobj=buffer, mode="w:gz") as tar:
         for file in CODE:
             tar.add(here / file, arcname=file)
     out.mkdir(parents=True, exist_ok=True)
     (out / "run.py").write_text(RUN_SCRIPT.format(
-        name=name, epochs=epochs, max_hours=max_hours, resume=resume, weights=WEIGHTS,
+        name=name, epochs=epochs, max_hours=max_hours, resume=resume, noise=noise, weights=WEIGHTS,
         code=base64.b64encode(buffer.getvalue()).decode()), encoding="utf-8")
     (out / "kernel-metadata.json").write_text(json.dumps({
         "id": f"{user}/{SCRIPT}", "title": SCRIPT, "code_file": "run.py", "language": "python",
         "kernel_type": "script", "is_private": True, "enable_gpu": True, "enable_internet": True,
-        "dataset_sources": [f"{user}/{DATASET}"],
+        "dataset_sources": [f"{user}/{DATASET}"] + ([f"{user}/{NOISE_DATASET}"] if noise else []),
         # Its own last output, so the next session can carry on from last.pth.
         "kernel_sources": [f"{user}/{SCRIPT}"] if resume else [],
         "competition_sources": [],
     }, indent=2))
     print(f"{out / 'run.py'}: run {name!r}, {epochs} epochs, up to {max_hours} h a session"
+          + (", with echo and noise" if noise else "")
           + (", carrying on from the last session" if resume else ""))
 
 
@@ -214,15 +246,24 @@ def main() -> None:
     parser.add_argument("--script-only", action="store_true", help="don't redo the data")
     parser.add_argument("--resume", action="store_true", help="carry on from the last session's output")
     parser.add_argument("--workers", type=int, default=None)
+    parser.add_argument("--noise-only", action="store_true", help="pack the echoes and noises as their own dataset")
+    parser.add_argument("--noise", action="store_true",
+                        help="attach the noise dataset, and stop on Kaggle if it isn't there")
     args = parser.parse_args()
 
     out = args.data_dir / "kaggle"
+    if args.noise_only:
+        if not write_noise(args.data_dir, out / "noise"):
+            raise SystemExit(f"no {args.data_dir / NOISE_SOURCE}; run `python download.py rirs_noises` first")
+        write_noise_metadata(out / "noise", args.user)
+        print(f"{out / 'noise'}: upload once with `kaggle datasets create -p {out / 'noise'}`")
+        return
     if not args.script_only:
         write_data(args.data_dir, out / "data", args.workers)
     if (out / "data").is_dir():
         write_dataset_metadata(out / "data", args.user)
     write_script(Path(__file__).parent, out / "script", args.user, args.name, args.epochs, args.max_hours,
-                 args.resume)
+                 args.resume, args.noise)
 
 
 if __name__ == "__main__":

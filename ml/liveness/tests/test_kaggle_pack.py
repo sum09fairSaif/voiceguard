@@ -78,7 +78,7 @@ def test_the_script_carries_the_code_and_the_settings(processed, tmp_path):
                              resume=True)
     script = (out / "run.py").read_text(encoding="utf-8")
     compile(script, "run.py", "exec")
-    assert "NAME, EPOCHS, MAX_HOURS, RESUME = 'run1', 3, 7.5, True" in script
+    assert "NAME, EPOCHS, MAX_HOURS, RESUME, NOISE = 'run1', 3, 7.5, True, False" in script
     assert "elif RESUME:" in script and "sys.exit(" in script
     assert 'f"runs/{NAME}/last.pth"' in script
 
@@ -89,3 +89,38 @@ def test_the_script_carries_the_code_and_the_settings(processed, tmp_path):
     meta = json.loads((out / "kernel-metadata.json").read_text())
     assert meta["enable_gpu"] and meta["is_private"]
     assert meta["kernel_sources"] == [f"someone/{kaggle_pack.SCRIPT}"]
+    assert meta["dataset_sources"] == [f"someone/{kaggle_pack.DATASET}"]
+
+
+def test_a_noise_run_attaches_the_noise_dataset_and_insists_on_it(tmp_path):
+    out = tmp_path / "script"
+    kaggle_pack.write_script(kaggle_pack.Path(kaggle_pack.__file__).parent, out, "someone", "run1", 3, 7.5,
+                             resume=False, noise=True)
+    script = (out / "run.py").read_text(encoding="utf-8")
+    compile(script, "run.py", "exec")
+    assert "NAME, EPOCHS, MAX_HOURS, RESUME, NOISE = 'run1', 3, 7.5, False, True" in script
+    assert "if NOISE and not noise:" in script
+    meta = json.loads((out / "kernel-metadata.json").read_text())
+    assert meta["dataset_sources"] == [f"someone/{kaggle_pack.DATASET}", f"someone/{kaggle_pack.NOISE_DATASET}"]
+
+
+def test_the_noise_pack_holds_every_echo_and_noise(tmp_path):
+    noise = tmp_path / kaggle_pack.NOISE_SOURCE
+    files = ["simulated_rirs/smallroom/Room001/Room001-00001.wav", "pointsource_noises/noise-free-sound-0001.wav",
+             "real_rirs_isotropic_noises/air_type1_air_binaural_lecture_0_1.wav"]
+    for name in files:
+        (noise / name).parent.mkdir(parents=True, exist_ok=True)
+        sf.write(str(noise / name), np.zeros(160, dtype=np.float32), 16000)
+    out = tmp_path / "kaggle" / "noise"
+
+    assert kaggle_pack.write_noise(tmp_path, out)
+    kaggle_pack.write_noise_metadata(out, "someone")
+
+    with tarfile.open(out / "rirs_noises.tar") as tar:
+        assert {f"RIRS_NOISES/{name}" for name in files} <= set(tar.getnames())
+    assert json.loads((out / "dataset-metadata.json").read_text())["id"] == f"someone/{kaggle_pack.NOISE_DATASET}"
+
+
+def test_no_noise_downloaded_means_no_noise_pack(tmp_path):
+    assert not kaggle_pack.write_noise(tmp_path, tmp_path / "kaggle" / "noise")
+    assert not (tmp_path / "kaggle" / "noise").exists()
