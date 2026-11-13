@@ -10,6 +10,11 @@ results (see ml/liveness/README.md).
 The model only gives meaningful scores on audio prepared exactly the way its
 training clips were, so prepare() repeats ml/liveness/audio.py's steps. Keep
 the two in step: a change there needs the same change here, and retraining.
+
+The model hears about 4 seconds at a time and a passage takes longer, so the
+whole recording is scored in overlapping 4-second windows and the lowest
+score counts. Scoring only the start would let someone say the first words
+themselves and play a recording or clone for the rest.
 """
 
 import os
@@ -33,6 +38,17 @@ TRIM_DB = 30
 ACTIVE_DB = 30
 TARGET_DBFS = -26
 MAX_PEAK = 0.95
+
+# Each window starts 2 seconds after the last, so they overlap by half, and
+# the last one ends where the speech does: the first and last 4 seconds are
+# always scored whole, and any 6 seconds hold at least one whole window.
+WINDOW_HOP = 2 * TARGET_RATE
+# A passage is about 5-8 seconds of speech: 2-3 windows. Over this many
+# (about a minute) isn't scored, so a long upload can't run past the
+# backend's timeout or the GPU's time limit; with no score, the check fails.
+MAX_WINDOWS = 30
+# Windows sent through the model at once.
+BATCH = 8
 
 # The AASIST settings the checkpoint was trained with (ml/liveness/score_baseline.py).
 MODEL_CONFIG = {
@@ -76,10 +92,21 @@ def _normalize_gain(samples: np.ndarray) -> float:
     return min(10 ** (TARGET_DBFS / 20) / level, MAX_PEAK / float(np.abs(samples).max()))
 
 
+def window_starts(length: int) -> list[int]:
+    """Where each window starts in speech `length` samples long (at least
+    CROP_SAMPLES): every WINDOW_HOP, plus one ending exactly at the end."""
+    starts = list(range(0, length - CROP_SAMPLES + 1, WINDOW_HOP))
+    if starts[-1] != length - CROP_SAMPLES:
+        starts.append(length - CROP_SAMPLES)
+    return starts
+
+
 def prepare(samples: np.ndarray) -> np.ndarray | None:
     """16 kHz mono samples as the model's input: centred, silence trimmed
-    off both ends, speech brought to -26 dBFS, then the first CROP_SAMPLES
-    (short clips repeated to fill them). None if there's no sound at all."""
+    off both ends, speech brought to -26 dBFS, then cut into overlapping
+    windows of CROP_SAMPLES covering all of it, as a (windows, CROP_SAMPLES)
+    array. Speech shorter than one window is repeated to fill it, as in
+    training. None if there's no sound at all, or more than MAX_WINDOWS."""
     mono = _remove_dc(samples.astype(np.float32))
     start, end = _speech_bounds(mono)
     if end == start:
@@ -87,8 +114,18 @@ def prepare(samples: np.ndarray) -> np.ndarray | None:
     trimmed = _remove_dc(mono[start:end])
     clip = (trimmed * _normalize_gain(trimmed)).astype(np.float32)
     if len(clip) < CROP_SAMPLES:
-        clip = np.tile(clip, CROP_SAMPLES // len(clip) + 1)
-    return clip[:CROP_SAMPLES]
+        clip = np.tile(clip, CROP_SAMPLES // len(clip) + 1)[:CROP_SAMPLES]
+    starts = window_starts(len(clip))
+    if len(starts) > MAX_WINDOWS:
+        return None
+    return np.stack([clip[s : s + CROP_SAMPLES] for s in starts])
+
+
+def lowest_score(windows: np.ndarray, score_batch) -> float:
+    """The recording's score: its least live-sounding window. `score_batch`
+    takes up to BATCH windows and returns one score per window."""
+    scores = [score_batch(windows[i : i + BATCH]) for i in range(0, len(windows), BATCH)]
+    return float(np.min(np.concatenate(scores)))
 
 
 def load_model() -> None:
@@ -107,16 +144,21 @@ def load_model() -> None:
 
 
 def score(samples: np.ndarray, device: str = "cpu") -> float | None:
-    """The liveness score for 16 kHz mono samples, or None if there's no
-    sound to judge. Few weights but a lot of arithmetic: about 3 seconds
-    on a CPU, a few milliseconds on a GPU."""
+    """The liveness score for 16 kHz mono samples: the lowest of its
+    windows' scores. None if there's no sound to judge, or too much. Few
+    weights but a lot of arithmetic: about 3 seconds a window on a CPU, a
+    few milliseconds on a GPU."""
     import torch
 
-    clip = prepare(samples)
-    if clip is None:
+    windows = prepare(samples)
+    if windows is None:
         return None
     if next(_model.parameters()).device.type != device:
         _model.to(device)
-    with torch.inference_mode():
-        _, logits = _model(torch.from_numpy(clip).unsqueeze(0).to(device))
-    return float(logits[0, 1])
+
+    def score_batch(batch: np.ndarray) -> np.ndarray:
+        with torch.inference_mode():
+            _, logits = _model(torch.from_numpy(batch).to(device))
+        return logits[:, 1].float().cpu().numpy()
+
+    return lowest_score(windows, score_batch)

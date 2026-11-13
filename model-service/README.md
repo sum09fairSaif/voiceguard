@@ -28,13 +28,21 @@ Gradio Spaces. ZeroGPU only works for Gradio apps, so this is a Gradio app
 with one API endpoint and no UI. Both models run in one `@spaces.GPU` call.
 If no GPU is free (or the quota is used up) they fall back to the CPU,
 where the embedding takes about half a second but the liveness score about
-3 seconds: AASIST has few weights but a lot of arithmetic.
+3 seconds per 4-second window, so 6-9 seconds for a passage: AASIST has few
+weights but a lot of arithmetic.
 
 The liveness model only scores audio prepared exactly like its training
 clips, so `liveness.prepare()` repeats `ml/liveness/audio.py`'s steps
-(centre, trim the silence at the ends, bring the speech to -26 dBFS, take
-the first 4 seconds). A change to either needs the same change in the other,
-and retraining.
+(centre, trim the silence at the ends, bring the speech to -26 dBFS). A
+change to either needs the same change in the other, and retraining;
+`tests/test_liveness.py` checks the two give the same audio.
+
+The model hears about 4 seconds at a time, so the whole recording is scored
+in 4-second windows, each starting 2 seconds after the last, with the last
+ending where the speech ends. The lowest window score counts: scoring only
+the start would let someone say the first words live and play a clone for
+the rest. Over 30 windows (about a minute of speech) isn't scored, and the
+check fails.
 
 Recordings are never stored. They arrive as base64 text, so Gradio never
 saves them as uploaded files, and each one is written to a temporary file

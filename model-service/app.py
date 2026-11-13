@@ -128,8 +128,8 @@ def run_models(samples: np.ndarray) -> tuple[list[float], float | None]:
             return _run_on_gpu(samples)
         except Exception:
             # Out of GPU quota, or no GPU free right now. The CPU still
-            # answers, in about half a second for the embedding and a few
-            # seconds for the liveness score.
+            # answers, in about half a second for the embedding and about 3
+            # seconds per 4-second window for the liveness score.
             logger.warning("GPU unavailable, running the models on the CPU instead.", exc_info=True)
     return _run(samples, "cpu")
 
