@@ -1,4 +1,5 @@
 import importlib.util
+import itertools
 from pathlib import Path
 
 import numpy as np
@@ -35,7 +36,7 @@ def test_windows_cover_all_of_the_speech_and_overlap():
         starts = window_starts(length)
         assert starts[0] == 0
         assert starts[-1] + CROP_SAMPLES == length
-        assert all(0 < b - a <= WINDOW_HOP for a, b in zip(starts, starts[1:], strict=False))
+        assert all(0 < b - a <= WINDOW_HOP for a, b in itertools.pairwise(starts))
 
 
 def test_a_passage_is_a_few_windows():
