@@ -22,10 +22,23 @@ updates:
       interval: weekly
     open-pull-requests-limit: 3
     ignore:
-      # ZeroGPU only accepts certain PyTorch versions (see requirements.txt),
-      # so these are upgraded by hand after checking the Space still starts.
+      # ZeroGPU only accepts certain PyTorch versions, and torchaudio stops
+      # at 2.11 (see requirements.txt), so these are upgraded by hand after
+      # checking the Space still starts.
       - dependency-name: torch
       - dependency-name: torchaudio
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+
+  # The liveness model's data and training tools. torch is upgraded here
+  # like anything else: nothing hosted depends on it.
+  - package-ecosystem: pip
+    directory: /ml/liveness
+    target-branch: dev
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
     groups:
       minor-and-patch:
         update-types: [minor, patch]
