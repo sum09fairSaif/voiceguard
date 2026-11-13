@@ -116,7 +116,7 @@ def test_the_noise_pack_holds_every_echo_and_noise(tmp_path):
     assert kaggle_pack.write_noise(tmp_path, out)
     kaggle_pack.write_noise_metadata(out, "someone")
 
-    with tarfile.open(out / "rirs_noises.tar") as tar:
+    with tarfile.open(out / kaggle_pack.NOISE_PACK) as tar:
         assert {f"RIRS_NOISES/{name}" for name in files} <= set(tar.getnames())
     assert json.loads((out / "dataset-metadata.json").read_text())["id"] == f"someone/{kaggle_pack.NOISE_DATASET}"
 

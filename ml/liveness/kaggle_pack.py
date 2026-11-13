@@ -55,6 +55,7 @@ SCRIPT = "voiceguard-liveness-train"
 WEIGHTS = "asvspoof5_aasist.pth"  # the starting point: the ASVspoof 5 baseline
 WEIGHTS_SOURCE = "external/asvspoof5/Baseline-AASIST/models/weights/AASIST/best.pth"
 NOISE_SOURCE = "augment/RIRS_NOISES"
+NOISE_PACK = "rirs_noises.tar.gz"
 CODE = ["audio.py", "augment.py", "manifest.py", "score_baseline.py", "train.py", "training_data.py",
         "validate.py", "models/__init__.py", "models/aasist.py", "models/LICENSE-AASIST"]
 
@@ -122,12 +123,13 @@ def write_data(data_dir: Path, out: Path, workers: int | None) -> None:
 
 
 def write_noise(data_dir: Path, out: Path) -> bool:
-    """RIRS_NOISES as one tar file in out. False if it hasn't been downloaded."""
+    """RIRS_NOISES as one gzipped tar file in out (3.6 GB of WAVs, about
+    1.3 GB packed). False if it hasn't been downloaded."""
     noise = data_dir / NOISE_SOURCE
     if not noise.is_dir():
         return False
     out.mkdir(parents=True, exist_ok=True)
-    with tarfile.open(out / "rirs_noises.tar", "w") as tar:
+    with tarfile.open(out / NOISE_PACK, "w:gz", compresslevel=6) as tar:
         tar.add(noise, arcname="RIRS_NOISES")
     return True
 
@@ -181,17 +183,17 @@ data = Path(find("manifest.processed.parquet")[0]).parent
 args = ["--name", NAME, "--data-dir", str(data), "--out-dir", str(work / "runs"), "--epochs", str(EPOCHS),
         "--max-hours", str(MAX_HOURS), "--workers", "4"]
 
-# The echoes and noises: unpacked if Kaggle unpacked them, or a tar file, in
-# the data pack or in the separate noise dataset.
+# The echoes and noises: unpacked if Kaggle unpacked them, or a tar file
+# (gzipped or not), in the data pack or in the separate noise dataset.
 noise = find("RIRS_NOISES/pointsource_noises")
-tars = find("rirs_noises.tar")
+tars = find("rirs_noises.tar*")
 if not noise and tars:
     with tarfile.open(tars[0]) as t:  # into /tmp: /kaggle/working is kept as output
         t.extractall("/tmp/noise", filter="data")
     noise = ["/tmp/noise/RIRS_NOISES/pointsource_noises"]
 if NOISE and not noise:
     # Asked for echo and noise: don't spend GPU hours on a run without them.
-    sys.exit("no RIRS_NOISES or rirs_noises.tar in /kaggle/input; is the noise dataset attached?")
+    sys.exit("no RIRS_NOISES or rirs_noises.tar* in /kaggle/input; is the noise dataset attached?")
 args += ["--noise-dir", str(Path(noise[0]).parent)] if noise else ["--no-noise"]
 
 previous = find(f"runs/{{NAME}}/last.pth")
