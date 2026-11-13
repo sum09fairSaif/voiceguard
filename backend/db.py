@@ -61,6 +61,15 @@ def get_login_failures_collection() -> Collection:
 
 
 @lru_cache
+def get_voice_failures_collection() -> Collection:
+    # Rejected voice checks and lockouts, one per user. MongoDB deletes
+    # each once its window and any lockout have ended.
+    voice_failures = get_client()[config.MONGO_DB_NAME]["voice_failures"]
+    voice_failures.create_index("expires_at", expireAfterSeconds=0)
+    return voice_failures
+
+
+@lru_cache
 def get_enrollments_collection() -> Collection:
     # Samples a user has given towards a voiceprint, keyed by user id.
     # MongoDB deletes an unfinished enrollment once it has expired.
