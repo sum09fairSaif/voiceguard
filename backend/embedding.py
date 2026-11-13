@@ -20,6 +20,12 @@ class Embedding:
     # None if the model service is too old to report them.
     speech_seconds: float | None
     clipped_share: float | None
+    # Which liveness model scored the recording; None if the model service
+    # is too old to check liveness.
+    liveness_model: str | None = None
+    # Higher means more likely a live person rather than a replay or AI
+    # voice. None if there was no sound to judge, or no liveness model.
+    liveness: float | None = None
 
 
 # Takes the recording and a filename (whose extension tells the model
@@ -69,10 +75,15 @@ def embed(url: str, token: str, audio: bytes, filename: str) -> Embedding:
     embedding = body.get("embedding")
     if not isinstance(embedding, list) or not all(_is_number(x) for x in embedding):
         raise IdentityUnavailable("The model service sent an unexpected answer.")
+    liveness_model = body.get("liveness_model")
+    if liveness_model is not None and not isinstance(liveness_model, str):
+        raise IdentityUnavailable("The model service sent an unexpected answer.")
     return Embedding(
         vector=embedding,
         speech_seconds=_optional_number(body, "speech_seconds"),
         clipped_share=_optional_number(body, "clipped_share"),
+        liveness_model=liveness_model,
+        liveness=_optional_number(body, "liveness"),
     )
 
 
