@@ -64,15 +64,17 @@ class ContentScore(BaseModel):
 
 
 class VerifyResponse(BaseModel):
-    # "incomplete" until the liveness check (#17) exists.
+    # "approved" only when all three checks pass; "incomplete" when the
+    # account has no voiceprint, so only the words could be checked.
     decision: Literal["approved", "rejected", "incomplete"]
     reason: str
     content: ContentScore
     # Pass or fail only. The similarity score stays on the server: handing
     # it back would let someone tune a voice clone until it scores high.
     identity: Literal["passed", "failed", "not_enrolled"]
-    # Not built yet (#17). Reported as such rather than faked as passing.
-    liveness: Literal["not_checked"] = "not_checked"
+    # Pass or fail only, for the same reason. "not_checked" when the account
+    # has no voiceprint: liveness runs in the same model-service call.
+    liveness: Literal["passed", "failed", "not_checked"]
 
 
 class EnrollmentStatus(BaseModel):

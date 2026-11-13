@@ -6,7 +6,7 @@ line-length = 120
 src = ["backend", "model-service", "ml/liveness"]
 # Third-party model code, kept exactly as published so it can be compared
 # with the original.
-extend-exclude = ["ml/liveness/models/aasist.py"]
+extend-exclude = ["ml/liveness/models/aasist.py", "model-service/aasist.py"]
 
 [lint]
 # Ruff's defaults (real errors: unused imports, undefined names, ...)

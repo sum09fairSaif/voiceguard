@@ -1,3 +1,4 @@
+import math
 import os
 
 from dotenv import load_dotenv
@@ -83,6 +84,14 @@ VOICEPRINT_KEY = os.getenv("VOICEPRINT_KEY", "")
 IDENTITY_THRESHOLD = float(os.getenv("IDENTITY_THRESHOLD", "0.5"))
 if not -1.0 <= IDENTITY_THRESHOLD <= 1.0:
     raise RuntimeError("IDENTITY_THRESHOLD must be between -1 and 1.")
+# Liveness check, run by the same model service. Lowest liveness score that
+# counts as a live person; recordings below it are rejected even when the
+# voice matches. The score is the model's raw "real" output, not a
+# probability, and belongs to one model (the service reports which):
+# retraining means choosing it again. LIVENESS_THRESHOLD_PLACEHOLDER
+LIVENESS_THRESHOLD = float(os.getenv("LIVENESS_THRESHOLD", "0.0"))
+if not math.isfinite(LIVENESS_THRESHOLD):
+    raise RuntimeError("LIVENESS_THRESHOLD must be a number.")
 
 # Per-user limits. Each voice check is a paid speech-to-text call, so these
 # cap what one account can spend. After 3 failed voice attempts the user
