@@ -75,19 +75,20 @@ Each row is a user story (see the
 | #15 Content check | ✅ Done (OpenAI Whisper) | — |
 | #10 Enroll voice profile | ✅ Done | ✅ Enrollment screens (after signup, or after sign-in until enrolled) |
 | #16 Identity check | ✅ Done (SpeechBrain ECAPA) | — |
-| #17 Liveness / anti-spoof check | 🟡 First model trained ([`ml/liveness/`](ml/liveness/README.md)); not used by the app yet | — |
-| #18 Combine the three checks | 🟡 Content + identity combined; answers "incomplete" until liveness exists | — |
+| #17 Liveness / anti-spoof check | 🟡 First model live (AASIST, fine-tuned); about 1 fake in 4 still passes | — |
+| #18 Combine the three checks | ✅ All three must pass; liveness can veto | — |
 | #19 Result screen with retry | — | ✅ Done |
 | #20 Account recovery (email code) | ⏳ Not started | ⏳ Not started |
 
-Until the liveness check is part of the app, a correct reading ends as
-**"Almost there" (incomplete)** rather than approved. That is deliberate:
-without liveness, a recording of the user could pass the other two checks.
+An enrolled user who reads the passage live in their own voice is approved.
+A recording that doesn't sound like a live voice is rejected even when the
+voice matches. Without a voiceprint, a correct reading ends as
+**"Almost there" (incomplete)**: only the words could be checked.
 
-The first liveness model is trained but not yet good enough to rely on: on
-held-out test data, about 1 fake in 4 still gets through (In-the-Wild error
-rate 22.4%, against 32.2% for the best public checkpoint). Training tools
-and results are in [ml/liveness/README.md](ml/liveness/README.md).
+The liveness model is a first version, so treat it as a speed bump for now,
+not a guarantee: on held-out test data, about 1 fake in 4 still gets through
+(In-the-Wild error rate 22.4%, against 32.2% for the best public checkpoint).
+Training tools and results are in [ml/liveness/README.md](ml/liveness/README.md).
 
 ## Demo
 
@@ -149,7 +150,7 @@ Full request and response details are in the interactive docs at `/docs`.
 | Voiceprints | MongoDB, encrypted with Fernet, one per user |
 | Content check | OpenAI Whisper (hosted API, `whisper-1`) |
 | Identity check | SpeechBrain ECAPA, in a separate model service on Hugging Face Spaces |
-| Liveness check | AASIST, fine-tuned on public spoofing datasets (training in `ml/liveness/`, on Kaggle's free GPUs); not in the app yet |
+| Liveness check | AASIST, fine-tuned on public spoofing datasets (training in `ml/liveness/`, on Kaggle's free GPUs); runs in the same model service |
 | Hosting | Vercel (frontend), Render (backend), Hugging Face Spaces (model service) |
 | CI/CD | GitHub Actions (lint, tests and build on every PR); Vercel and Render deploy `main` automatically |
 

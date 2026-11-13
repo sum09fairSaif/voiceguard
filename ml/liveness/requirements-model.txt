@@ -1,6 +1,9 @@
 # For scoring and training the liveness model (score_baseline.py). Kept apart
 # from requirements.txt so CI and the data tools don't need PyTorch. CPU build:
 #   pip install -r requirements-model.txt --extra-index-url https://download.pytorch.org/whl/cpu
+# No torchaudio here, so torch can be newer than the model service's (which
+# has to match torchaudio): 2.13.0 fixes all 4 of PyTorch's alerts (#107),
+# and scores the liveness model the same as 2.8.0 (within 0.000001).
 -r requirements.txt
-torch==2.8.0
+torch==2.13.0
 kaggle==2.2.5  # uploads the pack and starts training on Kaggle (kaggle_pack.py)
