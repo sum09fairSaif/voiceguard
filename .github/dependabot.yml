@@ -1,26 +1,40 @@
-# Dependabot checks our dependencies once a week and opens a pull request
-# when there's a newer version. Security fixes are proposed as soon as
-# they're published. Its pull requests go into dev, like everyone else's,
-# and need a review and green CI before they merge.
+# Dependabot checks our dependencies once a month and opens pull requests
+# for newer versions, grouped so a run is a few PRs rather than one per
+# package. Each folder gets at most two per run: one for all the minor and
+# patch updates, one for all the major ones (majors can break things, so
+# they're kept apart to be reviewed, or closed, on their own). Version
+# updates go into dev, like everyone else's PRs, and need a review and green
+# CI before they merge.
+#
+# Security fixes come as soon as they're published, also grouped, one PR per
+# folder. GitHub always opens those against the default branch (main), not
+# target-branch, so after merging one, merge main back into dev.
+#
+# GitHub only reads this file from main: a change here takes effect after
+# the next release.
 version: 2
 updates:
   - package-ecosystem: pip
     directory: /backend
     target-branch: dev
     schedule:
-      interval: weekly
-    open-pull-requests-limit: 3
+      interval: monthly
+    open-pull-requests-limit: 2
     groups:
-      # One pull request for all the small updates, instead of one each.
       minor-and-patch:
         update-types: [minor, patch]
+      majors:
+        update-types: [major]
+      security:
+        applies-to: security-updates
+        patterns: ["*"]
 
   - package-ecosystem: pip
     directory: /model-service
     target-branch: dev
     schedule:
-      interval: weekly
-    open-pull-requests-limit: 3
+      interval: monthly
+    open-pull-requests-limit: 2
     ignore:
       # ZeroGPU only accepts certain PyTorch versions, and torchaudio stops
       # at 2.11 (see requirements.txt), so these are upgraded by hand after
@@ -30,6 +44,11 @@ updates:
     groups:
       minor-and-patch:
         update-types: [minor, patch]
+      majors:
+        update-types: [major]
+      security:
+        applies-to: security-updates
+        patterns: ["*"]
 
   # The liveness model's data and training tools. torch is upgraded here
   # like anything else: nothing hosted depends on it.
@@ -37,24 +56,45 @@ updates:
     directory: /ml/liveness
     target-branch: dev
     schedule:
-      interval: weekly
-    open-pull-requests-limit: 3
+      interval: monthly
+    open-pull-requests-limit: 2
     groups:
       minor-and-patch:
         update-types: [minor, patch]
+      majors:
+        update-types: [major]
+      security:
+        applies-to: security-updates
+        patterns: ["*"]
 
   - package-ecosystem: npm
     directory: /frontend
     target-branch: dev
     schedule:
-      interval: weekly
-    open-pull-requests-limit: 3
+      interval: monthly
+    open-pull-requests-limit: 2
+    ignore:
+      # TypeScript 7 breaks typescript-eslint (see #81). Remove this once
+      # typescript-eslint supports it.
+      - dependency-name: typescript
+        update-types: ["version-update:semver-major"]
     groups:
       minor-and-patch:
         update-types: [minor, patch]
+      majors:
+        update-types: [major]
+      security:
+        applies-to: security-updates
+        patterns: ["*"]
 
+  # All the workflow actions in one PR, majors included: they're bumped
+  # together (checkout, setup-node, setup-python) and CI tests them at once.
   - package-ecosystem: github-actions
     directory: /
     target-branch: dev
     schedule:
       interval: monthly
+    open-pull-requests-limit: 1
+    groups:
+      actions:
+        patterns: ["*"]
