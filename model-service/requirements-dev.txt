@@ -1,5 +1,8 @@
 # Enough to run the tests, which call the request handler directly with a
 # stand-in for the model: no PyTorch and no Gradio needed.
+# soxr only so tests/test_liveness.py can load ml/liveness/audio.py and
+# check the model's input is prepared exactly as its training clips were.
 numpy==2.4.6
 pytest==9.2.0
+soxr==0.5.0.post1
 ruff==0.17.3
