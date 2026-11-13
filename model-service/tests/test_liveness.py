@@ -160,3 +160,19 @@ def test_the_real_model_loads_and_scores_repeatably():
     assert liveness.score(np.zeros(TARGET_RATE, np.float32)) is None
     # A longer recording is several windows, and gets one score.
     assert np.isfinite(liveness.score(tone(7.0)))
+
+
+def test_the_weights_setting_ignores_stray_spaces_and_line_breaks(monkeypatch):
+    # Pasted into the Space's settings, a value can pick up a trailing newline.
+    import importlib
+
+    import liveness
+
+    monkeypatch.setenv("LIVENESS_WEIGHTS", " /app/liveness-first-try.pth\n")
+    assert importlib.reload(liveness).WEIGHTS == "/app/liveness-first-try.pth"
+
+    monkeypatch.setenv("LIVENESS_WEIGHTS", "\n")
+    assert importlib.reload(liveness).WEIGHTS.endswith("liveness-first-try.pth")
+
+    monkeypatch.delenv("LIVENESS_WEIGHTS")
+    importlib.reload(liveness)
