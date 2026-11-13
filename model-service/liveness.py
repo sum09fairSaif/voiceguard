@@ -24,8 +24,11 @@ import numpy as np
 # The weights file and a name for it, reported with every score so the
 # backend's logs say which model made it.
 LIVENESS_MODEL = "aasist-first-try"
-WEIGHTS = os.getenv(
-    "LIVENESS_WEIGHTS", os.path.join(os.path.dirname(__file__), "weights", "liveness-first-try.pth")
+# LIVENESS_WEIGHTS can point elsewhere, e.g. a Space variable. Spaces and line
+# breaks around it are dropped: a value pasted into the Space's settings
+# with a trailing newline otherwise names a file that doesn't exist.
+WEIGHTS = os.getenv("LIVENESS_WEIGHTS", "").strip() or os.path.join(
+    os.path.dirname(__file__), "weights", "liveness-first-try.pth"
 )
 
 # From ml/liveness/audio.py (STEPS_VERSION 2). The input arrives already
