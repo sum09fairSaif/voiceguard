@@ -1,12 +1,14 @@
-"""VoiceGuard model service: turns a recording into a speaker embedding.
+"""VoiceGuard model service: turns a recording into a speaker embedding and
+a liveness score.
 
 Runs separately from the backend, as a free Hugging Face Space on ZeroGPU,
-because the voice model needs PyTorch, which is too big for the backend's
+because the voice models need PyTorch, which is too big for the backend's
 host. ZeroGPU only works for Gradio apps, so this is one: a Gradio app with
 a single API endpoint, `embed`, and no UI.
 
 The backend sends a recording (as base64 text, so Gradio never saves it as
-an uploaded file) and gets back a list of numbers describing the voice.
+an uploaded file) and gets back a list of numbers describing the voice, and
+a score for whether it's a live person rather than a replay or AI voice.
 Recordings are never stored: each one lives in a temporary file only while
 it is decoded, then is deleted.
 """
@@ -30,6 +32,8 @@ except ImportError:
     spaces = None
 
 import numpy as np
+
+import liveness
 
 MODEL_SOURCE = "speechbrain/spkrec-ecapa-voxceleb"
 MODEL_DIR = os.getenv("MODEL_DIR", "pretrained_models/spkrec-ecapa-voxceleb")
@@ -59,16 +63,17 @@ FORMATS = {
     ".wav": "wav",
 }
 
-# Takes 16 kHz mono samples and returns the embedding.
-Encoder = Callable[[np.ndarray], list[float]]
+# Takes 16 kHz mono samples and returns the embedding and the liveness score
+# (None if there's no sound to judge).
+Models = Callable[[np.ndarray], tuple[list[float], float | None]]
 
 logger = logging.getLogger("model-service")
 
-# The loaded model, set once by load_encoder().
+# The loaded speaker model, set once by load_models().
 _model = None
 
 
-def load_encoder() -> Encoder:
+def load_models() -> Models:
     global _model
     # Imported here so tests can run without PyTorch installed.
     from speechbrain.inference.speaker import EncoderClassifier
@@ -85,7 +90,8 @@ def load_encoder() -> Encoder:
         local_strategy=LocalStrategy.COPY,
     )
     _model.eval()
-    return encode
+    liveness.load_model()
+    return run_models
 
 
 def _embed(samples: np.ndarray, device: str) -> list[float]:
@@ -99,27 +105,33 @@ def _embed(samples: np.ndarray, device: str) -> list[float]:
     return embedding.squeeze().cpu().tolist()
 
 
-def _embed_on_gpu(samples: np.ndarray) -> list[float]:
-    return _embed(samples, "cuda")
+def _run(samples: np.ndarray, device: str) -> tuple[list[float], float | None]:
+    return _embed(samples, device), liveness.score(samples, device)
+
+
+def _run_on_gpu(samples: np.ndarray) -> tuple[list[float], float | None]:
+    return _run(samples, "cuda")
 
 
 if spaces is not None:
     # ZeroGPU attaches a GPU only while a function marked like this runs,
-    # and refuses to start a Space that has none. One call takes well under
-    # a second; the limit is generous so a slow start isn't cut off.
-    _embed_on_gpu = spaces.GPU(duration=20)(_embed_on_gpu)
+    # and refuses to start a Space that has none. Both models run in the
+    # one call, since each call waits for a GPU. It takes well under a
+    # second; the limit is generous so a slow start isn't cut off.
+    _run_on_gpu = spaces.GPU(duration=20)(_run_on_gpu)
 
 
-def encode(samples: np.ndarray) -> list[float]:
-    """Return the embedding, on ZeroGPU's GPU when there is one."""
+def run_models(samples: np.ndarray) -> tuple[list[float], float | None]:
+    """Return the embedding and liveness score, on ZeroGPU's GPU when there is one."""
     if spaces is not None:
         try:
-            return _embed_on_gpu(samples)
+            return _run_on_gpu(samples)
         except Exception:
-            # Out of GPU quota, or no GPU free right now. The model is small
-            # enough that the CPU still answers in about half a second.
-            logger.warning("GPU unavailable, embedding on the CPU instead.", exc_info=True)
-    return _embed(samples, "cpu")
+            # Out of GPU quota, or no GPU free right now. The CPU still
+            # answers, in about half a second for the embedding and a few
+            # seconds for the liveness score.
+            logger.warning("GPU unavailable, running the models on the CPU instead.", exc_info=True)
+    return _run(samples, "cpu")
 
 
 def decode_audio(audio: bytes, demuxer: str) -> np.ndarray:
@@ -164,8 +176,10 @@ def measure_quality(samples: np.ndarray) -> tuple[float, float]:
     return float(np.sum(loud) * FRAME_SECONDS), float(clipped)
 
 
-def embed_recording(token: str, audio_base64: str, extension: str, encode: Encoder) -> dict[str, Any]:
-    """Handle one request. Returns the embedding and quality measures, or
+def embed_recording(
+    token: str, audio_base64: str, extension: str, run_models: Models
+) -> dict[str, Any]:
+    """Handle one request. Returns the embedding, quality measures and liveness score, or
     {"error": ...} naming what was wrong. Errors are answers rather than
     exceptions so the backend can tell a bad recording from an outage."""
     expected = os.getenv("SERVICE_TOKEN", "")
@@ -192,23 +206,28 @@ def embed_recording(token: str, audio_base64: str, extension: str, encode: Encod
     except (ValueError, subprocess.TimeoutExpired):
         return {"error": "not_audio"}
     speech_seconds, clipped_share = measure_quality(samples)
+    embedding, liveness_score = run_models(samples)
     return {
-        "embedding": encode(samples),
+        "embedding": embedding,
         "model": MODEL_SOURCE,
         # Seconds of the recording loud enough to be voice rather than silence.
         "speech_seconds": speech_seconds,
         # Share of samples cut off at full volume, 0 to 1. High means distorted.
         "clipped_share": clipped_share,
+        # Higher means more likely a live person; None if there's no sound.
+        # The backend decides what score is enough.
+        "liveness": liveness_score,
+        "liveness_model": liveness.LIVENESS_MODEL,
     }
 
 
-def build_demo(encode: Encoder):
+def build_demo(run_models: Models):
     """The Gradio app: one API endpoint, `embed`, called by the backend
     over Gradio's HTTP API (POST /gradio_api/call/embed)."""
     import gradio as gr
 
     def embed(token: str, audio_base64: str, extension: str) -> dict:
-        return embed_recording(token, audio_base64, extension, encode)
+        return embed_recording(token, audio_base64, extension, run_models)
 
     with gr.Blocks(title="VoiceGuard model service") as demo:
         gr.Markdown("VoiceGuard model service. API only, for the VoiceGuard backend.")
@@ -217,7 +236,7 @@ def build_demo(encode: Encoder):
 
 
 if __name__ == "__main__":
-    # The model loads before launch, so ZeroGPU sees the @spaces.GPU
+    # The models load before launch, so ZeroGPU sees the @spaces.GPU
     # function when it checks at startup.
-    demo = build_demo(load_encoder())
+    demo = build_demo(load_models())
     demo.launch(server_name="0.0.0.0", server_port=int(os.getenv("PORT", "7860")), show_error=False)

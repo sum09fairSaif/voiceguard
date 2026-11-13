@@ -9,17 +9,32 @@ pinned: false
 
 # VoiceGuard model service
 
-Turns a recording into a speaker embedding (192 numbers that describe a
-voice) with SpeechBrain's ECAPA model, `speechbrain/spkrec-ecapa-voxceleb`.
-The VoiceGuard backend calls it for the identity check and enrollment. It
-runs on its own because the model needs PyTorch, which is too big for the
-backend's Render instance.
+Runs two models on each recording:
+
+- **Identity:** a speaker embedding (192 numbers that describe a voice) from
+  SpeechBrain's ECAPA model, `speechbrain/spkrec-ecapa-voxceleb`.
+- **Liveness:** a score for whether it's a live person rather than a replay
+  or AI voice, from AASIST fine-tuned in `ml/liveness/` (`liveness.py`; the
+  model code in `aasist.py` is copied unchanged from the ASVspoof 5 baseline
+  under the MIT licence in `LICENSE-AASIST`; the weights are
+  `weights/liveness-first-try.pth`, 1.2 MB).
+
+The VoiceGuard backend calls it for the identity and liveness checks and
+for enrollment. It runs on its own because the models need PyTorch, which
+is too big for the backend's Render instance.
 
 It runs as a Hugging Face Space on **ZeroGPU**, the free hardware for
 Gradio Spaces. ZeroGPU only works for Gradio apps, so this is a Gradio app
-with one API endpoint and no UI. The embedding runs in a `@spaces.GPU`
-function; if no GPU is free (or the quota is used up) it falls back to the
-CPU, which takes about half a second.
+with one API endpoint and no UI. Both models run in one `@spaces.GPU` call.
+If no GPU is free (or the quota is used up) they fall back to the CPU,
+where the embedding takes about half a second but the liveness score about
+3 seconds: AASIST has few weights but a lot of arithmetic.
+
+The liveness model only scores audio prepared exactly like its training
+clips, so `liveness.prepare()` repeats `ml/liveness/audio.py`'s steps
+(centre, trim the silence at the ends, bring the speech to -26 dBFS, take
+the first 4 seconds). A change to either needs the same change in the other,
+and retraining.
 
 Recordings are never stored. They arrive as base64 text, so Gradio never
 saves them as uploaded files, and each one is written to a temporary file
@@ -36,10 +51,15 @@ at most 1 MB and have at least 0.5 s of sound.
    returns `{"event_id": "..."}`.
 2. `GET /gradio_api/call/embed/<event_id>` streams the result, ending with
    `event: complete` and a `data:` line holding a one-item list:
-   - `{"embedding": [...], "model": "...", "speech_seconds": 2.1, "clipped_share": 0.0}`:
+   - `{"embedding": [...], "model": "...", "speech_seconds": 2.1, "clipped_share": 0.0,
+     "liveness": 1.37, "liveness_model": "aasist-first-try"}`:
      `speech_seconds` is how much of the recording is loud enough to be
      voice, `clipped_share` the share of samples cut off at full volume
      (0 to 1). The backend uses these to turn away poor enrollment samples.
+     `liveness` is the model's raw "real" output: higher means more likely
+     a live person. It isn't a probability, and the backend's
+     `LIVENESS_THRESHOLD` belongs to the model named in `liveness_model`.
+     It's `null` if the recording has no sound to judge.
    - or `{"error": "..."}`: `unauthorized` (wrong token),
      `service_token_not_set`, `unsupported_format`, `too_large` or
      `not_audio`.
@@ -59,10 +79,12 @@ apt packages in `packages.txt` (ffmpeg) and `requirements.txt`, then runs
 2. In the Space's **Settings → Variables and secrets**, add a secret
    `SERVICE_TOKEN` with a long random value, e.g. from
    `python -c "import secrets; print(secrets.token_urlsafe(32))"`.
-3. Upload the files in this folder (`app.py`, `packages.txt`,
+3. Upload the files in this folder (`app.py`, `liveness.py`, `aasist.py`,
+   `LICENSE-AASIST`, `weights/liveness-first-try.pth`, `packages.txt`,
    `requirements.txt`, `README.md`, replacing the Space's own README) to
    the Space, or push them with git. The first build takes several minutes,
-   and each start downloads the model (about 80 MB).
+   and each start downloads the ECAPA model (about 80 MB); the liveness
+   weights come with the files.
 4. Once it shows **Running**, open `https://<your-username>-<space-name>.hf.space`:
    it shows a one-line page.
 5. In the backend's environment (local `.env` and Render), set
