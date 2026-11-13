@@ -71,6 +71,14 @@ EMBEDDING_SERVICE_TOKEN = os.getenv("EMBEDDING_SERVICE_TOKEN", "")
 # count against that account instead of as anonymous use. Without it (or
 # once the quota is used up) the service falls back to its CPU.
 EMBEDDING_SERVICE_HF_TOKEN = os.getenv("EMBEDDING_SERVICE_HF_TOKEN", "")
+# Email (email_sender.py), through Resend's HTTP API: Render's free plan
+# blocks SMTP. EMAIL_FROM is e.g. "VoiceGuard <noreply@send.example.com>" on
+# a domain verified in Resend; until there is one, only
+# "onboarding@resend.dev", which Resend delivers only to the Resend
+# account's own address. Left blank, sending answers 503; nothing else is
+# affected.
+EMAIL_API_KEY = os.getenv("EMAIL_API_KEY", "")
+EMAIL_FROM = os.getenv("EMAIL_FROM", "")
 # Which model made the voiceprints. Changing models means re-enrolling.
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "speechbrain/spkrec-ecapa-voxceleb")
 # Encrypts voiceprints at rest. A Fernet key: generate one with

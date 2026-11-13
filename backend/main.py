@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 from pymongo.errors import PyMongoError
 
 import config
+from email_sender import EmailUnavailable
 from identity_check import IdentityUnavailable
 from rate_limit import RateLimited
 from routers import auth, challenge, enroll, verify
@@ -65,6 +66,17 @@ def voice_check_unavailable(request: Request, exc: Exception) -> JSONResponse:
     return JSONResponse(
         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
         content={"detail": "Voice checks are temporarily unavailable. Please try again shortly."},
+    )
+
+
+@app.exception_handler(EmailUnavailable)
+def email_unavailable(request: Request, exc: EmailUnavailable) -> JSONResponse:
+    # The log says what failed (never the key, address or message); the
+    # user just hears the email couldn't go.
+    logger.warning("email_unavailable path=%s reason=%s", request.url.path, exc)
+    return JSONResponse(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        content={"detail": "We couldn't send the email right now. Please try again shortly."},
     )
 
 
