@@ -12,6 +12,7 @@ from db import (
     get_login_failures_collection,
     get_rate_limits_collection,
     get_users_collection,
+    get_voice_failures_collection,
     get_voiceprints_collection,
 )
 from main import app
@@ -61,7 +62,14 @@ def login_failures():
 
 
 @pytest.fixture
-def client(users, challenges, rate_limits, voiceprints, enrollments, login_failures, monkeypatch):
+def voice_failures():
+    collection = mongomock.MongoClient()["voiceguard_test"]["voice_failures"]
+    collection.create_index("expires_at", expireAfterSeconds=0)
+    return collection
+
+
+@pytest.fixture
+def client(users, challenges, rate_limits, voiceprints, enrollments, login_failures, voice_failures, monkeypatch):
     # A fresh random key each run, so the code can't pass by hard-coding one.
     monkeypatch.setattr(config, "JWT_SECRET", secrets.token_urlsafe(32))
     app.dependency_overrides[get_users_collection] = lambda: users
@@ -70,5 +78,6 @@ def client(users, challenges, rate_limits, voiceprints, enrollments, login_failu
     app.dependency_overrides[get_voiceprints_collection] = lambda: voiceprints
     app.dependency_overrides[get_enrollments_collection] = lambda: enrollments
     app.dependency_overrides[get_login_failures_collection] = lambda: login_failures
+    app.dependency_overrides[get_voice_failures_collection] = lambda: voice_failures
     yield TestClient(app)
     app.dependency_overrides.clear()
