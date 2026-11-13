@@ -12,6 +12,7 @@ from db import get_challenges_collection, get_rate_limits_collection, get_voicep
 from decision import decide
 from embedding import Embedder, get_embedder
 from identity_check import IdentityResult, IdentityUnavailable, check_identity
+from liveness_check import LivenessResult, check_liveness
 from rate_limit import count_request
 from schemas import ContentScore, VerifyResponse
 from security import get_current_user_id
@@ -57,19 +58,33 @@ def verify(
 
     transcript = _transcribe_and_log(transcribe, recording, extension, user_id, attempt_id)
     content = check_content(passage, transcript)
-    identity = None
+    identity = liveness = None
     if voiceprint is not None:
+        # One model-service call gives both the voice embedding and the
+        # liveness score.
+        embedding = embed(recording, f"attempt.{extension}")
+        if embedding.liveness_model is None:
+            raise IdentityUnavailable("The model service is too old to check liveness.")
         try:
-            identity = check_identity(voiceprint, embed(recording, f"attempt.{extension}").vector)
+            identity = check_identity(voiceprint, embedding.vector)
         except ValueError as exc:
             # Sizes differ: the service is running a different model.
             raise IdentityUnavailable("The embedding doesn't match the voiceprint's model.") from exc
-        # The score stays on the server (see VerifyResponse); log it so the
-        # threshold can be tuned from real attempts.
+        liveness = check_liveness(embedding.liveness)
+        # The scores stay on the server (see VerifyResponse); log them so
+        # the thresholds can be tuned from real attempts.
         logger.info(
             "identity user=%s attempt=%s score=%.3f passed=%s", user_id, attempt_id, identity.score, identity.passed
         )
-    result = decide(content, identity)
+        logger.info(
+            "liveness user=%s attempt=%s model=%s score=%s passed=%s",
+            user_id,
+            attempt_id,
+            embedding.liveness_model,
+            "-" if liveness.score is None else f"{liveness.score:.3f}",
+            liveness.passed,
+        )
+    result = decide(content, identity, liveness)
     return VerifyResponse(
         decision=result.decision,
         reason=result.reason,
@@ -80,6 +95,7 @@ def verify(
             total=content.total,
         ),
         identity=_identity_status(identity),
+        liveness=_liveness_status(liveness),
     )
 
 
@@ -87,6 +103,12 @@ def _identity_status(identity: IdentityResult | None) -> str:
     if identity is None:
         return "not_enrolled"
     return "passed" if identity.passed else "failed"
+
+
+def _liveness_status(liveness: LivenessResult | None) -> str:
+    if liveness is None:
+        return "not_checked"
+    return "passed" if liveness.passed else "failed"
 
 
 def _transcribe_and_log(

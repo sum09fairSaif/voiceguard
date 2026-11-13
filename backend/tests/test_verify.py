@@ -47,11 +47,18 @@ def transcriber():
     return fake
 
 
+# Liveness scores either side of the threshold, whatever it's set to.
+LIVE = config.LIVENESS_THRESHOLD + 1.0
+SPOOFED = config.LIVENESS_THRESHOLD - 1.0
+
+
 class FakeEmbedder:
-    # Stands in for the model service: returns whatever voice the test
-    # sets and remembers what it was sent.
+    # Stands in for the model service: returns whatever voice and liveness
+    # score the test sets and remembers what it was sent.
     def __init__(self, voice=None, error=None):
         self.voice = voice
+        self.liveness = LIVE
+        self.liveness_model = "aasist-test"
         self.error = error
         self.calls = []
 
@@ -59,7 +66,13 @@ class FakeEmbedder:
         self.calls.append((audio, filename))
         if self.error:
             raise self.error
-        return Embedding(vector=self.voice, speech_seconds=2.0, clipped_share=0.0)
+        return Embedding(
+            vector=self.voice,
+            speech_seconds=2.0,
+            clipped_share=0.0,
+            liveness_model=self.liveness_model,
+            liveness=self.liveness,
+        )
 
 
 # Two made-up voices at right angles to each other: similarity 0.
@@ -101,15 +114,15 @@ def is_unused(challenges, attempt_id):
 # --- The voice check itself -------------------------------------------------
 
 
-def test_reading_the_passage_is_not_yet_approved(client, challenges, transcriber, attempt):
-    transcriber.heard = attempt["passage"].capitalize() + "."
+def test_reading_the_passage_without_a_voiceprint_is_not_approved(client, challenges, transcriber, attempt):
+    # Speech-to-text may change capitals and punctuation; that still counts.
+    transcriber.heard = attempt["passage"].upper().rstrip(".") + "!"
     response = submit(client, attempt["id"])
 
     assert response.status_code == 200
     assert response.json() == {
         "decision": "incomplete",
-        "reason": "The passage was read correctly, but this account has no voiceprint yet "
-        "and the liveness check isn't built yet.",
+        "reason": "The passage was read correctly, but this account has no voiceprint yet.",
         "content": {"passed": True, "score": 1.0, "matched": 6, "total": 6},
         "identity": "not_enrolled",
         "liveness": "not_checked",
@@ -364,19 +377,17 @@ def test_refused_requests_are_not_logged_as_transcriptions(client, transcriber, 
 # --- Identity check ------------------------------------------------------------
 
 
-def test_enrolled_user_reading_in_their_own_voice_is_not_yet_approved(
-    client, transcriber, embedder, enrolled, attempt
-):
+def test_enrolled_user_reading_live_in_their_own_voice_is_approved(client, transcriber, embedder, enrolled, attempt):
     transcriber.heard = attempt["passage"]
     response = submit(client, attempt["id"])
 
     assert response.status_code == 200
     assert response.json() == {
-        "decision": "incomplete",
-        "reason": "The passage and the voice matched, but the liveness check isn't built yet.",
+        "decision": "approved",
+        "reason": "The passage, the voice and liveness all checked out.",
         "content": {"passed": True, "score": 1.0, "matched": 6, "total": 6},
         "identity": "passed",
-        "liveness": "not_checked",
+        "liveness": "passed",
     }
     assert embedder.calls == [(RECORDING, "attempt.webm")]
 
@@ -393,12 +404,13 @@ def test_different_speaker_is_rejected(client, transcriber, embedder, enrolled, 
     assert body["identity"] == "failed"
 
 
-def test_identity_score_is_not_sent_back(client, transcriber, embedder, enrolled, attempt):
+def test_identity_and_liveness_scores_are_not_sent_back(client, transcriber, embedder, enrolled, attempt):
     # A score would let someone tune a voice clone until it gets through.
     transcriber.heard = attempt["passage"]
     body = submit(client, attempt["id"]).json()
 
     assert body["identity"] == "passed"
+    assert body["liveness"] == "passed"
     assert set(body) == {"decision", "reason", "content", "identity", "liveness"}
 
 
@@ -416,6 +428,7 @@ def test_user_without_a_voiceprint_is_not_sent_to_the_model_service(client, tran
     body = submit(client, attempt["id"]).json()
 
     assert body["identity"] == "not_enrolled"
+    assert body["liveness"] == "not_checked"
     assert embedder.calls == []
 
 
@@ -465,3 +478,82 @@ def test_recording_the_model_service_cannot_read_asks_for_a_new_passage(
 
     assert response.status_code == 422
     assert response.json()["detail"] == "We couldn't process that recording. Please get a new passage and record again."
+
+
+# --- Liveness check ------------------------------------------------------------
+
+
+def test_replay_or_clone_of_the_users_own_voice_is_rejected(client, transcriber, embedder, enrolled, attempt):
+    # The veto: the voice matches, but it isn't a live person.
+    transcriber.heard = attempt["passage"]
+    embedder.liveness = SPOOFED
+
+    body = submit(client, attempt["id"]).json()
+
+    assert body["decision"] == "rejected"
+    assert body["reason"] == "The recording didn't sound like a live voice."
+    assert body["identity"] == "passed"
+    assert body["liveness"] == "failed"
+
+
+def test_liveness_rejects_even_when_the_voice_is_also_wrong(client, transcriber, embedder, enrolled, attempt):
+    transcriber.heard = attempt["passage"]
+    embedder.voice = OTHER_VOICE
+    embedder.liveness = SPOOFED
+
+    body = submit(client, attempt["id"]).json()
+
+    assert body["decision"] == "rejected"
+    assert body["identity"] == "failed"
+    assert body["liveness"] == "failed"
+
+
+def test_score_exactly_at_the_threshold_passes(client, transcriber, embedder, enrolled, attempt):
+    transcriber.heard = attempt["passage"]
+    embedder.liveness = config.LIVENESS_THRESHOLD
+
+    assert submit(client, attempt["id"]).json()["liveness"] == "passed"
+
+
+def test_recording_with_nothing_to_judge_fails_liveness(client, transcriber, embedder, enrolled, attempt):
+    # A check that couldn't run must not let the attempt through.
+    transcriber.heard = attempt["passage"]
+    embedder.liveness = None
+
+    body = submit(client, attempt["id"]).json()
+
+    assert body["decision"] == "rejected"
+    assert body["liveness"] == "failed"
+
+
+def test_model_service_without_liveness_returns_503(client, transcriber, embedder, enrolled, attempt):
+    # An older model service sends no liveness score at all: that's a
+    # server problem, not the user's.
+    embedder.liveness_model = None
+    embedder.liveness = None
+
+    response = submit(client, attempt["id"])
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "Voice checks are temporarily unavailable. Please try again shortly."
+
+
+def test_liveness_score_is_logged_for_tuning(client, transcriber, embedder, enrolled, attempt, caplog, monkeypatch):
+    monkeypatch.setattr(config, "LIVENESS_THRESHOLD", 0.5)
+    embedder.liveness = 0.25
+
+    with caplog.at_level(logging.INFO, logger="voiceguard.verify"):
+        submit(client, attempt["id"])
+
+    lines = [r.getMessage() for r in caplog.records if r.message.startswith("liveness ")]
+    assert lines == [f"liveness user={USER_ID} attempt={attempt['id']} model=aasist-test score=0.250 passed=False"]
+
+
+def test_missing_liveness_score_is_logged_as_a_dash(client, transcriber, embedder, enrolled, attempt, caplog):
+    embedder.liveness = None
+
+    with caplog.at_level(logging.INFO, logger="voiceguard.verify"):
+        submit(client, attempt["id"])
+
+    [line] = [r.getMessage() for r in caplog.records if r.message.startswith("liveness ")]
+    assert "score=- passed=False" in line
