@@ -9,6 +9,7 @@ from db import get_enrollments_collection, get_rate_limits_collection, get_voice
 from embedding import Embedder, Embedding, get_embedder
 from enrollment import (
     INCONSISTENT,
+    NOT_LIVE,
     TOO_LOUD,
     TOO_SHORT,
     accepted_samples,
@@ -36,6 +37,8 @@ RETRY_MESSAGES = {
     "close to your microphone.",
     TOO_LOUD: "That recording was too loud and sounds distorted. Please move a little further "
     "from your microphone and try again.",
+    NOT_LIVE: "That recording didn't sound like a live voice. Please read the sentence yourself, "
+    "straight into your microphone, not from a recording or a speaker.",
     INCONSISTENT: "That recording doesn't sound like your earlier ones. Please record it again in the same "
     "quiet place. If this keeps happening, start over.",
 }
@@ -87,6 +90,8 @@ def add_enrollment_sample(
 
     if sample.speech_seconds is None or sample.clipped_share is None:
         raise IdentityUnavailable("The model service is too old to measure recording quality.")
+    if sample.liveness_model is None:
+        raise IdentityUnavailable("The model service is too old to check liveness.")
     if earlier and len(earlier[0]) != len(sample.vector):
         raise IdentityUnavailable("The embedding doesn't match the earlier samples' model.")
 
@@ -132,10 +137,11 @@ def _log(user_id: str, outcome: str, sample: Embedding | None, similarity: float
     # One line per sample, to tune the limits from real recordings. Never
     # the audio or the voice numbers.
     logger.info(
-        "enroll_sample user=%s outcome=%s speech_seconds=%s clipped_share=%s similarity=%s",
+        "enroll_sample user=%s outcome=%s speech_seconds=%s clipped_share=%s liveness=%s similarity=%s",
         user_id,
         outcome,
         "-" if sample is None else f"{sample.speech_seconds:.2f}",
         "-" if sample is None else f"{sample.clipped_share:.4f}",
+        "-" if sample is None or sample.liveness is None else f"{sample.liveness:.3f}",
         "-" if similarity is None else f"{similarity:.3f}",
     )

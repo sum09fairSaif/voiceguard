@@ -35,6 +35,8 @@ class FakeEmbedder:
         self.voices = list(TAKES)
         self.speech_seconds = 2.0
         self.clipped_share = 0.0
+        self.liveness = config.LIVENESS_THRESHOLD + 1.0
+        self.liveness_model = "aasist-test"
         self.error = None
         self.calls = []
 
@@ -43,7 +45,11 @@ class FakeEmbedder:
         if self.error:
             raise self.error
         return Embedding(
-            vector=self.voices.pop(0), speech_seconds=self.speech_seconds, clipped_share=self.clipped_share
+            vector=self.voices.pop(0),
+            speech_seconds=self.speech_seconds,
+            clipped_share=self.clipped_share,
+            liveness_model=self.liveness_model,
+            liveness=self.liveness,
         )
 
 
@@ -171,6 +177,47 @@ def test_distorted_sample_is_rejected(client, embedder, enrollments):
 
     assert response.status_code == 422
     assert response.json()["detail"].startswith("That recording was too loud")
+    assert stored(enrollments) == 0
+
+
+def test_recording_or_clone_is_rejected(client, embedder, enrollments):
+    embedder.liveness = config.LIVENESS_THRESHOLD - 1.0
+
+    response = send(client)
+
+    assert response.status_code == 422
+    assert response.json()["detail"].startswith("That recording didn't sound like a live voice.")
+    assert stored(enrollments) == 0
+
+
+def test_score_exactly_at_the_liveness_threshold_is_accepted(client, embedder, enrollments):
+    embedder.liveness = config.LIVENESS_THRESHOLD
+
+    assert send(client).status_code == 200
+    assert stored(enrollments) == 1
+
+
+def test_sample_with_nothing_to_judge_fails_liveness(client, embedder, enrollments):
+    embedder.liveness = None
+
+    assert send(client).status_code == 422
+    assert stored(enrollments) == 0
+
+
+def test_a_clone_after_two_good_samples_doesnt_finish_the_voiceprint(client, embedder, voiceprints, enrollments):
+    send(client)
+    send(client)
+    embedder.liveness = config.LIVENESS_THRESHOLD - 1.0
+
+    assert send(client).status_code == 422
+    assert stored(enrollments) == 2
+    assert voiceprints.find_one({"_id": USER_ID}) is None
+
+
+def test_model_service_without_liveness_returns_503(client, embedder, enrollments):
+    embedder.liveness_model = None
+
+    assert send(client).status_code == 503
     assert stored(enrollments) == 0
 
 
@@ -324,6 +371,12 @@ def test_each_sample_is_logged_without_the_voice(client, embedder, caplog):
 
     lines = [r.getMessage() for r in caplog.records if r.name == "voiceguard.enroll"]
     assert lines == [
-        f"enroll_sample user={USER_ID} outcome=accepted speech_seconds=2.00 clipped_share=0.0000 similarity=-",
-        f"enroll_sample user={USER_ID} outcome=inconsistent speech_seconds=2.00 clipped_share=0.0000 similarity=0.000",
+        (
+            f"enroll_sample user={USER_ID} outcome=accepted speech_seconds=2.00 clipped_share=0.0000 "
+            f"liveness={config.LIVENESS_THRESHOLD + 1.0:.3f} similarity=-"
+        ),
+        (
+            f"enroll_sample user={USER_ID} outcome=inconsistent speech_seconds=2.00 clipped_share=0.0000 "
+            f"liveness={config.LIVENESS_THRESHOLD + 1.0:.3f} similarity=0.000"
+        ),
     ]
