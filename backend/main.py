@@ -12,6 +12,7 @@ from identity_check import IdentityUnavailable
 from rate_limit import RateLimited
 from routers import auth, challenge, enroll, verify
 from transcription import AudioNotUnderstood, TranscriptionUnavailable
+from voice_attempts import VoiceLockedOut
 
 # uvicorn only sets up its own loggers, so without this our info lines
 # (one per transcription) would never reach the console or Render's logs.
@@ -84,6 +85,17 @@ def not_configured(request: Request, exc: config.NotConfigured) -> JSONResponse:
     return JSONResponse(
         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
         content={"detail": "The service is temporarily unavailable. Please try again shortly."},
+    )
+
+
+@app.exception_handler(VoiceLockedOut)
+def voice_locked_out(request: Request, exc: VoiceLockedOut) -> JSONResponse:
+    minutes = math.ceil(exc.retry_after / 60)
+    wait = "1 minute" if minutes == 1 else f"{minutes} minutes"
+    return JSONResponse(
+        status_code=status.HTTP_423_LOCKED,
+        content={"detail": f"Too many failed voice checks, so they're paused for now. Please try again in {wait}."},
+        headers={"Retry-After": str(exc.retry_after)},
     )
 
 

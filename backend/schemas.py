@@ -75,6 +75,12 @@ class VerifyResponse(BaseModel):
     # Pass or fail only, for the same reason. "not_checked" when the account
     # has no voiceprint: liveness runs in the same model-service call.
     liveness: Literal["passed", "failed", "not_checked"]
+    # Rejected checks the user has left before voice checks lock. Back to
+    # the maximum after an approval; not lowered by an "incomplete".
+    attempts_left: int
+    # True when this rejection used up the last attempt: voice checks are
+    # now locked, and the user should be offered the email code (#20).
+    fallback_required: bool
 
 
 class EnrollmentStatus(BaseModel):

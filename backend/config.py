@@ -93,6 +93,15 @@ LIVENESS_THRESHOLD = float(os.getenv("LIVENESS_THRESHOLD", "0.0"))
 if not math.isfinite(LIVENESS_THRESHOLD):
     raise RuntimeError("LIVENESS_THRESHOLD must be a number.")
 
+# Failed voice checks. After this many rejections within the window, voice
+# checks are locked for the lockout time, and the user falls back to an
+# email code (#20). Only rejections count, not outages or unenrolled users.
+VOICE_MAX_FAILURES = int(os.getenv("VOICE_MAX_FAILURES", "3"))
+VOICE_FAILURE_WINDOW_SECONDS = int(os.getenv("VOICE_FAILURE_WINDOW_SECONDS", "1800"))
+VOICE_LOCKOUT_SECONDS = int(os.getenv("VOICE_LOCKOUT_SECONDS", "1800"))
+if VOICE_MAX_FAILURES <= 0 or VOICE_FAILURE_WINDOW_SECONDS <= 0 or VOICE_LOCKOUT_SECONDS <= 0:
+    raise RuntimeError("VOICE_MAX_FAILURES, VOICE_FAILURE_WINDOW_SECONDS and VOICE_LOCKOUT_SECONDS must be more than 0.")
+
 # Per-user limits. Each voice check is a paid speech-to-text call, so these
 # cap what one account can spend. After 3 failed voice attempts the user
 # falls back to an email code, so a real user stays well under them.
