@@ -81,7 +81,6 @@ class EnrollmentStatus(BaseModel):
     status: Literal["not_started", "in_progress", "enrolled"]
     samples_accepted: int
     samples_required: int
-    # Something for the user to read aloud for their next sample, so each
-    # take is a few seconds of natural speech. Not checked, just a guide.
-    # None once enrolled.
+    # The sentence to read aloud for the next sample. The sample must hold
+    # every word of it, in order. None once enrolled.
     prompt: str | None

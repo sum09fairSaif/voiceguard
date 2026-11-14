@@ -67,3 +67,14 @@ def get_enrollments_collection() -> Collection:
     enrollments = get_client()[config.MONGO_DB_NAME]["enrollments"]
     enrollments.create_index("expires_at", expireAfterSeconds=0)
     return enrollments
+
+
+@lru_cache
+def get_enroll_prompts_collection() -> Collection:
+    # Sentences handed out for enrollment samples, one per document, so a
+    # sample can be checked against what the user was asked to read.
+    # MongoDB deletes each once it has expired.
+    prompts = get_client()[config.MONGO_DB_NAME]["enroll_prompts"]
+    prompts.create_index("expires_at", expireAfterSeconds=0)
+    prompts.create_index("user_id")
+    return prompts

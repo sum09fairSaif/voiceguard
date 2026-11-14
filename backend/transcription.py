@@ -1,3 +1,5 @@
+import logging
+import time
 from collections.abc import Callable
 from functools import lru_cache, partial
 
@@ -69,3 +71,43 @@ def get_transcriber() -> Transcriber:
     # Raises before the request does anything else if the key is missing, so
     # a misconfigured server doesn't use up the user's passage.
     return partial(transcribe, get_openai_client())
+
+
+def transcribe_and_log(
+    transcribe: Transcriber,
+    recording: bytes,
+    filename: str,
+    user_id: str,
+    attempt_id: str,
+    logger: logging.Logger,
+) -> str:
+    """Transcribe the recording and log one line per paid speech-to-text
+    call, so spend can be traced to a user. Never logs the audio, the
+    passage or what was heard."""
+    started = time.monotonic()
+    outcome = "error"
+    error = "-"
+    try:
+        transcript = transcribe(recording, filename)
+        outcome = "ok"
+        return transcript
+    except AudioNotUnderstood as exc:
+        outcome = "unreadable"
+        error = exc.details
+        raise
+    except TranscriptionUnavailable as exc:
+        outcome = "unavailable"
+        error = exc.details
+        raise
+    finally:
+        logger.info(
+            "transcription user=%s attempt=%s model=%s format=%s bytes=%d outcome=%s seconds=%.2f error=%s",
+            user_id,
+            attempt_id,
+            config.WHISPER_MODEL,
+            filename.rsplit(".", 1)[-1],
+            len(recording),
+            outcome,
+            time.monotonic() - started,
+            error,
+        )

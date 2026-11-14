@@ -143,7 +143,7 @@ curl -X POST $API/api/verify -H "Authorization: Bearer <access_token>" \
 | POST | `/api/challenge` | Get a fresh, single-use passage to read (expires in 2 min) | Yes |
 | POST | `/api/verify` | Send a recording of the passage; runs the checks and returns the decision | Yes |
 | GET | `/api/enroll` | Enrollment progress, and a sentence to read for the next sample | Yes |
-| POST | `/api/enroll/samples` | Add one voice sample; the voiceprint is built after 3 good ones | Yes |
+| POST | `/api/enroll/samples` | Add one voice sample (it must hold every word of the sentence, in order, sound live, and match the earlier samples); the voiceprint is built after 3 good ones | Yes |
 | DELETE | `/api/enroll/samples` | Start enrollment over | Yes |
 
 Full request and response details are in the interactive docs at `/docs`.
@@ -220,7 +220,7 @@ Fill in `.env`. It is git-ignored: never commit it.
 |---|---|---|
 | `MONGO_URI` | Everything except `/health` | Create a free cluster on [MongoDB Atlas](https://www.mongodb.com/atlas), then **Connect → Drivers** and copy the connection string. Allow your IP under **Network Access**. |
 | `JWT_SECRET` | Everything except `/health` | Any long random string: `python -c "import secrets; print(secrets.token_urlsafe(32))"` |
-| `OPENAI_API_KEY` | `/api/verify` (content check) | [platform.openai.com](https://platform.openai.com/api-keys). Each check is a paid call. |
+| `OPENAI_API_KEY` | `/api/verify` (content check) and enrollment (every-word check) | [platform.openai.com](https://platform.openai.com/api-keys). Each check, and each enrollment sample that passes the sound checks, is a paid call. |
 | `VOICEPRINT_KEY` | Enrollment and identity check | `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"` (run after installing the backend) |
 | `EMBEDDING_SERVICE_URL`, `EMBEDDING_SERVICE_TOKEN` | Enrollment and identity check | Your model service's address and token (step 3). |
 
@@ -285,7 +285,7 @@ runs the tests, lint and the frontend build on every pull request.
 |---|---|
 | `pip install` fails building packages | Use Python 3.11 (`py -3.11 -m venv venv` on Windows). Newer versions, such as 3.14, have no ready-built packages for some pins. |
 | `/health` works but other calls answer 503 "The service is temporarily unavailable" | `MONGO_URI` or `JWT_SECRET` is missing from `.env` (the server log names the missing setting), or the database can't be reached (check `MONGO_URI`, and that your IP is allowed under **Network Access** in Atlas). An unreachable database gives the same message, and the log doesn't name a setting for it. |
-| Voice checks answer "Voice checks are temporarily unavailable" | `OPENAI_API_KEY` (content check), `VOICEPRINT_KEY` (enrollment, identity check) or the model service settings (identity check, enrollment) are missing, or the model service is asleep: try again in a minute. |
+| Voice checks answer "Voice checks are temporarily unavailable" | `OPENAI_API_KEY` (content check, enrollment), `VOICEPRINT_KEY` (enrollment, identity check) or the model service settings (identity check, enrollment) are missing, or the model service is asleep: try again in a minute. |
 | The browser shows a CORS error | Add the frontend's address (e.g. `http://localhost:5173`) to `ALLOWED_ORIGINS` in `.env`, then restart the backend. |
 | The frontend talks to the wrong backend | Set `VITE_API_BASE_URL` in `frontend/.env.local` (not the root `.env`) and restart `npm run dev`. |
 | Model service tests fail with "ffmpeg not found" | Install ffmpeg, or set `FFMPEG_BINARY` to the full path of an ffmpeg file. `pip install imageio-ffmpeg` provides one; print its path with `python -c "import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())"`. |

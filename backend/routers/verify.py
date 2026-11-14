@@ -1,5 +1,4 @@
 import logging
-import time
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from pymongo.collection import Collection
@@ -16,7 +15,7 @@ from liveness_check import LivenessResult, check_liveness
 from rate_limit import count_request
 from schemas import ContentScore, VerifyResponse
 from security import get_current_user_id
-from transcription import AudioNotUnderstood, Transcriber, TranscriptionUnavailable, get_transcriber
+from transcription import Transcriber, get_transcriber, transcribe_and_log
 from voiceprints import load_voiceprint
 
 router = APIRouter(prefix="/api", tags=["verify"])
@@ -56,7 +55,7 @@ def verify(
             detail="This passage has expired or was already used. Please get a new one.",
         )
 
-    transcript = _transcribe_and_log(transcribe, recording, extension, user_id, attempt_id)
+    transcript = transcribe_and_log(transcribe, recording, f"attempt.{extension}", user_id, attempt_id, logger)
     content = check_content(passage, transcript)
     identity = liveness = None
     if voiceprint is not None:
@@ -110,37 +109,3 @@ def _liveness_status(liveness: LivenessResult | None) -> str:
         return "not_checked"
     return "passed" if liveness.passed else "failed"
 
-
-def _transcribe_and_log(
-    transcribe: Transcriber, recording: bytes, extension: str, user_id: str, attempt_id: str
-) -> str:
-    """Transcribe the recording and log one line per paid speech-to-text
-    call, so spend can be traced to a user. Never logs the audio, the
-    passage or what was heard."""
-    started = time.monotonic()
-    outcome = "error"
-    error = "-"
-    try:
-        transcript = transcribe(recording, f"attempt.{extension}")
-        outcome = "ok"
-        return transcript
-    except AudioNotUnderstood as exc:
-        outcome = "unreadable"
-        error = exc.details
-        raise
-    except TranscriptionUnavailable as exc:
-        outcome = "unavailable"
-        error = exc.details
-        raise
-    finally:
-        logger.info(
-            "transcription user=%s attempt=%s model=%s format=%s bytes=%d outcome=%s seconds=%.2f error=%s",
-            user_id,
-            attempt_id,
-            config.WHISPER_MODEL,
-            extension,
-            len(recording),
-            outcome,
-            time.monotonic() - started,
-            error,
-        )

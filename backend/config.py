@@ -122,9 +122,19 @@ ENROLL_SAMPLES_REQUIRED = int(os.getenv("ENROLL_SAMPLES_REQUIRED", "3"))
 ENROLL_MIN_SPEECH_SECONDS = float(os.getenv("ENROLL_MIN_SPEECH_SECONDS", "1.5"))
 # Most of a sample that may be cut off at full volume (0.01 = 1%).
 ENROLL_MAX_CLIPPED_SHARE = float(os.getenv("ENROLL_MAX_CLIPPED_SHARE", "0.01"))
-# Lowest similarity between a new sample and the user's earlier ones. Below
-# it, the sample is probably noise, another voice, or a bad microphone.
-ENROLL_CONSISTENCY_THRESHOLD = float(os.getenv("ENROLL_CONSISTENCY_THRESHOLD", "0.5"))
+# Lowest similarity between a new sample and each of the user's earlier
+# ones (every one, not just their average). Below it, the sample is
+# probably noise, another voice, or a bad microphone. Set above
+# IDENTITY_THRESHOLD: samples recorded minutes apart in one place should
+# be closer to each other than a later voice check is to the voiceprint.
+ENROLL_CONSISTENCY_THRESHOLD = float(os.getenv("ENROLL_CONSISTENCY_THRESHOLD", "0.6"))
+# Words heard beyond the sentence that a sample may still have (a stumble,
+# a repeated word). Every word of the sentence must be there regardless.
+ENROLL_MAX_EXTRA_WORDS = int(os.getenv("ENROLL_MAX_EXTRA_WORDS", "2"))
+# Sentences handed out for enrollment are remembered so a sample can be
+# checked against them. Only each user's newest few are kept, since the
+# screen can ask for a new one at any time.
+ENROLL_PROMPTS_KEPT = int(os.getenv("ENROLL_PROMPTS_KEPT", "5"))
 # How long accepted samples wait for the rest before they're thrown away.
 ENROLL_SESSION_TTL_SECONDS = int(os.getenv("ENROLL_SESSION_TTL_SECONDS", "1800"))
 # Each sample is a model-service call. A user who has to redo every take
@@ -136,3 +146,5 @@ if ENROLL_MIN_SPEECH_SECONDS < 0 or not 0.0 <= ENROLL_MAX_CLIPPED_SHARE <= 1.0:
     raise RuntimeError("ENROLL_MIN_SPEECH_SECONDS can't be negative; ENROLL_MAX_CLIPPED_SHARE must be between 0 and 1.")
 if not -1.0 <= ENROLL_CONSISTENCY_THRESHOLD <= 1.0:
     raise RuntimeError("ENROLL_CONSISTENCY_THRESHOLD must be between -1 and 1.")
+if ENROLL_MAX_EXTRA_WORDS < 0 or ENROLL_PROMPTS_KEPT <= 0:
+    raise RuntimeError("ENROLL_MAX_EXTRA_WORDS can't be negative; ENROLL_PROMPTS_KEPT must be more than 0.")

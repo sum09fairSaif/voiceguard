@@ -23,12 +23,18 @@ class ContentResult:
         return self.matched / (self.total + padding)
 
 
+def _all_words(text: str) -> list[str]:
+    # Capitals and punctuation can differ between the passage and what
+    # speech-to-text writes, so compare bare lowercase words only.
+    return re.findall(r"[a-z]+", text.lower())
+
+
 def _words(text: str) -> list[str]:
     # Capitals and punctuation can differ between the passage and what
     # speech-to-text writes, so compare bare lowercase words only. Small
     # words like "the" are left out: speech-to-text drops or swaps them
     # easily, and they say nothing about whether the passage was read.
-    return [word for word in re.findall(r"[a-z]+", text.lower()) if word not in UNCHECKED_WORDS]
+    return [word for word in _all_words(text) if word not in UNCHECKED_WORDS]
 
 
 def _in_order_matches(expected: list[str], heard: list[str]) -> int:
@@ -58,4 +64,18 @@ def check_content(passage: str, transcript: str) -> ContentResult:
         and matched >= len(expected) - config.CONTENT_MAX_MISSED_WORDS
         and extra <= config.CONTENT_MAX_EXTRA_WORDS
     )
+    return ContentResult(matched=matched, total=len(expected), passed=passed, extra=extra)
+
+
+def check_every_word(passage: str, transcript: str) -> ContentResult:
+    """The stricter check for enrollment samples: every word of the
+    passage, small words included, heard in the passage's order. A voice
+    sample is only as good as the speech in it, so a part-read sentence
+    isn't kept. A few extra words (a stumble, a word said twice) are
+    allowed, up to ENROLL_MAX_EXTRA_WORDS."""
+    expected = _all_words(passage)
+    heard = _all_words(transcript)
+    matched = _in_order_matches(expected, heard)
+    extra = len(heard) - matched
+    passed = bool(expected) and matched == len(expected) and extra <= config.ENROLL_MAX_EXTRA_WORDS
     return ContentResult(matched=matched, total=len(expected), passed=passed, extra=extra)
