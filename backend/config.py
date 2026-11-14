@@ -101,6 +101,15 @@ LIVENESS_THRESHOLD = float(os.getenv("LIVENESS_THRESHOLD", "0.0"))
 if not math.isfinite(LIVENESS_THRESHOLD):
     raise RuntimeError("LIVENESS_THRESHOLD must be a number.")
 
+# Failed voice checks. After this many rejections within the window, voice
+# checks are locked for the lockout time, and the user falls back to an
+# email code (#20). Only rejections count, not outages or unenrolled users.
+VOICE_MAX_FAILURES = int(os.getenv("VOICE_MAX_FAILURES", "3"))
+VOICE_FAILURE_WINDOW_SECONDS = int(os.getenv("VOICE_FAILURE_WINDOW_SECONDS", "1800"))
+VOICE_LOCKOUT_SECONDS = int(os.getenv("VOICE_LOCKOUT_SECONDS", "1800"))
+if VOICE_MAX_FAILURES <= 0 or VOICE_FAILURE_WINDOW_SECONDS <= 0 or VOICE_LOCKOUT_SECONDS <= 0:
+    raise RuntimeError("VOICE_MAX_FAILURES, VOICE_FAILURE_WINDOW_SECONDS and VOICE_LOCKOUT_SECONDS must be more than 0.")
+
 # Per-user limits. Each voice check is a paid speech-to-text call, so these
 # cap what one account can spend. After 3 failed voice attempts the user
 # falls back to an email code, so a real user stays well under them.
@@ -122,8 +131,11 @@ if RATE_LIMIT_WINDOW_SECONDS <= 0 or CHALLENGE_RATE_LIMIT <= 0 or VERIFY_RATE_LI
 # the per-sample log lines once there are real recordings.
 # How many good samples make a voiceprint.
 ENROLL_SAMPLES_REQUIRED = int(os.getenv("ENROLL_SAMPLES_REQUIRED", "3"))
-# Least voice (not silence) a sample must hold. Even the six-word passages
-# that came before the current sentences gave about 2 seconds.
+# Least voice (not silence) a sample must hold. Only 30 ms slices above
+# about -40 dBFS count, so pauses and quiet sounds don't: 300 Common Voice
+# read sentences (about 4 s each) gave a median of 2.1 s, and a quarter
+# under 1.4 s. Raising this would turn away many genuine reads; the words
+# are what show the whole sentence was read.
 ENROLL_MIN_SPEECH_SECONDS = float(os.getenv("ENROLL_MIN_SPEECH_SECONDS", "1.5"))
 # Most of a sample that may be cut off at full volume (0.01 = 1%).
 ENROLL_MAX_CLIPPED_SHARE = float(os.getenv("ENROLL_MAX_CLIPPED_SHARE", "0.01"))

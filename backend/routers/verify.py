@@ -8,7 +8,12 @@ import config
 from audio_upload import read_recording
 from challenges import use_challenge
 from content_check import check_content
-from db import get_challenges_collection, get_rate_limits_collection, get_voiceprints_collection
+from db import (
+    get_challenges_collection,
+    get_rate_limits_collection,
+    get_voice_failures_collection,
+    get_voiceprints_collection,
+)
 from decision import decide
 from embedding import Embedder, get_embedder
 from identity_check import IdentityResult, IdentityUnavailable, check_identity
@@ -17,6 +22,7 @@ from rate_limit import count_request
 from schemas import ContentScore, VerifyResponse
 from security import get_current_user_id
 from transcription import AudioNotUnderstood, Transcriber, TranscriptionUnavailable, get_transcriber
+from voice_attempts import ensure_not_locked, record_outcome
 from voiceprints import load_voiceprint
 
 router = APIRouter(prefix="/api", tags=["verify"])
@@ -32,11 +38,13 @@ def verify(
     challenges: Collection = Depends(get_challenges_collection),
     rate_limits: Collection = Depends(get_rate_limits_collection),
     voiceprints: Collection = Depends(get_voiceprints_collection),
+    voice_failures: Collection = Depends(get_voice_failures_collection),
     transcribe: Transcriber = Depends(get_transcriber),
     embed: Embedder | None = Depends(get_embedder),
 ) -> VerifyResponse:
     # Checked before the passage is used up, so a refused request doesn't
     # cost the user their passage.
+    ensure_not_locked(voice_failures, user_id)
     count_request(rate_limits, "verify", user_id, config.VERIFY_RATE_LIMIT, config.RATE_LIMIT_WINDOW_SECONDS)
 
     recording, extension = read_recording(audio)
@@ -85,6 +93,9 @@ def verify(
             liveness.passed,
         )
     result = decide(content, identity, liveness)
+    attempts_left = record_outcome(voice_failures, user_id, result.decision)
+    if result.decision == "rejected":
+        logger.info("voice_check_rejected user=%s attempt=%s attempts_left=%d", user_id, attempt_id, attempts_left)
     return VerifyResponse(
         decision=result.decision,
         reason=result.reason,
@@ -96,6 +107,8 @@ def verify(
         ),
         identity=_identity_status(identity),
         liveness=_liveness_status(liveness),
+        attempts_left=attempts_left,
+        fallback_required=result.decision == "rejected" and attempts_left == 0,
     )
 
 
