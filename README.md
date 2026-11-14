@@ -59,7 +59,9 @@ as soon as the voiceprint is built or the checks have run.
   fail, never its score, so nobody can tune a voice clone against it.
 - **Abuse limits:** sign-in locks for 30 minutes after 5 wrong passwords
   within 15 minutes, and per-user limits cap the paid speech-to-text calls.
-- **Fallback:** after 3 failed voice attempts, an email code (planned, #20).
+- **Fallback:** after 3 rejected voice checks within 30 minutes, voice
+  checks pause for 30 minutes and the app is told to offer an email code
+  (the code itself is planned, #20).
 
 ## Project status
 
@@ -77,7 +79,7 @@ Each row is a user story (see the
 | #16 Identity check | ✅ Done (SpeechBrain ECAPA) | — |
 | #17 Liveness / anti-spoof check | 🟡 First model live (AASIST, fine-tuned); about 1 fake in 4 still passes | — |
 | #18 Combine the three checks | ✅ All three must pass; liveness can veto | — |
-| #19 Result screen with retry | — | ✅ Done |
+| #19 Result screen with retry | ✅ Counts failed checks; pauses them after 3 | ✅ Done (attempts left not shown yet) |
 | #20 Account recovery (email code) | ⏳ Not started | ⏳ Not started |
 
 An enrolled user who reads the passage live in their own voice is approved.
@@ -140,8 +142,8 @@ curl -X POST $API/api/verify -H "Authorization: Bearer <access_token>" \
 | GET | `/health` | Is the server up? | No |
 | POST | `/api/auth/signup` | Create an account; returns an access token | No |
 | POST | `/api/auth/login` | Sign in with email and password; locks for 30 min after 5 wrong tries within 15 min | No |
-| POST | `/api/challenge` | Get a fresh, single-use passage to read (expires in 2 min) | Yes |
-| POST | `/api/verify` | Send a recording of the passage; runs the checks and returns the decision | Yes |
+| POST | `/api/challenge` | Get a fresh, single-use passage to read (expires in 2 min); 423 while voice checks are paused | Yes |
+| POST | `/api/verify` | Send a recording of the passage; runs the checks and returns the decision, `attempts_left` and `fallback_required`; 423 while voice checks are paused | Yes |
 | GET | `/api/enroll` | Enrollment progress, and a sentence to read for the next sample | Yes |
 | POST | `/api/enroll/samples` | Add one voice sample; the voiceprint is built after 3 good ones | Yes |
 | DELETE | `/api/enroll/samples` | Start enrollment over | Yes |
