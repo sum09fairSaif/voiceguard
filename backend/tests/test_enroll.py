@@ -1,4 +1,5 @@
 import logging
+import math
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -9,8 +10,9 @@ from audio_upload import MAX_AUDIO_BYTES
 from embedding import Embedding, get_embedder
 from identity_check import IdentityUnavailable
 from main import app
+from passages import UNCHECKED_WORDS
 from security import create_access_token
-from transcription import AudioNotUnderstood
+from transcription import AudioNotUnderstood, TranscriptionUnavailable, get_transcriber
 from voiceprints import load_voiceprint, save_voiceprint
 
 STATUS_URL = "/api/enroll"
@@ -60,7 +62,39 @@ def embedder():
     return fake
 
 
+class FakeTranscriber:
+    # Stands in for Whisper. Unless the test sets `heard`, it hears the
+    # newest sentence the user was given, read perfectly.
+    def __init__(self, prompts):
+        self.prompts = prompts
+        self.heard = None
+        self.error = None
+        self.calls = []
+
+    def __call__(self, audio, filename):
+        self.calls.append((audio, filename))
+        if self.error:
+            raise self.error
+        if self.heard is not None:
+            return self.heard
+        return newest_prompt(self.prompts)
+
+
+@pytest.fixture(autouse=True)
+def transcriber(enroll_prompts):
+    fake = FakeTranscriber(enroll_prompts)
+    app.dependency_overrides[get_transcriber] = lambda: fake
+    return fake
+
+
+def newest_prompt(prompts, user_id=USER_ID):
+    newest = list(prompts.find({"user_id": user_id}).sort("created_at", -1).limit(1))
+    return newest[0]["passage"] if newest else ""
+
+
 def send(client, audio=RECORDING, content_type="audio/webm;codecs=opus", headers=None):
+    # Like the screen: get the sentence to read, then send the recording.
+    client.get(STATUS_URL, headers=signed_in() if headers is None else headers)
     return client.post(
         SAMPLES_URL,
         headers=signed_in() if headers is None else headers,
@@ -221,6 +255,261 @@ def test_model_service_without_liveness_returns_503(client, embedder, enrollment
     assert stored(enrollments) == 0
 
 
+# --- Every word of the sentence, in order -------------------------------------
+
+
+def read_with(client, enroll_prompts, transcriber, change):
+    """Get a sentence, have the fake Whisper hear `change(words)` of it, and
+    send the sample."""
+    client.get(STATUS_URL, headers=signed_in())
+    words = newest_prompt(enroll_prompts).rstrip(".").split()
+    transcriber.heard = " ".join(change(words))
+    return client.post(SAMPLES_URL, headers=signed_in(), files={"audio": ("s.webm", RECORDING, "audio/webm")})
+
+
+WRONG_WORDS_MESSAGE = "We didn't hear every word of the sentence, in order."
+
+
+def test_the_whole_sentence_read_is_accepted(client, embedder, transcriber, enroll_prompts, enrollments):
+    response = read_with(client, enroll_prompts, transcriber, lambda words: words)
+
+    assert response.status_code == 200
+    assert stored(enrollments) == 1
+
+
+def test_capitals_and_punctuation_dont_matter(client, embedder, transcriber, enroll_prompts):
+    response = read_with(client, enroll_prompts, transcriber, lambda words: [w.upper() + "," for w in words])
+
+    assert response.status_code == 200
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        lambda words: words[:-1],  # last word dropped
+        lambda words: words[1:],  # first word ("the") dropped
+        lambda words: words[:4] + words[5:],  # a word in the middle dropped
+        lambda words: [w for w in words if w != "the"],  # every "the" dropped
+    ],
+    ids=["last-word", "first-the", "middle-word", "every-the"],
+)
+def test_any_missing_word_is_rejected(client, embedder, transcriber, enroll_prompts, enrollments, change):
+    response = read_with(client, enroll_prompts, transcriber, change)
+
+    assert response.status_code == 422
+    assert response.json()["detail"].startswith(WRONG_WORDS_MESSAGE)
+    assert stored(enrollments) == 0
+
+
+def test_words_out_of_order_are_rejected(client, embedder, transcriber, enroll_prompts, enrollments):
+    # "The sleepy tiger polished the rusty lantern ..." read with the two
+    # key nouns swapped.
+    def swap(words):
+        words = list(words)
+        words[2], words[6] = words[6], words[2]
+        return words
+
+    response = read_with(client, enroll_prompts, transcriber, swap)
+
+    assert response.status_code == 422
+    assert stored(enrollments) == 0
+
+
+def test_the_sentence_backwards_is_rejected(client, embedder, transcriber, enroll_prompts):
+    assert read_with(client, enroll_prompts, transcriber, lambda words: words[::-1]).status_code == 422
+
+
+def test_a_stumble_or_two_is_allowed(client, embedder, transcriber, enroll_prompts):
+    response = read_with(client, enroll_prompts, transcriber, lambda words: words[:3] + words[2:3] + ["um"] + words[3:])
+
+    assert response.status_code == 200
+
+
+def test_more_extra_words_than_allowed_are_rejected(client, embedder, transcriber, enroll_prompts):
+    extra = ["and", "then", "something", "else"]
+
+    assert read_with(client, enroll_prompts, transcriber, lambda words: words + extra).status_code == 422
+
+
+def test_a_rejected_sentence_can_be_read_again(client, embedder, transcriber, enroll_prompts, enrollments):
+    read_with(client, enroll_prompts, transcriber, lambda words: words[:-1])
+    passage = newest_prompt(enroll_prompts)
+    transcriber.heard = passage
+
+    response = client.post(SAMPLES_URL, headers=signed_in(), files={"audio": ("s.webm", RECORDING, "audio/webm")})
+
+    assert response.status_code == 200
+    assert stored(enrollments) == 1
+
+
+def test_a_sentence_never_given_out_is_rejected(client, embedder, transcriber):
+    transcriber.heard = "the happy painter carried the shiny ladder near the river"
+
+    response = send(client)
+
+    assert response.status_code == 422
+    assert response.json()["detail"].startswith(WRONG_WORDS_MESSAGE)
+
+
+def test_without_asking_for_a_sentence_no_sample_is_accepted(client, embedder, transcriber, enrollments):
+    transcriber.heard = "the happy painter carried the shiny ladder near the river"
+
+    response = client.post(SAMPLES_URL, headers=signed_in(), files={"audio": ("s.webm", RECORDING, "audio/webm")})
+
+    assert response.status_code == 422
+    assert stored(enrollments) == 0
+
+
+def test_one_sentence_counts_for_one_sample_only(client, embedder, transcriber, enroll_prompts, enrollments):
+    # Otherwise one good recording could be sent three times.
+    client.get(STATUS_URL, headers=signed_in())
+    transcriber.heard = newest_prompt(enroll_prompts)
+    upload = {"audio": ("s.webm", RECORDING, "audio/webm")}
+    assert client.post(SAMPLES_URL, headers=signed_in(), files=upload).status_code == 200
+
+    response = client.post(SAMPLES_URL, headers=signed_in(), files=upload)
+
+    assert response.status_code == 422
+    assert stored(enrollments) == 1
+
+
+def test_an_earlier_sentence_still_counts_if_the_screen_asked_twice(client, embedder, transcriber, enroll_prompts):
+    client.get(STATUS_URL, headers=signed_in())
+    first = newest_prompt(enroll_prompts)
+    client.get(STATUS_URL, headers=signed_in())
+    transcriber.heard = first
+
+    response = client.post(SAMPLES_URL, headers=signed_in(), files={"audio": ("s.webm", RECORDING, "audio/webm")})
+
+    assert response.status_code == 200
+
+
+def test_only_the_newest_sentences_are_kept(client, enroll_prompts, monkeypatch):
+    monkeypatch.setattr(config, "ENROLL_PROMPTS_KEPT", 3)
+    for _ in range(6):
+        client.get(STATUS_URL, headers=signed_in())
+
+    assert enroll_prompts.count_documents({"user_id": USER_ID}) == 3
+
+
+def test_an_expired_sentence_doesnt_count(client, embedder, transcriber, enroll_prompts):
+    client.get(STATUS_URL, headers=signed_in())
+    transcriber.heard = newest_prompt(enroll_prompts)
+    enroll_prompts.update_many({}, {"$set": {"expires_at": datetime.now(UTC) - timedelta(seconds=1)}})
+
+    response = client.post(SAMPLES_URL, headers=signed_in(), files={"audio": ("s.webm", RECORDING, "audio/webm")})
+
+    assert response.status_code == 422
+
+
+def test_someone_elses_sentence_doesnt_count(client, embedder, transcriber, enroll_prompts):
+    other = str(ObjectId())
+    client.get(STATUS_URL, headers=signed_in(other))
+    transcriber.heard = newest_prompt(enroll_prompts, other)
+
+    response = client.post(SAMPLES_URL, headers=signed_in(), files={"audio": ("s.webm", RECORDING, "audio/webm")})
+
+    assert response.status_code == 422
+
+
+def test_sentences_are_cleared_once_enrolled(client, embedder, enroll_prompts):
+    for _ in range(3):
+        send(client)
+
+    assert enroll_prompts.count_documents({"user_id": USER_ID}) == 0
+
+
+def test_recording_reaches_whisper_with_a_safe_filename(client, embedder, transcriber):
+    send(client)
+
+    assert transcriber.calls == [(RECORDING, "sample.webm")]
+
+
+@pytest.mark.parametrize(
+    "spoil",
+    [
+        lambda e: setattr(e, "speech_seconds", 0.4),
+        lambda e: setattr(e, "clipped_share", 0.2),
+        lambda e: setattr(e, "liveness", config.LIVENESS_THRESHOLD - 1.0),
+    ],
+    ids=["too-short", "too-loud", "not-live"],
+)
+def test_a_sample_already_turned_away_doesnt_pay_for_speech_to_text(client, embedder, transcriber, spoil):
+    spoil(embedder)
+
+    assert send(client).status_code == 422
+    assert transcriber.calls == []
+
+
+def test_an_inconsistent_sample_doesnt_pay_for_speech_to_text(client, embedder, transcriber):
+    embedder.voices = [TAKES[0], OTHER_VOICE]
+    send(client)
+
+    assert send(client).status_code == 422
+    assert len(transcriber.calls) == 1
+
+
+def test_a_recording_whisper_cannot_read_asks_to_record_again(client, embedder, transcriber, enrollments):
+    transcriber.error = AudioNotUnderstood("bad audio")
+
+    response = send(client)
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "We couldn't read that recording. Please record it again."
+    assert stored(enrollments) == 0
+
+
+def test_speech_to_text_outage_returns_503_and_keeps_nothing(client, embedder, transcriber, enrollments):
+    transcriber.error = TranscriptionUnavailable("down")
+
+    assert send(client).status_code == 503
+    assert stored(enrollments) == 0
+
+
+# --- Each sample close to every earlier one ----------------------------------
+
+
+def at_angle(degrees):
+    # A made-up voice pointing `degrees` away from the first take: the
+    # similarity between two of them is the cosine of the angle between.
+    radians = math.radians(degrees)
+    return [math.cos(radians), math.sin(radians), 0.0]
+
+
+def test_a_sample_close_to_the_average_but_far_from_one_take_is_rejected(
+    client, embedder, enrollments, monkeypatch
+):
+    monkeypatch.setattr(config, "ENROLL_SAMPLES_REQUIRED", 4)
+    # Takes at 0, 50 and 25 degrees average out at 25. A fourth at 60 is
+    # 35 degrees from that average (similarity 0.82) but 60 from the first
+    # take (0.50).
+    embedder.voices = [at_angle(0), at_angle(50), at_angle(25), at_angle(60)]
+    for _ in range(3):
+        assert send(client).status_code == 200
+
+    response = send(client)
+
+    assert response.status_code == 422
+    assert response.json()["detail"].startswith("That recording doesn't sound like your earlier ones.")
+    assert stored(enrollments) == 3
+
+
+def test_a_sample_just_above_the_consistency_bar_is_accepted(client, embedder, monkeypatch):
+    bar = config.ENROLL_CONSISTENCY_THRESHOLD
+    embedder.voices = [at_angle(0), at_angle(math.degrees(math.acos(bar)) - 0.5)]
+    send(client)
+
+    assert send(client).status_code == 200
+
+
+def test_a_sample_just_below_the_consistency_bar_is_rejected(client, embedder):
+    bar = config.ENROLL_CONSISTENCY_THRESHOLD
+    embedder.voices = [at_angle(0), at_angle(math.degrees(math.acos(bar)) + 0.5)]
+    send(client)
+
+    assert send(client).status_code == 422
+
+
 def test_sample_unlike_the_earlier_ones_is_rejected(client, embedder, enrollments):
     embedder.voices = [TAKES[0], OTHER_VOICE, TAKES[1]]
     send(client)
@@ -369,14 +658,38 @@ def test_each_sample_is_logged_without_the_voice(client, embedder, caplog):
         send(client)
         send(client)
 
-    lines = [r.getMessage() for r in caplog.records if r.name == "voiceguard.enroll"]
+    lines = [
+        r.getMessage()
+        for r in caplog.records
+        if r.name == "voiceguard.enroll" and r.getMessage().startswith("enroll_sample")
+    ]
     assert lines == [
         (
             f"enroll_sample user={USER_ID} outcome=accepted speech_seconds=2.00 clipped_share=0.0000 "
-            f"liveness={config.LIVENESS_THRESHOLD + 1.0:.3f} similarity=-"
+            f"liveness={config.LIVENESS_THRESHOLD + 1.0:.3f} similarity=- words=10/10 extra_words=0"
         ),
         (
             f"enroll_sample user={USER_ID} outcome=inconsistent speech_seconds=2.00 clipped_share=0.0000 "
-            f"liveness={config.LIVENESS_THRESHOLD + 1.0:.3f} similarity=0.000"
+            f"liveness={config.LIVENESS_THRESHOLD + 1.0:.3f} similarity=0.000 words=- extra_words=-"
         ),
     ]
+
+
+def test_a_sample_with_missing_words_is_logged_without_the_words(client, embedder, transcriber, enroll_prompts, caplog):
+    client.get(STATUS_URL, headers=signed_in())
+    passage = newest_prompt(enroll_prompts)
+    transcriber.heard = " ".join(passage.split()[:-2])
+
+    with caplog.at_level(logging.INFO, logger="voiceguard.enroll"):
+        client.post(SAMPLES_URL, headers=signed_in(), files={"audio": ("s.webm", RECORDING, "audio/webm")})
+
+    lines = [r.getMessage() for r in caplog.records if r.name == "voiceguard.enroll"]
+    [sample_line] = [line for line in lines if line.startswith("enroll_sample")]
+    assert "outcome=wrong_words" in sample_line
+    assert sample_line.endswith("words=8/10 extra_words=0")
+    [paid_call] = [line for line in lines if line.startswith("transcription")]
+    assert f"transcription user={USER_ID} attempt=enroll " in paid_call
+    for line in lines:
+        for word in passage.rstrip(".").split()[1:]:
+            if word not in UNCHECKED_WORDS:
+                assert f" {word} " not in f" {line} "

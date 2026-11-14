@@ -4,16 +4,19 @@ from pymongo import ReturnDocument
 from pymongo.collection import Collection
 
 import config
+from content_check import ContentResult, check_every_word
 from embedding import Embedding
 from identity_check import cosine_similarity
 from liveness_check import check_liveness
-from voiceprints import build_voiceprint, decrypt_embedding, encrypt_embedding
+from passages import generate_passage
+from voiceprints import decrypt_embedding, encrypt_embedding
 
 # Why a sample was turned away. The router turns each into a message.
 TOO_SHORT = "too_short"
 TOO_LOUD = "too_loud"
 INCONSISTENT = "inconsistent"
 NOT_LIVE = "not_live"
+WRONG_WORDS = "wrong_words"
 
 
 def _current(user_id: str, now: datetime) -> dict:
@@ -49,10 +52,57 @@ def sample_problem(sample: Embedding, earlier: list[list[float]]) -> tuple[str |
         return NOT_LIVE, None
     if not earlier:
         return None, None
-    similarity = cosine_similarity(build_voiceprint(earlier), sample.vector)
+    # Compared with each earlier sample, not just their average: an
+    # average can sit close to a new sample even when one of the samples
+    # behind it is far off. The lowest similarity is the one that counts.
+    similarity = min(cosine_similarity(take, sample.vector) for take in earlier)
     if similarity < config.ENROLL_CONSISTENCY_THRESHOLD:
         return INCONSISTENT, similarity
     return None, similarity
+
+
+def issue_prompt(prompts: Collection, user_id: str) -> str:
+    """A new sentence for the user's next sample, remembered so the sample
+    can be checked against it. Only the newest ENROLL_PROMPTS_KEPT are kept."""
+    now = datetime.now(UTC)
+    passage = generate_passage()
+    prompts.insert_one(
+        {
+            "user_id": user_id,
+            "passage": passage,
+            "created_at": now,
+            "expires_at": now + timedelta(seconds=config.ENROLL_SESSION_TTL_SECONDS),
+        }
+    )
+    older = prompts.find({"user_id": user_id}, {"_id": 1}).sort("created_at", -1).skip(config.ENROLL_PROMPTS_KEPT)
+    prompts.delete_many({"_id": {"$in": [doc["_id"] for doc in older]}})
+    return passage
+
+
+def use_prompt(prompts: Collection, user_id: str, transcript: str) -> ContentResult:
+    """Check what was heard against the user's current sentences. If it
+    holds every word of one of them, in order, that sentence is used up
+    (so one recording can't be sent again as another sample) and the
+    result passes. Otherwise returns the closest result, which fails.
+    Any of the newest few counts: the screen may have asked for a sentence
+    more than once before showing one."""
+    now = datetime.now(UTC)
+    misses = []
+    for prompt in prompts.find({"user_id": user_id, "expires_at": {"$gt": now}}).sort("created_at", -1):
+        result = check_every_word(prompt["passage"], transcript)
+        if not result.passed:
+            misses.append(result)
+        # Deleted in one step, so two requests can't both use one sentence.
+        elif prompts.delete_one({"_id": prompt["_id"]}).deleted_count:
+            return result
+    if not misses:
+        # No current sentence, or the one it matched was used a moment ago.
+        return ContentResult(matched=0, total=0, passed=False)
+    return max(misses, key=lambda result: result.matched / result.total)
+
+
+def discard_prompts(prompts: Collection, user_id: str) -> None:
+    prompts.delete_many({"user_id": user_id})
 
 
 def add_sample(enrollments: Collection, user_id: str, embedding: list[float]) -> int:
