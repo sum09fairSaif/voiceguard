@@ -1,7 +1,15 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { apiError, networkError } from "../test/apiError";
 import { api } from "./client";
-import { ENROLL_MESSAGES, addSample, describeEnrollError, getEnrollment, isAlreadyEnrolled, startOver } from "./enroll";
+import {
+  ENROLL_MESSAGES,
+  addSample,
+  describeEnrollError,
+  getEnrollment,
+  isAlreadyEnrolled,
+  isEnrollmentClosed,
+  startOver,
+} from "./enroll";
 import { MESSAGES } from "./errors";
 
 const status = { status: "in_progress", samples_accepted: 1, samples_required: 3, prompt: "amber lantern river" };
@@ -71,5 +79,13 @@ describe("describeEnrollError", () => {
   it("recognises an account that's already enrolled", () => {
     expect(isAlreadyEnrolled(apiError(409))).toBe(true);
     expect(isAlreadyEnrolled(apiError(422))).toBe(false);
+  });
+});
+
+describe("isEnrollmentClosed", () => {
+  it("recognises the signup-session-only refusal", () => {
+    expect(isEnrollmentClosed(apiError(403))).toBe(true);
+    expect(isEnrollmentClosed(apiError(409))).toBe(false);
+    expect(isEnrollmentClosed(new Error("boom"))).toBe(false);
   });
 });
