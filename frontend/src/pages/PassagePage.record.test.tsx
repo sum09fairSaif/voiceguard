@@ -174,6 +174,31 @@ describe("Recording and submitting", () => {
     expect(mockChallenge).toHaveBeenCalledTimes(1);
   });
 
+  it("offers a new phrase again once a pause from a submit is over", async () => {
+    mockSubmit.mockRejectedValue(apiError(423, {}, { "retry-after": "1" }));
+    const user = userEvent.setup();
+    renderFlow();
+    await recordClip(user);
+    await user.click(screen.getByRole("button", { name: /submit/i }));
+    await screen.findByText(/Voice checks are paused after/);
+
+    expect(await screen.findByText(/available again/, {}, { timeout: 3000 })).toBeInTheDocument();
+    await user.click(screen.getAllByRole("button", { name: /get a new phrase|new phrase/i })[0]);
+    expect(await screen.findByText("“Passage a2”")).toBeInTheDocument();
+  });
+
+  it("hides the recorded clip's actions when a new phrase is refused by a pause", async () => {
+    mockChallenge.mockReset().mockResolvedValueOnce(challenge("a1")).mockRejectedValueOnce(apiError(423, {}, { "retry-after": "900" }));
+    const user = userEvent.setup();
+    renderFlow();
+    await recordClip(user);
+
+    await user.click(screen.getByRole("button", { name: /new phrase/i }));
+
+    expect(await screen.findByText("Voice checks are paused")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /record again|submit/i })).not.toBeInTheDocument();
+  });
+
   it("sends a signed-out user back to sign in", async () => {
     saveToken("expired");
     mockSubmit.mockRejectedValue(apiError(401));

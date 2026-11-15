@@ -67,6 +67,17 @@ describe("describeResult", () => {
     expect(view.note).toBeUndefined();
   });
 
+  it("leaves the attempts note out when the server didn't send it", () => {
+    const fromOlderBackend = result({ decision: "rejected", identity: "failed" });
+    delete fromOlderBackend.attempts_left;
+    delete fromOlderBackend.fallback_required;
+
+    const view = describeResult(fromOlderBackend);
+
+    expect(view.note).toBeUndefined();
+    expect(view).toMatchObject({ title: "That didn’t match.", action: "retry" });
+  });
+
   it("gives no attempts note unless the check was rejected", () => {
     expect(describeResult(result()).note).toBeUndefined();
     expect(describeResult(result({ decision: "approved", identity: "passed", liveness: "passed" })).note).toBeUndefined();

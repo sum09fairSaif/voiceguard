@@ -101,7 +101,8 @@ export function describeResult(result: VerifyResult): ResultView {
         eyebrow: "Not verified",
         title: "That didn’t match.",
         subtitle: rejectedSubtitle(result),
-        note: attemptsNote(result.attempts_left),
+        // Left out if the server didn't say (a backend from before #141).
+        note: typeof result.attempts_left === "number" ? attemptsNote(result.attempts_left) : undefined,
         checks,
         action: "retry",
         actionLabel: "Try again",

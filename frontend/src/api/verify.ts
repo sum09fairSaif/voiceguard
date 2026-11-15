@@ -11,10 +11,11 @@ export type VerifyResult = {
   // values are handled already so the result screen needs no change then.
   liveness: "passed" | "failed" | "not_checked";
   // Rejections left before voice checks pause. Back to the maximum after an
-  // approval; an "incomplete" doesn't lower it.
-  attempts_left: number;
+  // approval; an "incomplete" doesn't lower it. Optional: a backend from
+  // before #141 doesn't send these, and the screen then leaves them out.
+  attempts_left?: number;
   // True when this rejection used the last attempt, so checks are paused now.
-  fallback_required: boolean;
+  fallback_required?: boolean;
 };
 
 // What the voice check's error statuses mean for the person on screen. Used as
@@ -38,6 +39,16 @@ export function pausedMessage(retryAfterSeconds: number | undefined): string {
   return `Voice checks are paused after too many failed attempts. Please try again in ${minutes} minute${minutes === 1 ? "" : "s"}.`;
 }
 
+// Shown once a pause is over, so the screen can offer a new phrase again.
+export const AVAILABLE_AGAIN = "Voice checks are available again. Get a new phrase to try again.";
+
+// How long a pause lasts, from Retry-After; undefined if the server didn't say.
+export function pauseSeconds(error: unknown): number | undefined {
+  if (!isAxiosError(error)) return undefined;
+  const seconds = Number(error.response?.headers["retry-after"]);
+  return Number.isFinite(seconds) && seconds > 0 ? seconds : undefined;
+}
+
 export function isVoiceCheckPaused(error: unknown): boolean {
   return isAxiosError(error) && error.response?.status === 423;
 }
@@ -48,7 +59,7 @@ export function describeVoiceCheckError(
   overrides: Partial<Record<number, string>> = VERIFY_MESSAGES,
 ): string {
   if (isAxiosError(error) && isVoiceCheckPaused(error)) {
-    return pausedMessage(Number(error.response?.headers["retry-after"]));
+    return pausedMessage(pauseSeconds(error));
   }
   return describeApiError(error, overrides);
 }

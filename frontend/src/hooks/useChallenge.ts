@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { requestChallenge, type Challenge } from "../api/challenge";
 import { clearToken } from "../api/session";
-import { describeVoiceCheckError, isVoiceCheckPaused } from "../api/verify";
+import { AVAILABLE_AGAIN, describeVoiceCheckError, isVoiceCheckPaused, pauseSeconds } from "../api/verify";
 import { secondsLeft } from "../utils/countdown";
 
 export type ChallengeState = {
@@ -26,6 +26,8 @@ export function useChallenge(): ChallengeState {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [paused, setPaused] = useState(false);
+  // How long the current pause lasts, if the server said.
+  const [pausedFor, setPausedFor] = useState<number | undefined>(undefined);
   const [now, setNow] = useState(() => Date.now());
   // Numbers each request so a slow earlier reply can't replace a newer one.
   const latestRequest = useRef(0);
@@ -51,6 +53,7 @@ export function useChallenge(): ChallengeState {
       }
       setChallenge(null);
       setPaused(isVoiceCheckPaused(err));
+      setPausedFor(pauseSeconds(err));
       setError(describeVoiceCheckError(err, {}));
     } finally {
       if (requestId === latestRequest.current) setLoading(false);
@@ -68,6 +71,16 @@ export function useChallenge(): ChallengeState {
     setError("");
     void fetchChallenge();
   }, [fetchChallenge]);
+
+  // Once the pause is over, offer a new phrase again instead of staying stuck.
+  useEffect(() => {
+    if (!paused || !pausedFor) return;
+    const timer = setTimeout(() => {
+      setPaused(false);
+      setError(AVAILABLE_AGAIN);
+    }, pausedFor * 1000);
+    return () => clearTimeout(timer);
+  }, [paused, pausedFor]);
 
   const secondsRemaining = challenge ? secondsLeft(challenge.expires_at, now) : 0;
   const expired = challenge !== null && secondsRemaining === 0;

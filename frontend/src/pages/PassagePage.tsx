@@ -1,8 +1,14 @@
 import { isAxiosError } from "axios";
-import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { clearToken } from "../api/session";
-import { describeVoiceCheckError, isVoiceCheckPaused, submitAttempt } from "../api/verify";
+import { useEffect, useState } from "react";
+import {
+  AVAILABLE_AGAIN,
+  describeVoiceCheckError,
+  isVoiceCheckPaused,
+  pauseSeconds,
+  submitAttempt,
+} from "../api/verify";
 import { Button } from "../components/Button";
 import { Logo } from "../components/Logo";
 import { Page } from "../components/Page";
@@ -28,6 +34,17 @@ export function PassagePage() {
   const [submitError, setSubmitError] = useState("");
   const [needsNewPhrase, setNeedsNewPhrase] = useState(false);
   const [submitPaused, setSubmitPaused] = useState(false);
+  const [submitPausedFor, setSubmitPausedFor] = useState<number | undefined>(undefined);
+
+  // Once a pause from a submit is over, offer a new phrase again.
+  useEffect(() => {
+    if (!submitPaused || !submitPausedFor) return;
+    const timer = setTimeout(() => {
+      setSubmitPaused(false);
+      setSubmitError(AVAILABLE_AGAIN);
+    }, submitPausedFor * 1000);
+    return () => clearTimeout(timer);
+  }, [submitPaused, submitPausedFor]);
 
   // Voice checks are paused (423 on the passage or the submit): nothing on
   // this screen can be retried until the wait is over, so no buttons to try.
@@ -65,6 +82,7 @@ export function PassagePage() {
       const status = isAxiosError(err) ? err.response?.status : undefined;
       setNeedsNewPhrase(!(status && PASSAGE_STILL_VALID.has(status)));
       setSubmitPaused(isVoiceCheckPaused(err));
+      setSubmitPausedFor(pauseSeconds(err));
       setSubmitError(describeVoiceCheckError(err));
       setSubmitting(false);
     }
@@ -136,7 +154,7 @@ export function PassagePage() {
       </section>
 
       <section className={styles.recorder} aria-label="Record your voice">
-        {recorded && !submitError ? (
+        {recorded && !submitError && !paused ? (
           <>
             <p className={styles.recorderTitle}>Recording ready</p>
             <p className={styles.recorderHint}>Send it to check your voice, or record it again.</p>
