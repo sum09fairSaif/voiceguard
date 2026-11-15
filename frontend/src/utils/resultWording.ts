@@ -18,6 +18,8 @@ export type ResultView = {
   eyebrow: string;
   title: string;
   subtitle: string;
+  // A line under the subtitle about attempts left, after a rejection only.
+  note?: string;
   checks: CheckRow[];
   // "home" opens the account (approved only); "done" goes back to the start;
   // "retry" gets a fresh passage.
@@ -56,6 +58,16 @@ function rejectedSubtitle(result: VerifyResult): string {
   return "We couldn’t verify you this time. Please try again.";
 }
 
+// How many more rejections before voice checks pause (#141). The length of
+// the pause is a server setting and the result doesn't carry it, so it isn't
+// promised here; the passage screen says the exact wait if they come back early.
+function attemptsNote(attemptsLeft: number): string {
+  if (attemptsLeft === 1) {
+    return "1 attempt left. If the next one doesn’t match, voice checks will pause for a while.";
+  }
+  return `${attemptsLeft} attempts left.`;
+}
+
 // Turns the server's answer into plain words for the screen. The server's own
 // `reason` is never shown as-is.
 export function describeResult(result: VerifyResult): ResultView {
@@ -74,11 +86,26 @@ export function describeResult(result: VerifyResult): ResultView {
         actionLabel: result.access_token ? "Continue to home" : "Done",
       };
     case "rejected":
+      if (result.fallback_required) {
+        // That was the last attempt: a new passage would be refused now.
+        return {
+          tone: "failure",
+          eyebrow: "Not verified",
+          title: "Voice checks are paused.",
+          subtitle:
+            "That didn’t match, and it was the last attempt for now. To keep your account safe, voice checks are paused for a while. Please come back and try again later.",
+          checks,
+          action: "done",
+          actionLabel: "Done",
+        };
+      }
       return {
         tone: "failure",
         eyebrow: "Not verified",
         title: "That didn’t match.",
         subtitle: rejectedSubtitle(result),
+        // Left out if the server didn't say (a backend from before #141).
+        note: typeof result.attempts_left === "number" ? attemptsNote(result.attempts_left) : undefined,
         checks,
         action: "retry",
         actionLabel: "Try again",
