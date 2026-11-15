@@ -443,7 +443,7 @@ def test_a_password_sign_in_may_not_enroll(client, embedder, no_grace):
     assert embedder.calls == []
 
 
-def test_a_token_from_before_the_marking_may_not_enroll(client, embedder, no_grace):
+def test_a_token_from_before_these_changes_is_refused(client, embedder, no_grace):
     import jwt
 
     now = datetime.now(UTC)
@@ -451,7 +451,8 @@ def test_a_token_from_before_the_marking_may_not_enroll(client, embedder, no_gra
         {"sub": USER_ID, "iat": now, "exp": now + timedelta(minutes=5)}, config.JWT_SECRET, algorithm="HS256"
     )
 
-    assert send(client, headers={"Authorization": f"Bearer {old}"}).status_code == 403
+    # No session, issuer or audience: refused outright (sign in again).
+    assert send(client, headers={"Authorization": f"Bearer {old}"}).status_code == 401
 
 
 def test_the_grace_period_lets_an_older_account_enroll_after_signing_in(client, users, embedder, monkeypatch):

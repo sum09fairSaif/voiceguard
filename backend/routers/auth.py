@@ -12,7 +12,8 @@ from db import get_login_failures_collection, get_rate_limits_collection, get_us
 from login_lockout import clear_failures, record_failure, seconds_locked
 from rate_limit import count_request
 from schemas import LoginRequest, LoginResponse, SignupRequest, SignupResponse, UserPublic
-from security import check_password, create_access_token, hash_password
+from security import check_password, create_access_token, get_token_claims, hash_password
+from sessions import revoke, revoked_sessions
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -118,3 +119,14 @@ def _locked_out(seconds: int) -> HTTPException:
         ),
         headers={"Retry-After": str(seconds)},
     )
+
+
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+def logout(
+    claims: dict = Depends(get_token_claims),
+    revoked=Depends(revoked_sessions),
+) -> None:
+    """End this sign-in on the server: both its limited token and any
+    voice-verified one stop working at once."""
+    revoke(revoked(), claims["sid"])
+    logger.info("logout user=%s", claims["sub"])

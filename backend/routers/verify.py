@@ -24,7 +24,7 @@ from identity_check import IdentityResult, IdentityUnavailable, check_identity
 from liveness_check import LivenessResult, check_liveness
 from rate_limit import count_request
 from schemas import ContentScore, VerifyResponse
-from security import create_verified_token, get_current_user_id
+from security import create_verified_token, get_current_user_id, get_token_claims
 from transcription import AudioNotUnderstood, Transcriber, TranscriptionUnavailable, get_transcriber
 from voice_attempts import ensure_not_locked, record_outcome
 from voiceprints import load_voiceprint
@@ -39,6 +39,7 @@ def verify(
     audio: UploadFile = File(...),
     attempt_id: str = Form(...),
     user_id: str = Depends(get_current_user_id),
+    claims: dict = Depends(get_token_claims),
     challenges: Collection = Depends(get_challenges_collection),
     rate_limits: Collection = Depends(get_rate_limits_collection),
     voiceprints: Collection = Depends(get_voiceprints_collection),
@@ -104,7 +105,8 @@ def verify(
     access_token = None
     if result.decision == "approved":
         # Only an approval opens the account: password, voice and liveness.
-        access_token = create_verified_token(user_id)
+        # Same session as the token that ran the check: signing out ends both.
+        access_token = create_verified_token(user_id, claims["sid"])
         _record_sign_in(users, user_id)
         logger.info("voice_check_approved user=%s attempt=%s", user_id, attempt_id)
     return VerifyResponse(

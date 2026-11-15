@@ -6,6 +6,14 @@ from pymongo.collection import Collection
 import config
 
 
+def get_revoked_sessions_collection() -> Collection:
+    # Signed-out sessions (sessions.py). MongoDB deletes each once all the
+    # session's tokens would have expired.
+    revoked = get_client()[config.MONGO_DB_NAME]["revoked_sessions"]
+    revoked.create_index("expires_at", expireAfterSeconds=0)
+    return revoked
+
+
 @lru_cache
 def get_client() -> MongoClient:
     if not config.MONGO_URI:
