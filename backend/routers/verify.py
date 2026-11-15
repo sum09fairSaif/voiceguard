@@ -22,6 +22,7 @@ from rate_limit import count_client_request, count_request
 from schemas import ContentScore, VerifyResponse
 from security import get_current_user_id
 from transcription import AudioNotUnderstood, Transcriber, TranscriptionUnavailable, get_transcriber
+from transcription_budget import ensure_budget_left, spend_transcription
 from voice_attempts import ensure_not_locked, record_outcome
 from voiceprints import load_voiceprint
 
@@ -57,6 +58,10 @@ def verify(
     if voiceprint is not None and embed is None:
         raise IdentityUnavailable("EMBEDDING_SERVICE_URL or EMBEDDING_SERVICE_TOKEN is not set.")
 
+    # Before the passage is used up, so a spent budget doesn't cost the
+    # user their passage.
+    ensure_budget_left(rate_limits)
+
     # Use up the attempt before transcribing, so a passage can never be
     # checked twice, even if transcription fails part-way.
     passage = use_challenge(challenges, attempt_id, user_id)
@@ -66,6 +71,7 @@ def verify(
             detail="This passage has expired or was already used. Please get a new one.",
         )
 
+    spend_transcription(rate_limits)
     transcript = _transcribe_and_log(transcribe, recording, extension, user_id, attempt_id)
     content = check_content(passage, transcript)
     identity = liveness = None

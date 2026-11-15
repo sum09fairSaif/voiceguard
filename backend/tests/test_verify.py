@@ -688,3 +688,31 @@ def test_rejections_are_logged_with_what_is_left(client, challenges, transcriber
         check(client, challenges, transcriber, embedder, voice=OTHER_VOICE)
 
     assert any(f"attempts_left={MAX - 1}" in r.getMessage() for r in caplog.records)
+
+
+# --- Daily speech-to-text budget ---------------------------------------------
+
+
+def test_a_spent_budget_refuses_before_the_paid_call(client, transcriber, attempt, challenges, monkeypatch):
+    monkeypatch.setattr(config, "TRANSCRIPTION_DAILY_BUDGET", 1)
+    transcriber.heard = attempt["passage"]
+    assert submit(client, attempt["id"]).status_code == 200
+    second = create_challenge(challenges, USER_ID)
+
+    response = submit(client, str(second["_id"]))
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "Voice checks are busy right now. Please try again later."
+    assert 0 < int(response.headers["Retry-After"]) <= 24 * 3600
+    assert len(transcriber.calls) == 1
+    # The user keeps their passage for when the budget is back.
+    assert is_unused(challenges, str(second["_id"]))
+
+
+def test_requests_that_fail_before_the_paid_call_dont_use_the_budget(client, transcriber, attempt, monkeypatch):
+    monkeypatch.setattr(config, "TRANSCRIPTION_DAILY_BUDGET", 1)
+    # An unknown passage is refused before any paid call.
+    assert submit(client, str(ObjectId())).status_code == 400
+
+    transcriber.heard = attempt["passage"]
+    assert submit(client, attempt["id"]).status_code == 200
