@@ -28,6 +28,19 @@ ALLOWED_ORIGINS = [
 # cookie, so CORS is a second line of defence here, not the only one.
 ALLOWED_ORIGIN_REGEX = os.getenv("ALLOWED_ORIGIN_REGEX", r"https://voiceguard-[a-z0-9-]+-voice-guard2\.vercel\.app") or None
 
+# Where the client's address comes from, for per-client limits (see
+# client_address.py): "cf-connecting-ip" (set by Cloudflare, in front of
+# Render), "x-forwarded-for-last" (the entry our last proxy added) or "peer"
+# (the direct connection; local development). Confirm live after changing.
+def client_ip_source(value: str) -> str:
+    source = value.strip().lower()
+    if source not in ("cf-connecting-ip", "x-forwarded-for-last", "peer"):
+        raise RuntimeError("CLIENT_IP_SOURCE must be cf-connecting-ip, x-forwarded-for-last or peer.")
+    return source
+
+
+CLIENT_IP_SOURCE = client_ip_source(os.getenv("CLIENT_IP_SOURCE", "cf-connecting-ip"))
+
 JWT_SECRET = os.getenv("JWT_SECRET", "")
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRE_MINUTES = int(os.getenv("JWT_EXPIRE_MINUTES", "60"))
