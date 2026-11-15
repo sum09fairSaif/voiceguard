@@ -31,7 +31,7 @@ def signup(
     user_id = ObjectId()
     # Make the token before saving, so a config problem never leaves
     # behind an account the user can't sign up for again.
-    token = create_access_token(str(user_id))
+    token = create_access_token(str(user_id), source="signup")
 
     user = {
         "_id": user_id,
@@ -84,7 +84,7 @@ def login(
             detail="The email or password is incorrect.",
         )
 
-    token = create_access_token(str(user["_id"]))
+    token = create_access_token(str(user["_id"]), source="login")
     clear_failures(login_failures, email)
     logger.info("login user=%s", user["_id"])
     return LoginResponse(user=_public(user), access_token=token)

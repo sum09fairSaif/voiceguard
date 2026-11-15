@@ -33,6 +33,11 @@ JWT_ALGORITHM = "HS256"
 JWT_EXPIRE_MINUTES = int(os.getenv("JWT_EXPIRE_MINUTES", "60"))
 if JWT_EXPIRE_MINUTES <= 0:
     raise RuntimeError("JWT_EXPIRE_MINUTES must be more than 0.")
+# A voice-verified token (password and an approved voice check) is the only
+# one that opens the account, so it's kept short.
+VERIFIED_TOKEN_MINUTES = int(os.getenv("VERIFIED_TOKEN_MINUTES", "15"))
+if VERIFIED_TOKEN_MINUTES <= 0:
+    raise RuntimeError("VERIFIED_TOKEN_MINUTES must be more than 0.")
 
 # Sign-in lockout: this many wrong passwords for one email within the
 # window locks that email out for the lockout time.
