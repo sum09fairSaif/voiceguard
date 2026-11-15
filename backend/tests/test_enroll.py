@@ -487,3 +487,27 @@ def test_a_missing_account_may_not_enroll(client, users, embedder):
     users.delete_many({})
 
     assert send(client).status_code == 403
+
+
+def test_refused_requests_dont_use_up_the_owners_allowance(client, embedder, monkeypatch, no_grace):
+    # Someone with only the password keeps trying; the owner's signup session
+    # can still enroll.
+    monkeypatch.setattr(config, "ENROLL_RATE_LIMIT", 1)
+    for _ in range(3):
+        assert send(client, headers=from_login()).status_code == 403
+
+    assert send(client).status_code == 200
+
+
+def test_new_signups_are_flagged_and_get_no_grace(client, users, embedder, monkeypatch):
+    monkeypatch.setattr(config, "ENROLL_GRACE_UNTIL", datetime.now(UTC) + timedelta(hours=6))
+    client.post(
+        "/api/auth/signup",
+        json={"full_name": "New Person", "email": "new@example.com", "password": "correct-horse-battery"},
+    )
+    new_user = users.find_one({"email": "new@example.com"})
+    assert new_user["signup_session_enrollment"] is True
+
+    response = send(client, headers=from_login(str(new_user["_id"])))
+
+    assert response.status_code == 403

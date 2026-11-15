@@ -75,3 +75,18 @@ def test_fails_closed_without_an_account():
 def test_the_cut_off_setting(value, expected):
     assert config.grace_until(value) == expected
 
+
+
+def test_accounts_made_under_the_rule_get_no_grace():
+    # Made before the cut-off but after this rule shipped: flagged at signup.
+    flagged = {"created_at": CUT_OFF - timedelta(hours=3), "signup_session_enrollment": True}
+
+    assert may_enroll(LOGIN, flagged, CUT_OFF - timedelta(hours=2)) is False
+    # Its own signup session still works.
+    assert may_enroll(SIGNUP, flagged, CUT_OFF - timedelta(hours=3) + timedelta(minutes=5)) is True
+
+
+def test_a_creation_time_in_the_future_never_opens_the_window():
+    created = AFTER + timedelta(minutes=10)
+
+    assert may_enroll(SIGNUP, account(created), AFTER) is False

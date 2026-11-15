@@ -5,7 +5,7 @@ from the person who created the account. Until email verification and account
 recovery exist, the only safe moment is the signup session: a token from
 signup, shortly after the account was created. A one-off grace period lets
 accounts made before this rule (that never enrolled) enroll after signing in,
-until a cut-off.
+until a cut-off. Accounts made since are flagged at signup and never get it.
 """
 
 from datetime import UTC, datetime, timedelta
@@ -26,9 +26,14 @@ def may_enroll(claims: dict, user: dict | None, now: datetime | None = None) -> 
     now = now or datetime.now(UTC)
     created = _utc(user["created_at"])
 
-    in_signup_session = claims.get("src") == "signup" and now - created <= timedelta(
+    age = now - created
+    # A creation time in the future (clock trouble) never opens the window.
+    in_signup_session = claims.get("src") == "signup" and timedelta(0) <= age <= timedelta(
         minutes=config.ENROLL_WINDOW_MINUTES
     )
+    # The grace period is only for accounts made before this rule existed:
+    # every account made since carries the flag set at signup.
     grace = config.ENROLL_GRACE_UNTIL
-    in_grace_period = grace is not None and created < grace and now < grace
+    legacy = not user.get("signup_session_enrollment")
+    in_grace_period = legacy and grace is not None and created < grace and now < grace
     return in_signup_session or in_grace_period

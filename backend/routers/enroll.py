@@ -78,17 +78,17 @@ def add_enrollment_sample(
     enrollments: Collection = Depends(get_enrollments_collection),
     embed: Embedder | None = Depends(get_embedder),
 ) -> EnrollmentStatus:
-    count_request(rate_limits, "enroll", user_id, config.ENROLL_RATE_LIMIT, config.RATE_LIMIT_WINDOW_SECONDS)
-
     # Replacing a voiceprint needs more than a password: otherwise anyone
     # who learned the password could swap in their own voice and pass the
     # voice check from then on.
     if has_voiceprint(voiceprints, user_id):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Your voice is already enrolled.")
     # Setting the voice needs more than a password, too: only the signup
-    # session (or the one-off grace period) may do it.
+    # session (or the one-off grace period) may do it. Checked before the
+    # count, so refused requests can't use up the owner's allowance.
     if not _may_enroll(users, claims, user_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=NOT_NOW)
+    count_request(rate_limits, "enroll", user_id, config.ENROLL_RATE_LIMIT, config.RATE_LIMIT_WINDOW_SECONDS)
 
     recording, extension = read_recording(audio)
     # Checked before the model-service call, so a misconfigured server
@@ -142,7 +142,8 @@ def start_over(
 
 
 def _may_enroll(users: Collection, claims: dict, user_id: str) -> bool:
-    user = users.find_one({"_id": ObjectId(user_id)}, {"created_at": 1}) if ObjectId.is_valid(user_id) else None
+    fields = {"created_at": 1, "signup_session_enrollment": 1}
+    user = users.find_one({"_id": ObjectId(user_id)}, fields) if ObjectId.is_valid(user_id) else None
     return may_enroll(claims, user)
 
 
