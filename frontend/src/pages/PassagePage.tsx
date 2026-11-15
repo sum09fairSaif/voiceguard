@@ -12,6 +12,7 @@ import { RecordButton } from "../components/RecordButton";
 import { StepProgress } from "../components/StepProgress";
 import { useChallenge } from "../hooks/useChallenge";
 import { useRecorder } from "../hooks/useRecorder";
+import { useStillShown } from "../hooks/useStillShown";
 import { formatCountdown } from "../utils/countdown";
 import { displayPassage } from "../utils/passage";
 import styles from "./PassagePage.module.css";
@@ -25,6 +26,7 @@ export function PassagePage() {
   const navigate = useNavigate();
   const { challenge, loading, error, secondsRemaining, expired, newPhrase } = useChallenge();
   const recorder = useRecorder();
+  const shown = useStillShown();
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
   const [needsNewPhrase, setNeedsNewPhrase] = useState(false);
@@ -52,9 +54,12 @@ export function PassagePage() {
     setSubmitError("");
     try {
       const result = await submitAttempt(recorder.recording, challenge.attempt_id);
+      // Left the screen meanwhile (e.g. signed out): don't bring a token back.
+      if (!shown.current) return;
       if (result.access_token) saveToken(result.access_token);
       navigate("/result", { state: { result } });
     } catch (err) {
+      if (!shown.current) return;
       if (isAxiosError(err) && err.response?.status === 401) {
         clearToken();
         navigate("/signin", { replace: true });

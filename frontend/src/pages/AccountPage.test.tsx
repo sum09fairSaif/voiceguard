@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { logOut } from "../api/auth";
 import { getMe, type Me } from "../api/me";
 import { getToken, saveToken } from "../api/session";
 import { apiError, networkError } from "../test/apiError";
@@ -10,6 +11,10 @@ import { AccountPage } from "./AccountPage";
 // Never talk to a real server in tests.
 vi.mock("../api/me", () => ({ getMe: vi.fn() }));
 const mockGetMe = vi.mocked(getMe);
+vi.mock("../api/auth", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../api/auth")>()),
+  logOut: vi.fn().mockResolvedValue(undefined),
+}));
 
 const ME: Me = {
   full_name: "Sam Doe",
@@ -96,6 +101,7 @@ describe("Account page", () => {
     await userEvent.setup().click(screen.getByRole("button", { name: "Sign out" }));
 
     expect(await screen.findByText("sign-in screen")).toBeInTheDocument();
+    expect(vi.mocked(logOut)).toHaveBeenCalledTimes(1);
     expect(getToken()).toBeNull();
   });
 });

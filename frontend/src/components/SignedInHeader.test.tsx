@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { logOut } from "../api/auth";
 import { getToken, saveToken } from "../api/session";
@@ -13,12 +13,17 @@ vi.mock("../api/auth", async (importOriginal) => ({
 }));
 const mockLogOut = vi.mocked(logOut);
 
+function SignInStand() {
+  const state = useLocation().state as { serverSignOutFailed?: boolean } | null;
+  return <p>sign-in screen{state?.serverSignOutFailed ? " (server sign-out failed)" : ""}</p>;
+}
+
 function renderHeader() {
   render(
     <MemoryRouter initialEntries={["/verify"]}>
       <Routes>
         <Route path="/verify" element={<SignedInHeader />} />
-        <Route path="/signin" element={<p>sign-in screen</p>} />
+        <Route path="/signin" element={<SignInStand />} />
       </Routes>
     </MemoryRouter>,
   );
@@ -47,7 +52,8 @@ describe("Sign out", () => {
 
     await userEvent.setup().click(screen.getByRole("button", { name: "Sign out" }));
 
-    expect(await screen.findByText("sign-in screen")).toBeInTheDocument();
+    // Signed out here, and sign-in is told the server didn't confirm it.
+    expect(await screen.findByText("sign-in screen (server sign-out failed)")).toBeInTheDocument();
     expect(getToken()).toBeNull();
   });
 
