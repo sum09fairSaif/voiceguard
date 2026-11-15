@@ -1,6 +1,7 @@
 import logging
 from datetime import UTC, datetime, timedelta
 
+import jwt
 import pytest
 from bson import ObjectId
 from pymongo.errors import ServerSelectionTimeoutError
@@ -128,6 +129,8 @@ def test_reading_the_passage_without_a_voiceprint_is_not_approved(client, challe
         "liveness": "not_checked",
         "attempts_left": config.VOICE_MAX_FAILURES,
         "fallback_required": False,
+        # Not approved, so no voice-verified token.
+        "access_token": None,
     }
     assert not is_unused(challenges, attempt["id"])
 
@@ -384,7 +387,10 @@ def test_enrolled_user_reading_live_in_their_own_voice_is_approved(client, trans
     response = submit(client, attempt["id"])
 
     assert response.status_code == 200
-    assert response.json() == {
+    body = response.json()
+    # Approved: a voice-verified token comes back (checked in detail below).
+    assert body.pop("access_token")
+    assert body == {
         "decision": "approved",
         "reason": "The passage, the voice and liveness all checked out.",
         "content": {"passed": True, "score": 1.0, "matched": 6, "total": 6},
@@ -416,7 +422,8 @@ def test_identity_and_liveness_scores_are_not_sent_back(client, transcriber, emb
     assert body["identity"] == "passed"
     assert body["liveness"] == "passed"
     assert set(body) == {
-        "decision", "reason", "content", "identity", "liveness", "attempts_left", "fallback_required"
+        "decision", "reason", "content", "identity", "liveness", "attempts_left", "fallback_required",
+        "access_token",
     }
 
 
@@ -688,3 +695,40 @@ def test_rejections_are_logged_with_what_is_left(client, challenges, transcriber
         check(client, challenges, transcriber, embedder, voice=OTHER_VOICE)
 
     assert any(f"attempts_left={MAX - 1}" in r.getMessage() for r in caplog.records)
+
+
+# --- The voice-verified token -------------------------------------------------
+
+
+def token_claims(token):
+    return jwt.decode(token, config.JWT_SECRET, algorithms=[config.JWT_ALGORITHM])
+
+
+def test_an_approved_check_returns_a_voice_verified_token(client, transcriber, embedder, enrolled, attempt):
+    transcriber.heard = attempt["passage"]
+
+    token = submit(client, attempt["id"]).json()["access_token"]
+
+    claims = token_claims(token)
+    assert claims["sub"] == USER_ID
+    assert claims["scope"] == "verified"
+    assert claims["amr"] == ["pwd", "voice"]
+
+
+@pytest.mark.parametrize(
+    "setup",
+    ["wrong_words", "other_voice", "not_live", "not_enrolled"],
+)
+def test_anything_but_approval_returns_no_token(client, transcriber, embedder, voiceprints, attempt, setup):
+    transcriber.heard = "the quick brown fox jumps over" if setup == "wrong_words" else attempt["passage"]
+    if setup != "not_enrolled":
+        save_voiceprint(voiceprints, USER_ID, USERS_VOICE)
+    if setup == "other_voice":
+        embedder.voice = OTHER_VOICE
+    if setup == "not_live":
+        embedder.liveness = config.LIVENESS_THRESHOLD - 1.0
+
+    body = submit(client, attempt["id"]).json()
+
+    assert body["decision"] != "approved"
+    assert body["access_token"] is None
