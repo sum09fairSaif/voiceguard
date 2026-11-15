@@ -29,6 +29,14 @@ ALLOWED_ORIGINS = [
 # cookie, so CORS is a second line of defence here, not the only one.
 ALLOWED_ORIGIN_REGEX = os.getenv("ALLOWED_ORIGIN_REGEX", r"https://voiceguard-[a-z0-9-]+-voice-guard2\.vercel\.app") or None
 
+# Security events (audit.py): kept this many days in our database, and also
+# sent to PostHog when a project key is set (nothing is sent without one).
+AUDIT_RETENTION_DAYS = int(os.getenv("AUDIT_RETENTION_DAYS", "30"))
+if AUDIT_RETENTION_DAYS <= 0:
+    raise RuntimeError("AUDIT_RETENTION_DAYS must be more than 0.")
+POSTHOG_API_KEY = os.getenv("POSTHOG_API_KEY", "").strip()
+POSTHOG_HOST = os.getenv("POSTHOG_HOST", "https://us.i.posthog.com").strip()
+
 JWT_SECRET = os.getenv("JWT_SECRET", "")
 JWT_ALGORITHM = "HS256"
 # Who issues our tokens and who they're for: a token minted for anything

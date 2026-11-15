@@ -8,6 +8,7 @@ from pymongo.collection import Collection
 from pymongo.errors import DuplicateKeyError
 
 import config
+from audit import track
 from db import get_login_failures_collection, get_rate_limits_collection, get_users_collection
 from login_lockout import clear_failures, record_failure, seconds_locked
 from rate_limit import count_request
@@ -52,6 +53,7 @@ def signup(
             detail="An account with this email already exists.",
         )
 
+    track("signup", str(user_id))
     return SignupResponse(user=_public(user), access_token=token)
 
 
@@ -66,6 +68,7 @@ def login(
     # it's locked.
     locked = seconds_locked(login_failures, email)
     if locked:
+        track("login_failed", reason="locked")
         raise _locked_out(locked)
 
     user = users.find_one({"email": email})
@@ -79,9 +82,13 @@ def login(
             config.LOGIN_FAILURE_WINDOW_SECONDS,
             config.LOGIN_LOCKOUT_SECONDS,
         )
+        # Our own record may say which it was; the answer never does.
+        why = "wrong_password" if user else "unknown_account"
         if locked:
             logger.info("login_locked user=%s", user["_id"] if user else "-")
+            track("login_locked", str(user["_id"]) if user else None, reason=why)
             raise _locked_out(locked)
+        track("login_failed", str(user["_id"]) if user else None, reason=why)
         # Same words whether the email or the password was wrong.
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -91,6 +98,7 @@ def login(
     token = create_access_token(str(user["_id"]), source="login")
     clear_failures(login_failures, email)
     logger.info("login user=%s", user["_id"])
+    track("login_succeeded", str(user["_id"]))
     return LoginResponse(user=_public(user), access_token=token)
 
 
@@ -130,3 +138,4 @@ def logout(
     voice-verified one stop working at once."""
     revoke(revoked(), claims["sid"])
     logger.info("logout user=%s", claims["sub"])
+    track("logout", claims["sub"])

@@ -17,6 +17,15 @@ def get_revoked_sessions_collection() -> Collection:
 
 
 @lru_cache
+def get_audit_events_collection() -> Collection:
+    # Security events (audit.py). MongoDB deletes each after
+    # AUDIT_RETENTION_DAYS. Made once per process: written on many requests.
+    events = get_client()[config.MONGO_DB_NAME]["audit_events"]
+    events.create_index("expires_at", expireAfterSeconds=0)
+    return events
+
+
+@lru_cache
 def get_client() -> MongoClient:
     if not config.MONGO_URI:
         raise config.NotConfigured("MONGO_URI is not set. Add it to your .env file.")
