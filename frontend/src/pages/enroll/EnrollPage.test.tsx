@@ -216,6 +216,20 @@ describe("EnrollPage: recording samples", () => {
     expect(await screen.findByRole("heading", { name: "Meet your new key." })).toBeInTheDocument();
   });
 
+  it("switches to the explanation when the window ends while recording", async () => {
+    mockGet.mockResolvedValueOnce({ ...status(1), can_enroll: true }).mockResolvedValueOnce({
+      ...status(1, "new phrase"),
+      can_enroll: false,
+    });
+    renderPage();
+    const user = userEvent.setup();
+    await screen.findByText("“Amber lantern river 1”");
+
+    await user.click(screen.getByRole("button", { name: /new phrase/i }));
+
+    expect(await screen.findByRole("heading", { name: "Voice ID can’t be set up here." })).toBeInTheDocument();
+  });
+
   it("treats an account that's already enrolled as done", async () => {
     mockGet.mockResolvedValue(status(2));
     mockAdd.mockRejectedValue(apiError(409));

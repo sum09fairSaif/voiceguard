@@ -55,6 +55,11 @@ export function EnrollRecord({ enrollment, onChange, onEnrolled, onSignedOut, on
         onEnrolled();
         return;
       }
+      // The window can end while this screen is open: say so straight away.
+      if (next.can_enroll === false) {
+        onClosed();
+        return;
+      }
       if (kind === "sending") setSaved(`Sample ${next.samples_accepted} saved.`);
       recorder.reset();
       onChange(next);
