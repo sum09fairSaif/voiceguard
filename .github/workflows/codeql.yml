@@ -14,6 +14,9 @@ on:
 permissions:
   contents: read
 
+# Actions are pinned to a full commit, because this job can write security
+# results; the comment says which release that commit is. Only branches in
+# this repo are scanned with results uploaded (the team doesn't use forks).
 jobs:
   analyze:
     runs-on: ubuntu-latest
@@ -27,12 +30,12 @@ jobs:
       matrix:
         language: [python, javascript-typescript]
     steps:
-      - uses: actions/checkout@v7
-      - uses: github/codeql-action/init@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
         with:
           languages: ${{ matrix.language }}
           # Python and TypeScript need no build step.
           build-mode: none
-      - uses: github/codeql-action/analyze@v4
+      - uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
         with:
           category: /language:${{ matrix.language }}
