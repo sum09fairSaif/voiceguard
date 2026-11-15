@@ -709,6 +709,19 @@ def test_a_spent_budget_refuses_before_the_paid_call(client, transcriber, attemp
     assert is_unused(challenges, str(second["_id"]))
 
 
+def test_a_failed_passage_lookup_gives_the_budget_slot_back(client, transcriber, attempt, rate_limits, monkeypatch):
+    class Broken:
+        def find_one_and_update(self, *args, **kwargs):
+            raise ServerSelectionTimeoutError("database unreachable")
+
+    monkeypatch.setattr(config, "TRANSCRIPTION_DAILY_BUDGET", 1)
+    app.dependency_overrides[get_challenges_collection] = lambda: Broken()
+
+    assert submit(client, attempt["id"]).status_code == 503
+    budget = rate_limits.find_one({"_id": {"$regex": "^transcription-budget:"}})
+    assert budget["count"] == 0
+
+
 def test_requests_that_fail_before_the_paid_call_dont_use_the_budget(client, transcriber, attempt, monkeypatch):
     monkeypatch.setattr(config, "TRANSCRIPTION_DAILY_BUDGET", 1)
     # An unknown passage is refused before any paid call.

@@ -1,14 +1,14 @@
 """A daily budget for speech-to-text, which is paid for from prepaid credit.
 
-Checked before a passage is used up, so a refused check never costs the user
-their passage, and counted only once a real paid call is about to be made, so
-requests that fail earlier (bad passage, bad audio) don't use the budget.
-Requests arriving at the same moment can overshoot it by a few; that's fine
-for capping spend.
+A slot is reserved in one database step before a passage is used up, so
+requests arriving together can't all slip past the budget, and a refused
+check never costs the user their passage. If the request then fails before
+the paid call (e.g. the passage was already used), the slot is given back.
 """
 
 from datetime import UTC, datetime, timedelta
 
+from pymongo import ReturnDocument
 from pymongo.collection import Collection
 
 import config
@@ -27,21 +27,23 @@ def _today(now: datetime) -> tuple[str, datetime]:
     return f"transcription-budget:{start.date().isoformat()}", start + timedelta(days=1)
 
 
-def ensure_budget_left(rate_limits: Collection, now: datetime | None = None) -> None:
-    """Raise BudgetUsedUp if today's budget is already spent."""
+def reserve_transcription(rate_limits: Collection, now: datetime | None = None) -> None:
+    """Take one slot of today's budget, or raise BudgetUsedUp if none is left."""
     now = now or datetime.now(UTC)
     key, tomorrow = _today(now)
-    record = rate_limits.find_one({"_id": key})
-    if record and record["count"] >= config.TRANSCRIPTION_DAILY_BUDGET:
-        raise BudgetUsedUp(retry_after=max(1, int((tomorrow - now).total_seconds())))
-
-
-def spend_transcription(rate_limits: Collection, now: datetime | None = None) -> None:
-    """Count one paid speech-to-text call against today's budget."""
-    now = now or datetime.now(UTC)
-    key, tomorrow = _today(now)
-    rate_limits.update_one(
+    record = rate_limits.find_one_and_update(
         {"_id": key},
         {"$inc": {"count": 1}, "$setOnInsert": {"expires_at": tomorrow + timedelta(days=1)}},
         upsert=True,
+        return_document=ReturnDocument.AFTER,
     )
+    if record["count"] > config.TRANSCRIPTION_DAILY_BUDGET:
+        # Over by this one: give it back, so the count stays at the budget.
+        rate_limits.update_one({"_id": key}, {"$inc": {"count": -1}})
+        raise BudgetUsedUp(retry_after=max(1, int((tomorrow - now).total_seconds())))
+
+
+def release_transcription(rate_limits: Collection, now: datetime | None = None) -> None:
+    """Give back a reserved slot when the request fails before the paid call."""
+    key, _ = _today(now or datetime.now(UTC))
+    rate_limits.update_one({"_id": key, "count": {"$gt": 0}}, {"$inc": {"count": -1}})
