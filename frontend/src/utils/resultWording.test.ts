@@ -15,10 +15,18 @@ function result(overrides: Partial<VerifyResult> = {}): VerifyResult {
 
 describe("describeResult", () => {
   it("confirms access for an approved check", () => {
-    const view = describeResult(result({ decision: "approved", identity: "passed", liveness: "passed" }));
+    const view = describeResult(
+      result({ decision: "approved", identity: "passed", liveness: "passed", access_token: "voice-verified" }),
+    );
 
     expect(view).toMatchObject({ tone: "success", title: "You’re in. Securely.", action: "home", actionLabel: "Continue to home" });
     expect(view.checks.map((check) => check.state)).toEqual(["passed", "passed", "passed"]);
+  });
+
+  it("finishes as before when an approval comes without a token (older backend)", () => {
+    const view = describeResult(result({ decision: "approved", identity: "passed", liveness: "passed" }));
+
+    expect(view).toMatchObject({ title: "You’re in. Securely.", action: "done", actionLabel: "Done" });
   });
 
   it("says the words were wrong when the phrase didn't match", () => {

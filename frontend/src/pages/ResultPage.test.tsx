@@ -84,7 +84,9 @@ describe("Result page", () => {
 
   it("continues to the account after an approved check, keeping the session", async () => {
     saveToken("voice-verified");
-    renderResult({ result: result({ decision: "approved", identity: "passed", liveness: "passed" }) });
+    renderResult({
+      result: result({ decision: "approved", identity: "passed", liveness: "passed", access_token: "voice-verified" }),
+    });
 
     await userEvent.setup().click(screen.getByRole("button", { name: /continue to home/i }));
 
