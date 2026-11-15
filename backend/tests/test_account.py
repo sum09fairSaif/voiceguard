@@ -130,3 +130,15 @@ def test_sign_in_to_account_end_to_end(client, users, challenges, voiceprints, m
 
     second = sign_in().json()
     assert second["previous_sign_in_at"] is not None
+
+
+def test_dates_say_they_are_utc(client, users):
+    # MongoDB returns dates without a time zone; the browser must not read
+    # them as local time.
+    user_id = make_account(users, previous_verified_at=datetime(2026, 11, 13, 18, 30))
+    users.update_one({"_id": ObjectId(user_id)}, {"$set": {"created_at": datetime(2026, 11, 1, 9, 0)}})
+
+    body = client.get(ME_URL, headers=bearer(create_verified_token(user_id))).json()
+
+    assert body["created_at"] == "2026-11-01T09:00:00Z"
+    assert body["previous_sign_in_at"] == "2026-11-13T18:30:00Z"

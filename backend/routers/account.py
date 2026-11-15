@@ -1,3 +1,5 @@
+from datetime import UTC, datetime
+
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, status
 from pymongo.collection import Collection
@@ -7,6 +9,14 @@ from schemas import MeResponse
 from security import get_verified_user_id
 
 router = APIRouter(prefix="/api", tags=["account"])
+
+
+def _utc(moment: datetime | None) -> datetime | None:
+    # MongoDB hands dates back without a time zone; they are UTC. Without
+    # one, a browser would read them as local time and show the wrong hour.
+    if moment is None or moment.tzinfo:
+        return moment
+    return moment.replace(tzinfo=UTC)
 
 
 @router.get("/me", response_model=MeResponse)
@@ -29,7 +39,7 @@ def me(
     return MeResponse(
         full_name=user["full_name"],
         email=user["email"],
-        created_at=user["created_at"],
-        enrolled_at=voiceprint["created_at"] if voiceprint else None,
-        previous_sign_in_at=user.get("previous_verified_at"),
+        created_at=_utc(user["created_at"]),
+        enrolled_at=_utc(voiceprint["created_at"]) if voiceprint else None,
+        previous_sign_in_at=_utc(user.get("previous_verified_at")),
     )
