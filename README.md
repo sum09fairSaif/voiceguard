@@ -46,10 +46,10 @@ as soon as the voiceprint is built or the checks have run.
 
 ## Key features
 
-- **Password, then voice:** the intended flow makes voice a second factor on
-  top of a password, not a replacement for it. This isn't enforced yet:
-  sign-in issues a token after the password alone, and nothing requires a
-  passed voice check until a voice check can be approved (#17 and #18).
+- **Password, then voice:** voice is a second factor on top of a password,
+  not a replacement for it. A password alone gives a limited token that can
+  only start the voice check; only an approved check (words, voice and
+  liveness) gives the short-lived token that opens the account (#153).
 - **Single-use passages:** each passage is a random sentence (about 508
   million combinations of the six words that are checked), can be used once,
   and expires after two minutes, so an old recording can't be replayed.
