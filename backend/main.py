@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 from pymongo.errors import PyMongoError
 
 import config
+from body_limit import BodyLimitMiddleware
 from email_sender import EmailUnavailable
 from identity_check import IdentityUnavailable
 from rate_limit import RateLimited
@@ -22,6 +23,10 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 logger = logging.getLogger("voiceguard")
 
 app = FastAPI(title="VoiceGuard API", version="0.1.0")
+
+# Refuses oversized request bodies before anything reads them. Added before
+# CORS so CORS wraps it: the frontend can read the 413 like any other error.
+app.add_middleware(BodyLimitMiddleware)
 
 # CORS lets the frontend (a different address) call this API from the
 # browser. Only our own frontends are allowed (see config.ALLOWED_ORIGINS).
