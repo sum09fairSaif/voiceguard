@@ -1,4 +1,6 @@
+import { isAxiosError } from "axios";
 import { api } from "./client";
+import { describeApiError } from "./errors";
 
 export type VerifyResult = {
   decision: "approved" | "rejected" | "incomplete";
@@ -8,6 +10,11 @@ export type VerifyResult = {
   // Only "not_checked" until the liveness check (#17) exists; the other
   // values are handled already so the result screen needs no change then.
   liveness: "passed" | "failed" | "not_checked";
+  // Rejections left before voice checks pause. Back to the maximum after an
+  // approval; an "incomplete" doesn't lower it.
+  attempts_left: number;
+  // True when this rejection used the last attempt, so checks are paused now.
+  fallback_required: boolean;
 };
 
 // What the voice check's error statuses mean for the person on screen. Used as
@@ -18,6 +25,33 @@ export const VERIFY_MESSAGES: Partial<Record<number, string>> = {
   415: "Your browser recorded audio in a format we can't use. Please try Chrome or Safari.",
   422: "We couldn't make out the recording. Get a new phrase and record again.",
 };
+
+// After 3 rejections the server pauses voice checks for this account (423 on
+// both a new passage and a submit) and says how long in Retry-After. This is
+// not the sign-in lockout (also 423, handled in auth.ts): the voice screens
+// word it themselves, like every other message.
+export function pausedMessage(retryAfterSeconds: number | undefined): string {
+  if (!retryAfterSeconds || retryAfterSeconds <= 0) {
+    return "Voice checks are paused after too many failed attempts. Please try again later.";
+  }
+  const minutes = Math.ceil(retryAfterSeconds / 60);
+  return `Voice checks are paused after too many failed attempts. Please try again in ${minutes} minute${minutes === 1 ? "" : "s"}.`;
+}
+
+export function isVoiceCheckPaused(error: unknown): boolean {
+  return isAxiosError(error) && error.response?.status === 423;
+}
+
+// The message for any error from a passage request or a submit.
+export function describeVoiceCheckError(
+  error: unknown,
+  overrides: Partial<Record<number, string>> = VERIFY_MESSAGES,
+): string {
+  if (isAxiosError(error) && isVoiceCheckPaused(error)) {
+    return pausedMessage(Number(error.response?.headers["retry-after"]));
+  }
+  return describeApiError(error, overrides);
+}
 
 // Sends the recording with the attempt it answers. Each attempt can be checked
 // once: the server uses it up before transcribing, so any retry needs a new

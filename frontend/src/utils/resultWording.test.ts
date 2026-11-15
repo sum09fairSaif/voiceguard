@@ -9,6 +9,8 @@ function result(overrides: Partial<VerifyResult> = {}): VerifyResult {
     content: { passed: true, score: 1, matched: 6, total: 6 },
     identity: "not_enrolled",
     liveness: "not_checked",
+    attempts_left: 3,
+    fallback_required: false,
     ...overrides,
   };
 }
