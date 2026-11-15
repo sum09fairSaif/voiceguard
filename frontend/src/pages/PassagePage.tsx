@@ -5,7 +5,7 @@ import { describeApiError } from "../api/errors";
 import { clearToken, saveToken } from "../api/session";
 import { VERIFY_MESSAGES, submitAttempt } from "../api/verify";
 import { Button } from "../components/Button";
-import { Logo } from "../components/Logo";
+import { SignedInHeader } from "../components/SignedInHeader";
 import { Page } from "../components/Page";
 import { PageHeading } from "../components/PageHeading";
 import { RecordButton } from "../components/RecordButton";
@@ -72,7 +72,7 @@ export function PassagePage() {
 
   return (
     <Page>
-      <Logo />
+      <SignedInHeader />
       <div className={styles.progress}>
         <StepProgress current={2} total={3} />
       </div>

@@ -95,7 +95,7 @@ describe("Account page", () => {
 
     await userEvent.setup().click(screen.getByRole("button", { name: "Sign out" }));
 
-    expect(screen.getByText("sign-in screen")).toBeInTheDocument();
+    expect(await screen.findByText("sign-in screen")).toBeInTheDocument();
     expect(getToken()).toBeNull();
   });
 });

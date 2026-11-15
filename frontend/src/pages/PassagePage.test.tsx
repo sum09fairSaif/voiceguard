@@ -56,6 +56,13 @@ describe("Passage screen", () => {
     expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "2");
   });
 
+  it("offers sign-out", async () => {
+    mockRequest.mockResolvedValue(challenge("quilt tiger ocean"));
+    renderPage();
+
+    expect(await screen.findByRole("button", { name: "Sign out" })).toBeInTheDocument();
+  });
+
   it("swaps in a new passage on request", async () => {
     mockRequest
       .mockResolvedValueOnce(challenge("quilt tiger ocean"))

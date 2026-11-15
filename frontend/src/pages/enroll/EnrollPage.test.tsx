@@ -190,7 +190,7 @@ describe("EnrollPage: recording samples", () => {
 
     await userEvent.setup().click(await screen.findByRole("button", { name: "Sign out" }));
 
-    expect(screen.getByText("sign-in screen")).toBeInTheDocument();
+    expect(await screen.findByText("sign-in screen")).toBeInTheDocument();
     expect(getToken()).toBeNull();
   });
 
