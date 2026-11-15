@@ -28,7 +28,12 @@ From the `backend/` folder:
 6. Check it: open http://localhost:8000/health
    You should see: {"status":"ok","service":"voiceguard-api"}
 
-Interactive API docs are at http://localhost:8000/docs
+Interactive API docs are at http://localhost:8000/docs once `DOCS_ENABLED=true`
+is set in `.env` (they're off by default, and must stay off on the live server).
+
+Request bodies are capped before anything reads them (`body_limit.py`): 16 KB
+for JSON routes, and the 1 MB recording limit plus 64 KB of form overhead for
+`/api/verify` and `/api/enroll/samples`. Anything bigger gets a 413.
 
 ## Tests and lint
 
@@ -43,6 +48,8 @@ ruff check .
 ## Code layout
 
 - `main.py`: creates the app, CORS, and turns errors into clear responses
+- `body_limit.py` and `security_headers.py`: refuse oversized requests and add
+  security headers to every response
 - `routers/`: the endpoints (`auth`, `challenge`, `verify`, `enroll`)
 - `config.py`: every setting, read from the environment with defaults
 - `db.py`: MongoDB collections and their indexes

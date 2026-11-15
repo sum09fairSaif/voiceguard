@@ -5,7 +5,7 @@
 Voice-biometric multi-factor authentication with anti-spoofing and deepfake detection.
 
 - **Live app:** https://voiceguard-nu.vercel.app/
-- **Live API:** https://voiceguard-83cj.onrender.com/ (health check at [`/health`](https://voiceguard-83cj.onrender.com/health), interactive docs at [`/docs`](https://voiceguard-83cj.onrender.com/docs))
+- **Live API:** https://voiceguard-83cj.onrender.com/ (health check at [`/health`](https://voiceguard-83cj.onrender.com/health); the interactive docs are only on a local server, see [Backend](#2-backend))
 
 > The free hosting tiers sleep when idle, so the first request after a
 > while can take up to a minute.
@@ -148,7 +148,7 @@ curl -X POST $API/api/verify -H "Authorization: Bearer <access_token>" \
 | POST | `/api/enroll/samples` | Add one voice sample; the voiceprint is built after 3 good ones | Yes |
 | DELETE | `/api/enroll/samples` | Start enrollment over | Yes |
 
-Full request and response details are in the interactive docs at `/docs`.
+Full request and response details are in the interactive docs at `/docs` on a local server with `DOCS_ENABLED=true` (they're off on the live API).
 
 ## Tech stack
 
@@ -241,8 +241,8 @@ uvicorn main:app --reload --port 8000
 ```
 
 Open http://localhost:8000/health. You should see
-`{"status":"ok","service":"voiceguard-api"}`, and the interactive API docs
-are at http://localhost:8000/docs. More detail: [backend/README.md](backend/README.md).
+`{"status":"ok","service":"voiceguard-api"}`. For the interactive API docs at
+http://localhost:8000/docs, set `DOCS_ENABLED=true` in `.env` first. More detail: [backend/README.md](backend/README.md).
 
 ### 3. Model service (optional: only for enrollment and the identity check)
 
