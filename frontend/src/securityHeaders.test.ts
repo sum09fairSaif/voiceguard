@@ -12,14 +12,30 @@ const config = JSON.parse(readFileSync(resolve(__dirname, "../vercel.json"), "ut
 const everyPage = config.headers.find((rule) => rule.source === "/(.*)");
 const header = (key: string) => everyPage?.headers.find((h) => h.key === key)?.value ?? "";
 
+// Browsers enforce the first copy of a repeated directive, so a repeat could
+// quietly loosen the policy: fail on one rather than read past it.
 function directives(policy: string): Record<string, string[]> {
-  return Object.fromEntries(
-    policy
-      .split(";")
-      .map((part) => part.trim().split(/\s+/))
-      .filter((words) => words[0])
-      .map(([name, ...sources]) => [name, sources]),
-  );
+  const parsed: Record<string, string[]> = {};
+  for (const part of policy.split(";")) {
+    const [name, ...sources] = part.trim().split(/\s+/);
+    if (!name) continue;
+    if (name in parsed) throw new Error(`CSP directive repeated: ${name}`);
+    parsed[name] = sources;
+  }
+  return parsed;
+}
+
+// "microphone=(self), camera=()" → { microphone: "(self)", camera: "()" },
+// so a check can't be fooled by a look-alike name such as "x-camera".
+function features(policy: string): Record<string, string> {
+  const parsed: Record<string, string> = {};
+  for (const part of policy.split(",")) {
+    const [name, allowlist] = part.trim().split("=");
+    if (!name) continue;
+    if (name in parsed) throw new Error(`Permissions-Policy feature repeated: ${name}`);
+    parsed[name] = allowlist ?? "";
+  }
+  return parsed;
 }
 
 describe("security headers in vercel.json", () => {
@@ -34,11 +50,19 @@ describe("security headers in vercel.json", () => {
     expect(csp["script-src"]).toEqual(["'self'"]);
     expect(csp["style-src"]).toEqual(["'self'"]);
     expect(csp["img-src"]).toEqual(["'self'", "data:"]);
+    expect(csp["font-src"]).toEqual(["'self'"]);
+    expect(csp["media-src"]).toEqual(["'self'"]);
     expect(csp["connect-src"]).toEqual(["'self'", "https://voiceguard-83cj.onrender.com"]);
     expect(csp["object-src"]).toEqual(["'none'"]);
     expect(csp["base-uri"]).toEqual(["'self'"]);
     expect(csp["form-action"]).toEqual(["'self'"]);
     expect(csp["frame-ancestors"]).toEqual(["'none'"]);
+    expect(csp["upgrade-insecure-requests"]).toEqual([]);
+  });
+
+  it("rejects a repeated directive, which browsers would read the first copy of", () => {
+    expect(() => directives("script-src 'self'; script-src *")).toThrow("repeated");
+    expect(() => features("camera=(), camera=(*)")).toThrow("repeated");
   });
 
   it("never allows inline or evaluated scripts", () => {
@@ -50,11 +74,11 @@ describe("security headers in vercel.json", () => {
   });
 
   it("allow the microphone only on our own pages and turn off what we don't use", () => {
-    const permissions = header("Permissions-Policy");
+    const allowed = features(header("Permissions-Policy"));
 
-    expect(permissions).toContain("microphone=(self)");
-    for (const feature of ["camera=()", "geolocation=()", "payment=()"]) {
-      expect(permissions).toContain(feature);
+    expect(allowed.microphone).toBe("(self)");
+    for (const feature of ["camera", "geolocation", "payment", "usb"]) {
+      expect(allowed[feature]).toBe("()");
     }
   });
 
