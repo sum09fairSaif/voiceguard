@@ -25,7 +25,16 @@ OTHER_VOICE = [0.0, 0.0, 1.0]
 
 
 def signed_in(user_id=USER_ID):
-    return {"Authorization": f"Bearer {create_access_token(user_id)}"}
+    # The signup session: the only one allowed to enroll (see the
+    # enrollment window tests at the end).
+    return {"Authorization": f"Bearer {create_access_token(user_id, source='signup')}"}
+
+
+@pytest.fixture(autouse=True)
+def account(users):
+    # Enrollment checks when the account was made, so it has to exist.
+    users.insert_one({"_id": ObjectId(USER_ID), "full_name": "Sam Doe", "email": "sam@example.com",
+                      "created_at": datetime.now(UTC)})
 
 
 class FakeEmbedder:
@@ -104,7 +113,14 @@ def test_third_good_sample_creates_the_voiceprint(client, embedder, voiceprints,
     response = send(client)
 
     assert response.status_code == 200
-    assert response.json() == {"status": "enrolled", "samples_accepted": 3, "samples_required": 3, "prompt": None}
+    assert response.json() == {
+        "status": "enrolled",
+        "samples_accepted": 3,
+        "samples_required": 3,
+        "prompt": None,
+        # Nothing more to record once enrolled.
+        "can_enroll": False,
+    }
     voiceprint = load_voiceprint(voiceprints, USER_ID)
     assert voiceprint is not None
     assert len(voiceprint) == 3
@@ -380,3 +396,94 @@ def test_each_sample_is_logged_without_the_voice(client, embedder, caplog):
             f"liveness={config.LIVENESS_THRESHOLD + 1.0:.3f} similarity=0.000"
         ),
     ]
+
+
+# --- Only the signup session may enroll (#155) ---------------------------------
+
+SOON = datetime(2026, 11, 16, 5, 0, tzinfo=UTC)
+
+
+def from_login(user_id=USER_ID):
+    return {"Authorization": f"Bearer {create_access_token(user_id, source='login')}"}
+
+
+@pytest.fixture
+def no_grace(monkeypatch):
+    monkeypatch.setattr(config, "ENROLL_GRACE_UNTIL", None)
+
+
+def made(users, minutes_ago):
+    users.update_one(
+        {"_id": ObjectId(USER_ID)}, {"$set": {"created_at": datetime.now(UTC) - timedelta(minutes=minutes_ago)}}
+    )
+
+
+def test_the_signup_session_may_enroll(client, embedder, no_grace):
+    assert client.get(STATUS_URL, headers=signed_in()).json()["can_enroll"] is True
+    assert send(client).status_code == 200
+
+
+def test_the_signup_session_closes_after_the_window(client, users, embedder, no_grace):
+    made(users, config.ENROLL_WINDOW_MINUTES + 1)
+
+    response = send(client)
+
+    assert response.status_code == 403
+    assert response.json()["detail"].startswith("Voice ID can only be set up right after creating your account.")
+    assert client.get(STATUS_URL, headers=signed_in()).json()["can_enroll"] is False
+    assert embedder.calls == []
+
+
+def test_a_password_sign_in_may_not_enroll(client, embedder, no_grace):
+    # Someone who only knows the password can't attach their own voice.
+    response = send(client, headers=from_login())
+
+    assert response.status_code == 403
+    assert client.get(STATUS_URL, headers=from_login()).json()["can_enroll"] is False
+    assert embedder.calls == []
+
+
+def test_a_token_from_before_the_marking_may_not_enroll(client, embedder, no_grace):
+    import jwt
+
+    now = datetime.now(UTC)
+    old = jwt.encode(
+        {"sub": USER_ID, "iat": now, "exp": now + timedelta(minutes=5)}, config.JWT_SECRET, algorithm="HS256"
+    )
+
+    assert send(client, headers={"Authorization": f"Bearer {old}"}).status_code == 403
+
+
+def test_the_grace_period_lets_an_older_account_enroll_after_signing_in(client, users, embedder, monkeypatch):
+    made(users, 60 * 24 * 10)  # ten days old, never enrolled
+    monkeypatch.setattr(config, "ENROLL_GRACE_UNTIL", datetime.now(UTC) + timedelta(hours=1))
+
+    assert client.get(STATUS_URL, headers=from_login()).json()["can_enroll"] is True
+    assert send(client, headers=from_login()).status_code == 200
+
+
+def test_the_grace_period_ends_at_the_cut_off(client, users, embedder, monkeypatch):
+    made(users, 60 * 24 * 10)
+    monkeypatch.setattr(config, "ENROLL_GRACE_UNTIL", datetime.now(UTC) - timedelta(minutes=1))
+
+    assert send(client, headers=from_login()).status_code == 403
+
+
+def test_an_account_made_after_the_cut_off_gets_no_grace(client, users, embedder, monkeypatch):
+    # Created after the cut-off, an hour ago: only its own signup session counted.
+    monkeypatch.setattr(config, "ENROLL_GRACE_UNTIL", datetime.now(UTC) - timedelta(hours=2))
+    made(users, 60)
+
+    assert send(client, headers=from_login()).status_code == 403
+
+
+def test_an_enrolled_account_still_gets_409_not_403(client, voiceprints, embedder, no_grace):
+    save_voiceprint(voiceprints, USER_ID, [0.6, 0.8, 0.0])
+
+    assert send(client, headers=from_login()).status_code == 409
+
+
+def test_a_missing_account_may_not_enroll(client, users, embedder):
+    users.delete_many({})
+
+    assert send(client).status_code == 403
