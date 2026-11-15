@@ -13,6 +13,7 @@ from email_sender import EmailUnavailable
 from identity_check import IdentityUnavailable
 from rate_limit import RateLimited
 from routers import auth, challenge, enroll, verify
+from security_headers import SecurityHeadersMiddleware
 from transcription import AudioNotUnderstood, TranscriptionUnavailable
 from voice_attempts import VoiceLockedOut
 
@@ -22,7 +23,15 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 
 logger = logging.getLogger("voiceguard")
 
-app = FastAPI(title="VoiceGuard API", version="0.1.0")
+
+def docs_settings(enabled: bool) -> dict:
+    """Where FastAPI serves its docs; None turns each one off (404)."""
+    if enabled:
+        return {"docs_url": "/docs", "redoc_url": "/redoc", "openapi_url": "/openapi.json"}
+    return {"docs_url": None, "redoc_url": None, "openapi_url": None}
+
+
+app = FastAPI(title="VoiceGuard API", version="0.1.0", **docs_settings(config.DOCS_ENABLED))
 
 # Refuses oversized request bodies before anything reads them. Added before
 # CORS so CORS wraps it: the frontend can read the 413 like any other error.
@@ -40,6 +49,10 @@ app.add_middleware(
     # frontend reads Retry-After to say how long a lockout or rate limit lasts.
     expose_headers=["Retry-After"],
 )
+
+# Outermost, so every response gets the headers: errors, 413s and CORS
+# preflights included.
+app.add_middleware(SecurityHeadersMiddleware)
 
 app.include_router(auth.router)
 app.include_router(challenge.router)
@@ -127,6 +140,7 @@ def rate_limited(request: Request, exc: RateLimited) -> JSONResponse:
     )
 
 
-@app.get("/health")
+# HEAD too: uptime monitors often check with HEAD.
+@app.api_route("/health", methods=["GET", "HEAD"])
 def health():
     return {"status": "ok", "service": "voiceguard-api"}
