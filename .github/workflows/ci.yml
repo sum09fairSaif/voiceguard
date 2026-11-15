@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [main, dev]
 
+# The workflow's token can only read the repo: no job here needs to write.
+permissions:
+  contents: read
+
 # Each job stops after 15 minutes. Without a limit GitHub waits 6 hours,
 # so a stuck step (like a stalled apt download) holds up merges all day.
 jobs:
@@ -92,3 +96,37 @@ jobs:
         run: npm test
       - name: Build
         run: npm run build
+
+  # Known vulnerabilities in our dependencies. Fails on any finding not in
+  # .github/pip-audit-accepted.txt (each accepted one has its reason there).
+  # A new advisory can turn this red on a PR that didn't change anything:
+  # upgrade the package, or accept it there with a reason (docs/runbook.md).
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+      - name: Install pip-audit
+        run: pip install pip-audit==2.10.1
+      - name: Python dependencies
+        run: |
+          ignores=$(grep -oE '^[A-Za-z]+-[A-Za-z0-9-]+' .github/pip-audit-accepted.txt | sed 's/^/--ignore-vuln /' | tr '\n' ' ')
+          rc=0
+          for dir in backend model-service ml/liveness; do
+            echo "::group::$dir"
+            pip-audit --progress-spinner off -r "$dir/requirements.txt" $ignores || rc=1
+            echo "::endgroup::"
+          done
+          echo "::group::backend (dev tools)"
+          pip-audit --progress-spinner off -r backend/requirements-dev.txt $ignores || rc=1
+          echo "::endgroup::"
+          exit $rc
+      - name: Frontend dependencies
+        working-directory: frontend
+        run: npm audit --audit-level=high
