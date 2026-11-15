@@ -43,6 +43,9 @@ describe("describeEnrollError", () => {
     ["That recording was too loud and sounds distorted. Please move a little further from your microphone and try again.", ENROLL_MESSAGES.tooLoud],
     ["That recording doesn't sound like your earlier ones. Please record it again in the same quiet place. If this keeps happening, start over.", ENROLL_MESSAGES.inconsistent],
     ["We couldn't read that recording. Please record it again.", ENROLL_MESSAGES.unreadable],
+    ["That recording didn't sound like a live voice. Please read the sentence yourself, straight into your microphone, not from a recording or a speaker.", ENROLL_MESSAGES.notLive],
+    // From PR #145, not merged yet: matched ahead so it works whenever that lands.
+    ["We didn't hear every word of the sentence, in order. Please read the whole sentence exactly as shown, without skipping any words.", ENROLL_MESSAGES.missingWords],
   ])("rewords a rejected sample in our own words: %s", (detail, message) => {
     expect(describeEnrollError(apiError(422, { detail }))).toBe(message);
   });
