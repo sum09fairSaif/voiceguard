@@ -46,5 +46,10 @@ def count_request(
 
 def count_client_request(rate_limits: Collection, action: str, request: Request, limit: int) -> None:
     """Count one request of this kind from this client (its address, hashed)
-    and raise RateLimited if it's over `limit` for the current window."""
-    count_request(rate_limits, f"{action}-client", client_key(request), limit, config.RATE_LIMIT_WINDOW_SECONDS)
+    and raise RateLimited if it's over `limit` for the current window. Skipped
+    when the client can't be told (see client_address.py): the per-account
+    limits and the all-users backstops still apply."""
+    key = client_key(request)
+    if key is None:
+        return
+    count_request(rate_limits, f"{action}-client", key, limit, config.RATE_LIMIT_WINDOW_SECONDS)

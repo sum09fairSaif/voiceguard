@@ -161,3 +161,31 @@ def test_limits_store_no_addresses_in_clear(client, rate_limits):
 
     stored = " ".join(str(doc) for doc in rate_limits.find())
     assert "203.0.113.1" not in stored
+
+
+def test_without_a_trusted_address_one_client_doesnt_block_everyone(client, monkeypatch):
+    # No CF-Connecting-IP (e.g. the setting doesn't match the proxies): the
+    # per-client limit is skipped rather than shared by every user.
+    monkeypatch.setattr(config, "SIGNUP_CLIENT_LIMIT", 1)
+
+    def anonymous(n):
+        return client.post(
+            "/api/auth/signup",
+            json={"full_name": "Sam Doe", "email": f"anon{n}@example.com", "password": "correct-horse-battery"},
+        )
+
+    assert [anonymous(n).status_code for n in range(3)] == [201, 201, 201]
+
+
+def test_without_a_trusted_address_the_backstop_still_applies(client, monkeypatch):
+    monkeypatch.setattr(config, "SIGNUP_RATE_LIMIT", 2)
+
+    statuses = [
+        client.post(
+            "/api/auth/signup",
+            json={"full_name": "Sam Doe", "email": f"anon{n}@example.com", "password": "correct-horse-battery"},
+        ).status_code
+        for n in range(3)
+    ]
+
+    assert statuses == [201, 201, 429]

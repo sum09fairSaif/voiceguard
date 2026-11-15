@@ -30,8 +30,9 @@ ALLOWED_ORIGIN_REGEX = os.getenv("ALLOWED_ORIGIN_REGEX", r"https://voiceguard-[a
 
 # Where the client's address comes from, for per-client limits (see
 # client_address.py): "cf-connecting-ip" (set by Cloudflare, in front of
-# Render), "x-forwarded-for-last" (the entry our last proxy added) or "peer"
-# (the direct connection; local development). Confirm live after changing.
+# Render), "x-forwarded-for-last" (the entry our last proxy added; only once
+# the live check shows it's the client, not a proxy) or "peer" (the direct
+# connection; local development). Confirm live after changing.
 def client_ip_source(value: str) -> str:
     source = value.strip().lower()
     if source not in ("cf-connecting-ip", "x-forwarded-for-last", "peer"):

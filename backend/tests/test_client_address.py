@@ -57,12 +57,14 @@ def test_peer_mode_ignores_headers(monkeypatch):
     assert client_address(request({"CF-Connecting-IP": "203.0.113.7"})) == "10.0.0.9"
 
 
-def test_falls_back_to_the_peer_and_warns_once(monkeypatch, caplog):
+def test_a_missing_header_means_unknown_not_the_proxy_and_warns_once(monkeypatch, caplog):
+    # Falling back to the peer would be the proxy for everyone: one shared limit.
     use(monkeypatch, "cf-connecting-ip")
     caplog.set_level(logging.WARNING, logger="voiceguard.client")
 
-    assert client_address(request()) == "10.0.0.9"
-    assert client_address(request()) == "10.0.0.9"
+    assert client_address(request()) is None
+    assert client_key(request()) is None
+    assert client_address(request()) is None
 
     warnings = [r for r in caplog.records if "client_address_missing" in r.getMessage()]
     assert len(warnings) == 1
@@ -72,19 +74,31 @@ def test_falls_back_to_the_peer_and_warns_once(monkeypatch, caplog):
 def test_a_header_that_isnt_an_address_is_ignored(monkeypatch, junk):
     use(monkeypatch, "cf-connecting-ip")
 
-    assert client_address(request({"CF-Connecting-IP": junk})) == "10.0.0.9"
+    assert client_address(request({"CF-Connecting-IP": junk})) is None
 
 
-def test_ipv6_is_normalised(monkeypatch):
+def test_ipv6_counts_as_its_64_network(monkeypatch):
+    # One home or server usually has a whole /64; rotating within it isn't a new client.
     use(monkeypatch, "cf-connecting-ip")
 
-    assert client_address(request({"CF-Connecting-IP": "2001:DB8::0001"})) == "2001:db8::1"
+    first = client_address(request({"CF-Connecting-IP": "2001:DB8:0:1::0001"}))
+    second = client_address(request({"CF-Connecting-IP": "2001:db8:0:1:ffff::abcd"}))
+    other = client_address(request({"CF-Connecting-IP": "2001:db8:0:2::1"}))
+
+    assert first == second == "2001:db8:0:1::/64"
+    assert other != first
+
+
+def test_ipv4_mapped_ipv6_counts_as_ipv4(monkeypatch):
+    use(monkeypatch, "cf-connecting-ip")
+
+    assert client_address(request({"CF-Connecting-IP": "::ffff:203.0.113.7"})) == "203.0.113.7"
 
 
 def test_no_peer_at_all(monkeypatch):
     use(monkeypatch, "peer")
 
-    assert client_address(request(peer=None)) == "unknown"
+    assert client_address(request(peer=None)) is None
 
 
 def test_key_is_a_hash_not_the_address(monkeypatch):

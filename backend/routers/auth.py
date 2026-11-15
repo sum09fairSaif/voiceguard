@@ -71,7 +71,9 @@ def login(
     # client), and everyone's together (the ceiling, a lock for everyone).
     # A stranger's guesses alone can't lock the owner out, but guessing
     # spread across many addresses still stops.
-    this_client = f"client:{client_key(request)}:{email}"
+    # An unknown client (no trusted address) falls back to one shared count
+    # for the email: the stricter old rule, safe against guessing.
+    this_client = f"client:{client_key(request) or 'unknown'}:{email}"
     everyone = f"account:{email}"
     # A locked email isn't even checked, so guessing can't go on while
     # it's locked.
@@ -84,9 +86,14 @@ def login(
         # Emails with no account are counted and locked the same way, so
         # the answers never give away which emails have accounts.
         window, lockout = config.LOGIN_FAILURE_WINDOW_SECONDS, config.LOGIN_LOCKOUT_SECONDS
+        # The account-wide count first: if the second write fails, the
+        # ceiling has still counted the guess.
+        locked_for_everyone = record_failure(
+            login_failures, everyone, config.LOGIN_ACCOUNT_MAX_FAILURES, window, lockout
+        )
         locked = max(
+            locked_for_everyone,
             record_failure(login_failures, this_client, config.LOGIN_MAX_FAILURES, window, lockout),
-            record_failure(login_failures, everyone, config.LOGIN_ACCOUNT_MAX_FAILURES, window, lockout),
         )
         if locked:
             logger.info("login_locked user=%s", user["_id"] if user else "-")
