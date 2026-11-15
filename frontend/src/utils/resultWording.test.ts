@@ -47,6 +47,31 @@ describe("describeResult", () => {
     expect(view.checks[2]).toEqual({ label: "Live speaker", state: "failed", detail: "Not confirmed" });
   });
 
+  it.each([
+    [2, "2 attempts left."],
+    [1, "1 attempt left. If the next one doesn’t match, voice checks will pause for a while."],
+  ])("says how many attempts are left after a rejection (%i)", (attemptsLeft, note) => {
+    const view = describeResult(result({ decision: "rejected", identity: "failed", attempts_left: attemptsLeft }));
+
+    expect(view.note).toBe(note);
+    expect(view.action).toBe("retry");
+  });
+
+  it("says checks are paused when that rejection used the last attempt", () => {
+    const view = describeResult(
+      result({ decision: "rejected", identity: "failed", attempts_left: 0, fallback_required: true }),
+    );
+
+    expect(view).toMatchObject({ tone: "failure", title: "Voice checks are paused.", action: "done" });
+    expect(view.subtitle).toMatch(/last attempt/);
+    expect(view.note).toBeUndefined();
+  });
+
+  it("gives no attempts note unless the check was rejected", () => {
+    expect(describeResult(result()).note).toBeUndefined();
+    expect(describeResult(result({ decision: "approved", identity: "passed", liveness: "passed" })).note).toBeUndefined();
+  });
+
   it("explains a partly verified result without a voiceprint", () => {
     const view = describeResult(result());
 
