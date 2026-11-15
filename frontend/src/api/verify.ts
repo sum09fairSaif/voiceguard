@@ -8,6 +8,9 @@ export type VerifyResult = {
   // Only "not_checked" until the liveness check (#17) exists; the other
   // values are handled already so the result screen needs no change then.
   liveness: "passed" | "failed" | "not_checked";
+  // Only when approved: the voice-verified token that opens the account.
+  // It replaces the password's limited token.
+  access_token?: string | null;
 };
 
 // What the voice check's error statuses mean for the person on screen. Used as

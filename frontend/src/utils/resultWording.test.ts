@@ -17,7 +17,7 @@ describe("describeResult", () => {
   it("confirms access for an approved check", () => {
     const view = describeResult(result({ decision: "approved", identity: "passed", liveness: "passed" }));
 
-    expect(view).toMatchObject({ tone: "success", title: "You’re in. Securely.", action: "done", actionLabel: "Done" });
+    expect(view).toMatchObject({ tone: "success", title: "You’re in. Securely.", action: "home", actionLabel: "Continue to home" });
     expect(view.checks.map((check) => check.state)).toEqual(["passed", "passed", "passed"]);
   });
 

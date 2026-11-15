@@ -17,6 +17,12 @@ export function ResultPage() {
   const view = describeResult(result);
 
   function handleAction() {
+    if (view.action === "home") {
+      // The approved check saved a voice-verified token; the account page
+      // asks the server, which decides.
+      navigate("/account", { replace: true });
+      return;
+    }
     if (view.action === "retry") {
       // Passages are single-use, so the passage screen fetches a fresh one.
       navigate("/verify", { replace: true });

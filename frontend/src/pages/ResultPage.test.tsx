@@ -23,6 +23,7 @@ function renderResult(state?: { result: VerifyResult }) {
       <Routes>
         <Route path="/result" element={<ResultPage />} />
         <Route path="/verify" element={<p>passage screen</p>} />
+        <Route path="/account" element={<p>account screen</p>} />
         <Route path="/signin" element={<p>sign-in screen</p>} />
       </Routes>
     </MemoryRouter>,
@@ -81,14 +82,14 @@ describe("Result page", () => {
     expect(getToken()).toBe("token");
   });
 
-  it("finishes the session on Done", async () => {
-    saveToken("token");
+  it("continues to the account after an approved check, keeping the session", async () => {
+    saveToken("voice-verified");
     renderResult({ result: result({ decision: "approved", identity: "passed", liveness: "passed" }) });
 
-    await userEvent.setup().click(screen.getByRole("button", { name: /done/i }));
+    await userEvent.setup().click(screen.getByRole("button", { name: /continue to home/i }));
 
-    expect(screen.getByText("sign-in screen")).toBeInTheDocument();
-    expect(getToken()).toBeNull();
+    expect(screen.getByText("account screen")).toBeInTheDocument();
+    expect(getToken()).toBe("voice-verified");
   });
 
   it("goes back to the passage screen when there's no result to show", () => {

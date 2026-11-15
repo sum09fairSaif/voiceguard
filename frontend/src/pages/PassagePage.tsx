@@ -2,7 +2,7 @@ import { isAxiosError } from "axios";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { describeApiError } from "../api/errors";
-import { clearToken } from "../api/session";
+import { clearToken, saveToken } from "../api/session";
 import { VERIFY_MESSAGES, submitAttempt } from "../api/verify";
 import { Button } from "../components/Button";
 import { Logo } from "../components/Logo";
@@ -52,6 +52,7 @@ export function PassagePage() {
     setSubmitError("");
     try {
       const result = await submitAttempt(recorder.recording, challenge.attempt_id);
+      if (result.access_token) saveToken(result.access_token);
       navigate("/result", { state: { result } });
     } catch (err) {
       if (isAxiosError(err) && err.response?.status === 401) {

@@ -93,6 +93,38 @@ describe("Recording and submitting", () => {
     expect(screen.getByText("Not set up yet")).toBeInTheDocument();
   });
 
+  it("swaps in the voice-verified token from an approved check", async () => {
+    saveToken("password-only");
+    mockSubmit.mockResolvedValue({
+      ...INCOMPLETE,
+      decision: "approved",
+      identity: "passed",
+      liveness: "passed",
+      access_token: "voice-verified",
+    });
+    const user = userEvent.setup();
+    renderFlow();
+    await recordClip(user);
+
+    await user.click(screen.getByRole("button", { name: /submit/i }));
+
+    expect(await screen.findByText("You’re in. Securely.")).toBeInTheDocument();
+    expect(getToken()).toBe("voice-verified");
+  });
+
+  it("keeps the password's token when the check isn't approved", async () => {
+    saveToken("password-only");
+    mockSubmit.mockResolvedValue({ ...INCOMPLETE, access_token: null });
+    const user = userEvent.setup();
+    renderFlow();
+    await recordClip(user);
+
+    await user.click(screen.getByRole("button", { name: /submit/i }));
+
+    expect(await screen.findByText("Almost there.")).toBeInTheDocument();
+    expect(getToken()).toBe("password-only");
+  });
+
   it("lets you record again before submitting", async () => {
     const user = userEvent.setup();
     renderFlow();
