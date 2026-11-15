@@ -53,9 +53,17 @@ def test_security_headers_on_a_success():
 
 
 def test_security_headers_on_an_error():
-    response = client.post("/api/auth/login", json={})
+    # A body that isn't JSON is refused before any setting or database is needed.
+    response = client.post("/api/auth/login", content=b"not json", headers={"Content-Type": "application/json"})
 
     assert response.status_code == 422
+    assert_security_headers(response)
+
+
+def test_security_headers_on_a_refused_sign_in():
+    response = client.get("/api/enroll")
+
+    assert response.status_code == 401
     assert_security_headers(response)
 
 
