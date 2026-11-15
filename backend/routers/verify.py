@@ -4,8 +4,8 @@ from datetime import UTC, datetime
 
 from bson import ObjectId
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
-from pymongo import ReturnDocument
 from pymongo.collection import Collection
+from pymongo.errors import PyMongoError
 
 import config
 from audio_upload import read_recording
@@ -104,8 +104,8 @@ def verify(
     access_token = None
     if result.decision == "approved":
         # Only an approval opens the account: password, voice and liveness.
-        _record_sign_in(users, user_id)
         access_token = create_verified_token(user_id)
+        _record_sign_in(users, user_id)
         logger.info("voice_check_approved user=%s attempt=%s", user_id, attempt_id)
     return VerifyResponse(
         decision=result.decision,
@@ -126,17 +126,19 @@ def verify(
 
 def _record_sign_in(users: Collection, user_id: str) -> None:
     """Note this voice-verified sign-in, keeping the one before it so the
-    account page can show it."""
+    account page can show it. One atomic update, so two approvals at once
+    can't leave an older time behind. Best effort: the user has passed every
+    check, so a failed write is logged rather than costing them the sign-in."""
     if not ObjectId.is_valid(user_id):
         return
-    now = datetime.now(UTC)
-    before = users.find_one_and_update(
-        {"_id": ObjectId(user_id)}, {"$set": {"last_verified_at": now}}, return_document=ReturnDocument.BEFORE
-    )
-    if before is not None:
+    try:
         users.update_one(
-            {"_id": ObjectId(user_id)}, {"$set": {"previous_verified_at": before.get("last_verified_at")}}
+            {"_id": ObjectId(user_id)},
+            # A pipeline update reads the old last_verified_at in the same step.
+            [{"$set": {"previous_verified_at": "$last_verified_at", "last_verified_at": datetime.now(UTC)}}],
         )
+    except PyMongoError as exc:
+        logger.warning("sign_in_history_not_saved user=%s reason=%s", user_id, type(exc).__name__)
 
 
 def _identity_status(identity: IdentityResult | None) -> str:

@@ -127,9 +127,11 @@ def test_sign_in_to_account_end_to_end(client, users, challenges, voiceprints, m
     first = sign_in()
     assert first.status_code == 200
     assert first.json()["previous_sign_in_at"] is None
+    first_time = users.find_one({"email": "sam@example.com"})["last_verified_at"]
 
     second = sign_in().json()
-    assert second["previous_sign_in_at"] is not None
+    # The second sign-in shows the first one's time, not its own.
+    assert second["previous_sign_in_at"] == first_time.replace(tzinfo=UTC).isoformat().replace("+00:00", "Z")
 
 
 def test_dates_say_they_are_utc(client, users):

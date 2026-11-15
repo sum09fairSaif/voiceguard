@@ -9,7 +9,7 @@ from pymongo.errors import ServerSelectionTimeoutError
 import config
 from audio_upload import MAX_AUDIO_BYTES
 from challenges import create_challenge
-from db import get_challenges_collection
+from db import get_challenges_collection, get_users_collection
 from embedding import Embedding, get_embedder
 from identity_check import IdentityUnavailable
 from main import app
@@ -732,3 +732,34 @@ def test_anything_but_approval_returns_no_token(client, transcriber, embedder, v
 
     assert body["decision"] != "approved"
     assert body["access_token"] is None
+
+
+def test_a_failed_sign_in_history_write_still_signs_the_user_in(
+    client, transcriber, embedder, enrolled, attempt, caplog
+):
+    class BrokenUsers:
+        def update_one(self, *args, **kwargs):
+            raise ServerSelectionTimeoutError("database unreachable")
+
+    app.dependency_overrides[get_users_collection] = lambda: BrokenUsers()
+    transcriber.heard = attempt["passage"]
+
+    with caplog.at_level(logging.WARNING, logger="voiceguard.verify"):
+        response = submit(client, attempt["id"])
+
+    assert response.status_code == 200
+    assert response.json()["decision"] == "approved"
+    assert response.json()["access_token"]
+    assert any("sign_in_history_not_saved" in r.getMessage() for r in caplog.records)
+
+
+def test_an_approval_moves_the_last_sign_in_to_previous(client, users, transcriber, embedder, enrolled, attempt):
+    earlier = datetime(2026, 11, 13, 18, 30)
+    users.insert_one({"_id": ObjectId(USER_ID), "full_name": "Sam", "email": "s@example.com", "last_verified_at": earlier})
+    transcriber.heard = attempt["passage"]
+
+    submit(client, attempt["id"])
+
+    record = users.find_one({"_id": ObjectId(USER_ID)})
+    assert record["previous_verified_at"] == earlier
+    assert record["last_verified_at"] > earlier

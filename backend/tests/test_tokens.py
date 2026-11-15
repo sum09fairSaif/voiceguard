@@ -69,8 +69,12 @@ def test_a_password_gives_a_limited_token():
     assert token["exp"] - token["iat"] == config.JWT_EXPIRE_MINUTES * 60
 
 
-def test_a_signup_token_says_so():
-    assert claims(create_access_token(USER, source="signup"))["src"] == "signup"
+def test_a_signup_token_says_so_and_is_limited():
+    token = claims(create_access_token(USER, source="signup"))
+
+    assert token["src"] == "signup"
+    assert token["scope"] == "pending"
+    assert token["amr"] == ["pwd"]
 
 
 def test_an_approved_voice_check_gives_a_short_voice_verified_token():
@@ -159,6 +163,8 @@ def test_signup_and_login_hand_out_limited_tokens(client):
     )
     login = client.post("/api/auth/login", json={"email": "sam@example.com", "password": "correct-horse-battery"})
 
-    assert claims(signup.json()["access_token"])["src"] == "signup"
-    assert claims(login.json()["access_token"])["src"] == "login"
-    assert claims(login.json()["access_token"])["scope"] == "pending"
+    for response, source in ((signup, "signup"), (login, "login")):
+        token = claims(response.json()["access_token"])
+        assert token["src"] == source
+        assert token["scope"] == "pending"
+        assert token["amr"] == ["pwd"]
