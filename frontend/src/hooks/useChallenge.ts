@@ -2,8 +2,8 @@ import { isAxiosError } from "axios";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { requestChallenge, type Challenge } from "../api/challenge";
-import { describeApiError } from "../api/errors";
 import { clearToken } from "../api/session";
+import { describeVoiceCheckError, isVoiceCheckPaused } from "../api/verify";
 import { secondsLeft } from "../utils/countdown";
 
 export type ChallengeState = {
@@ -12,6 +12,8 @@ export type ChallengeState = {
   error: string;
   secondsRemaining: number;
   expired: boolean;
+  // Voice checks are paused for this account (423): no passage until the wait is over.
+  paused: boolean;
   newPhrase: () => void;
 };
 
@@ -23,6 +25,7 @@ export function useChallenge(): ChallengeState {
   const [challenge, setChallenge] = useState<Challenge | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [paused, setPaused] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   // Numbers each request so a slow earlier reply can't replace a newer one.
   const latestRequest = useRef(0);
@@ -37,6 +40,7 @@ export function useChallenge(): ChallengeState {
       if (requestId !== latestRequest.current) return;
       setChallenge(next);
       setError("");
+      setPaused(false);
       setNow(Date.now());
     } catch (err) {
       if (requestId !== latestRequest.current) return;
@@ -46,7 +50,8 @@ export function useChallenge(): ChallengeState {
         return;
       }
       setChallenge(null);
-      setError(describeApiError(err));
+      setPaused(isVoiceCheckPaused(err));
+      setError(describeVoiceCheckError(err, {}));
     } finally {
       if (requestId === latestRequest.current) setLoading(false);
     }
@@ -73,5 +78,5 @@ export function useChallenge(): ChallengeState {
     return () => clearInterval(timer);
   }, [challenge, expired]);
 
-  return { challenge, loading, error, secondsRemaining, expired, newPhrase };
+  return { challenge, loading, error, secondsRemaining, expired, paused, newPhrase };
 }

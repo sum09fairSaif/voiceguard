@@ -115,4 +115,18 @@ describe("Passage screen", () => {
     expect(await screen.findByText("“Quilt tiger ocean”")).toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
+
+  it("says when voice checks are paused and offers nothing to retry", async () => {
+    mockRequest.mockRejectedValue(apiError(423, { detail: "server text" }, { "retry-after": "840" }));
+    renderPage();
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Voice checks are paused after too many failed attempts. Please try again in 14 minutes.",
+    );
+    expect(screen.queryByText(/server text/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /try again|new phrase/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Start recording" })).toBeDisabled();
+    expect(screen.getByText("Voice checks are paused")).toBeInTheDocument();
+    expect(mockRequest).toHaveBeenCalledTimes(1);
+  });
 });

@@ -157,6 +157,23 @@ describe("Recording and submitting", () => {
     expect(screen.getByRole("button", { name: "Start recording" })).toBeEnabled();
   });
 
+  it("stops at the pause when the submit is refused because checks are paused", async () => {
+    mockSubmit.mockRejectedValue(apiError(423, {}, { "retry-after": "900" }));
+    const user = userEvent.setup();
+    renderFlow();
+    await recordClip(user);
+
+    await user.click(screen.getByRole("button", { name: /submit/i }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Voice checks are paused after too many failed attempts. Please try again in 15 minutes.",
+    );
+    expect(screen.queryByRole("button", { name: /try again|new phrase|submit|record again/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Start recording" })).toBeDisabled();
+    expect(screen.queryByText(/expires in/i)).not.toBeInTheDocument();
+    expect(mockChallenge).toHaveBeenCalledTimes(1);
+  });
+
   it("sends a signed-out user back to sign in", async () => {
     saveToken("expired");
     mockSubmit.mockRejectedValue(apiError(401));
