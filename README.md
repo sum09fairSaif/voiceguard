@@ -57,6 +57,9 @@ as soon as the voiceprint is built or the checks have run.
   encrypted at rest. Recordings are never saved.
 - **Scores stay on the server:** the identity check answers only pass or
   fail, never its score, so nobody can tune a voice clone against it.
+- **Passwords (NIST SP 800-63B-4):** at least 15 characters, no rules about
+  which kinds of character, and never a common or breached password, the
+  person's own email name, or a simple repeat or sequence.
 - **Abuse limits:** sign-in locks for 30 minutes after 5 wrong passwords
   within 15 minutes, and per-user limits cap the paid speech-to-text calls.
 - **Fallback:** after 3 rejected voice checks within 30 minutes, voice
@@ -140,7 +143,7 @@ curl -X POST $API/api/verify -H "Authorization: Bearer <access_token>" \
 | Method | Path | What it does | Sign-in needed |
 |---|---|---|---|
 | GET | `/health` | Is the server up? | No |
-| POST | `/api/auth/signup` | Create an account; returns an access token | No |
+| POST | `/api/auth/signup` | Create an account; returns an access token. The password needs 15+ characters and mustn't be common, breached, personal, repetitive or sequential (422 says which) | No |
 | POST | `/api/auth/login` | Sign in with email and password; locks for 30 min after 5 wrong tries within 15 min | No |
 | POST | `/api/challenge` | Get a fresh, single-use passage to read (expires in 2 min); 423 while voice checks are paused | Yes |
 | POST | `/api/verify` | Send a recording of the passage; runs the checks and returns the decision, `attempts_left` and `fallback_required`; 423 while voice checks are paused | Yes |
