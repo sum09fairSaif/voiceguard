@@ -57,6 +57,11 @@ as soon as the voiceprint is built or the checks have run.
   encrypted at rest. Recordings are never saved.
 - **Scores stay on the server:** the identity check answers only pass or
   fail, never its score, so nobody can tune a voice clone against it.
+- **Security events and uptime:** sign-ups, sign-ins, lockouts, enrollment,
+  voice-check decisions and sign-outs are recorded for 30 days without personal
+  data (hashed user ids, no emails, addresses or scores), and also sent to
+  PostHog when `POSTHOG_API_KEY` is set. A scheduled check opens an
+  "API is down" issue when `/health` stops answering.
 - **Abuse limits:** sign-in locks for 30 minutes after 5 wrong passwords
   within 15 minutes, and per-user limits cap the paid speech-to-text calls.
 - **Fallback:** after 3 rejected voice checks within 30 minutes, voice

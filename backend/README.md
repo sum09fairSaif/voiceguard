@@ -50,4 +50,5 @@ ruff check .
   `decision.py`, `rate_limit.py`, `login_lockout.py`, `enrollment.py`
 - `transcription.py` (OpenAI Whisper) and `embedding.py` (model service):
   calls to outside services
+- `audit.py`: the security event record (and the optional PostHog feed)
 - `scripts/save_voiceprint.py`: dev tool to give a test account a voiceprint
