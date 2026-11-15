@@ -129,12 +129,22 @@ if VOICE_MAX_FAILURES <= 0 or VOICE_FAILURE_WINDOW_SECONDS <= 0 or VOICE_LOCKOUT
 RATE_LIMIT_WINDOW_SECONDS = int(os.getenv("RATE_LIMIT_WINDOW_SECONDS", "3600"))
 CHALLENGE_RATE_LIMIT = int(os.getenv("CHALLENGE_RATE_LIMIT", "20"))
 VERIFY_RATE_LIMIT = int(os.getenv("VERIFY_RATE_LIMIT", "10"))
-# New accounts per window, from everyone together. Each account gets its
-# own voice-check allowance above, so without this one person could open
-# many accounts to multiply the paid calls. Counted across everyone, not
-# per address: behind Render's proxy the caller's address is either the
-# proxy's or taken from a header that can be faked.
-SIGNUP_RATE_LIMIT = int(os.getenv("SIGNUP_RATE_LIMIT", "30"))
+# New accounts per window from everyone together: a backstop well above
+# normal use, in case client addresses turn out to be fakeable. Each account
+# gets its own voice-check allowance above, so without a cap one person could
+# open many accounts to multiply the paid calls.
+SIGNUP_RATE_LIMIT = int(os.getenv("SIGNUP_RATE_LIMIT", "100"))
+# Per-client limits (one address, see client_address.py), same window. They
+# stop one sender without affecting anyone else, alongside the per-account
+# limits above. A household or office shares one address, so they're set
+# well above one person's use.
+SIGNUP_CLIENT_LIMIT = int(os.getenv("SIGNUP_CLIENT_LIMIT", "5"))
+LOGIN_CLIENT_LIMIT = int(os.getenv("LOGIN_CLIENT_LIMIT", "30"))
+CHALLENGE_CLIENT_LIMIT = int(os.getenv("CHALLENGE_CLIENT_LIMIT", "60"))
+VERIFY_CLIENT_LIMIT = int(os.getenv("VERIFY_CLIENT_LIMIT", "30"))
+ENROLL_CLIENT_LIMIT = int(os.getenv("ENROLL_CLIENT_LIMIT", "60"))
+if min(SIGNUP_CLIENT_LIMIT, LOGIN_CLIENT_LIMIT, CHALLENGE_CLIENT_LIMIT, VERIFY_CLIENT_LIMIT, ENROLL_CLIENT_LIMIT) <= 0:
+    raise RuntimeError("The *_CLIENT_LIMIT settings must be more than 0.")
 if RATE_LIMIT_WINDOW_SECONDS <= 0 or CHALLENGE_RATE_LIMIT <= 0 or VERIFY_RATE_LIMIT <= 0 or SIGNUP_RATE_LIMIT <= 0:
     raise RuntimeError(
         "RATE_LIMIT_WINDOW_SECONDS, CHALLENGE_RATE_LIMIT, VERIFY_RATE_LIMIT and SIGNUP_RATE_LIMIT must be more than 0."

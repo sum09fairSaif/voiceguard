@@ -1,6 +1,6 @@
 import logging
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 from pymongo.collection import Collection
 
 import config
@@ -21,7 +21,7 @@ from enrollment import (
 )
 from identity_check import IdentityUnavailable
 from passages import generate_passage
-from rate_limit import count_request
+from rate_limit import count_client_request, count_request
 from schemas import EnrollmentStatus
 from security import get_current_user_id
 from transcription import AudioNotUnderstood
@@ -56,6 +56,7 @@ def enrollment_status(
 
 @router.post("/samples", response_model=EnrollmentStatus)
 def add_enrollment_sample(
+    request: Request,
     audio: UploadFile = File(...),
     user_id: str = Depends(get_current_user_id),
     rate_limits: Collection = Depends(get_rate_limits_collection),
@@ -63,6 +64,7 @@ def add_enrollment_sample(
     enrollments: Collection = Depends(get_enrollments_collection),
     embed: Embedder | None = Depends(get_embedder),
 ) -> EnrollmentStatus:
+    count_client_request(rate_limits, "enroll", request, config.ENROLL_CLIENT_LIMIT)
     count_request(rate_limits, "enroll", user_id, config.ENROLL_RATE_LIMIT, config.RATE_LIMIT_WINDOW_SECONDS)
 
     # Replacing a voiceprint needs more than a password: otherwise anyone

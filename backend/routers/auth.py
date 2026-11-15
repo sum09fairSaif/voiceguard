@@ -3,14 +3,14 @@ import math
 from datetime import UTC, datetime
 
 from bson import ObjectId
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pymongo.collection import Collection
 from pymongo.errors import DuplicateKeyError
 
 import config
 from db import get_login_failures_collection, get_rate_limits_collection, get_users_collection
 from login_lockout import clear_failures, record_failure, seconds_locked
-from rate_limit import count_request
+from rate_limit import count_client_request, count_request
 from schemas import LoginRequest, LoginResponse, SignupRequest, SignupResponse, UserPublic
 from security import check_password, create_access_token, hash_password
 
@@ -22,10 +22,13 @@ logger = logging.getLogger("voiceguard.auth")
 @router.post("/signup", response_model=SignupResponse, status_code=status.HTTP_201_CREATED)
 def signup(
     body: SignupRequest,
+    request: Request,
     users: Collection = Depends(get_users_collection),
     rate_limits: Collection = Depends(get_rate_limits_collection),
 ) -> SignupResponse:
-    # One count for everyone (see config.SIGNUP_RATE_LIMIT).
+    # Per client first, so one sender is stopped long before the shared
+    # backstop (see config.SIGNUP_RATE_LIMIT) could affect anyone else.
+    count_client_request(rate_limits, "signup", request, config.SIGNUP_CLIENT_LIMIT)
     count_request(rate_limits, "signup", "all", config.SIGNUP_RATE_LIMIT, config.RATE_LIMIT_WINDOW_SECONDS)
 
     user_id = ObjectId()
@@ -54,9 +57,14 @@ def signup(
 @router.post("/login", response_model=LoginResponse)
 def login(
     body: LoginRequest,
+    request: Request,
     users: Collection = Depends(get_users_collection),
     login_failures: Collection = Depends(get_login_failures_collection),
+    rate_limits: Collection = Depends(get_rate_limits_collection),
 ) -> LoginResponse:
+    # Every attempt counts, whichever emails it tries, so one client can't
+    # work through a list of accounts.
+    count_client_request(rate_limits, "login", request, config.LOGIN_CLIENT_LIMIT)
     email = body.email.lower()
     # A locked email isn't even checked, so guessing can't go on while
     # it's locked.

@@ -1,7 +1,7 @@
 import logging
 import time
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
 from pymongo.collection import Collection
 
 import config
@@ -18,7 +18,7 @@ from decision import decide
 from embedding import Embedder, get_embedder
 from identity_check import IdentityResult, IdentityUnavailable, check_identity
 from liveness_check import LivenessResult, check_liveness
-from rate_limit import count_request
+from rate_limit import count_client_request, count_request
 from schemas import ContentScore, VerifyResponse
 from security import get_current_user_id
 from transcription import AudioNotUnderstood, Transcriber, TranscriptionUnavailable, get_transcriber
@@ -32,6 +32,7 @@ logger = logging.getLogger("voiceguard.verify")
 
 @router.post("/verify", response_model=VerifyResponse)
 def verify(
+    request: Request,
     audio: UploadFile = File(...),
     attempt_id: str = Form(...),
     user_id: str = Depends(get_current_user_id),
@@ -45,6 +46,7 @@ def verify(
     # Checked before the passage is used up, so a refused request doesn't
     # cost the user their passage.
     ensure_not_locked(voice_failures, user_id)
+    count_client_request(rate_limits, "verify", request, config.VERIFY_CLIENT_LIMIT)
     count_request(rate_limits, "verify", user_id, config.VERIFY_RATE_LIMIT, config.RATE_LIMIT_WINDOW_SECONDS)
 
     recording, extension = read_recording(audio)
