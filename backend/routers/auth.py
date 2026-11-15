@@ -8,6 +8,7 @@ from pymongo.collection import Collection
 from pymongo.errors import DuplicateKeyError
 
 import config
+from client_address import client_key
 from db import get_login_failures_collection, get_rate_limits_collection, get_users_collection
 from login_lockout import clear_failures, record_failure, seconds_locked
 from rate_limit import count_client_request, count_request
@@ -66,9 +67,15 @@ def login(
     # work through a list of accounts.
     count_client_request(rate_limits, "login", request, config.LOGIN_CLIENT_LIMIT)
     email = body.email.lower()
+    # Two counts per email: this client's failures (a lock only for this
+    # client), and everyone's together (the ceiling, a lock for everyone).
+    # A stranger's guesses alone can't lock the owner out, but guessing
+    # spread across many addresses still stops.
+    this_client = f"client:{client_key(request)}:{email}"
+    everyone = f"account:{email}"
     # A locked email isn't even checked, so guessing can't go on while
     # it's locked.
-    locked = seconds_locked(login_failures, email)
+    locked = max(seconds_locked(login_failures, this_client), seconds_locked(login_failures, everyone))
     if locked:
         raise _locked_out(locked)
 
@@ -76,12 +83,10 @@ def login(
     if not check_password(body.password, user["password_hash"] if user else None):
         # Emails with no account are counted and locked the same way, so
         # the answers never give away which emails have accounts.
-        locked = record_failure(
-            login_failures,
-            email,
-            config.LOGIN_MAX_FAILURES,
-            config.LOGIN_FAILURE_WINDOW_SECONDS,
-            config.LOGIN_LOCKOUT_SECONDS,
+        window, lockout = config.LOGIN_FAILURE_WINDOW_SECONDS, config.LOGIN_LOCKOUT_SECONDS
+        locked = max(
+            record_failure(login_failures, this_client, config.LOGIN_MAX_FAILURES, window, lockout),
+            record_failure(login_failures, everyone, config.LOGIN_ACCOUNT_MAX_FAILURES, window, lockout),
         )
         if locked:
             logger.info("login_locked user=%s", user["_id"] if user else "-")
@@ -93,7 +98,9 @@ def login(
         )
 
     token = create_access_token(str(user["_id"]))
-    clear_failures(login_failures, email)
+    # Only this client's count: the ceiling keeps counting other clients'
+    # guesses, so the owner signing in doesn't reset a guesser's progress.
+    clear_failures(login_failures, this_client)
     logger.info("login user=%s", user["_id"])
     return LoginResponse(user=_public(user), access_token=token)
 

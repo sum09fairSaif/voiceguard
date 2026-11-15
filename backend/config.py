@@ -47,11 +47,18 @@ JWT_EXPIRE_MINUTES = int(os.getenv("JWT_EXPIRE_MINUTES", "60"))
 if JWT_EXPIRE_MINUTES <= 0:
     raise RuntimeError("JWT_EXPIRE_MINUTES must be more than 0.")
 
-# Sign-in lockout: this many wrong passwords for one email within the
-# window locks that email out for the lockout time.
+# Sign-in lockout: this many wrong passwords for one email from one client
+# within the window locks that client out of that email for the lockout
+# time. Other clients (e.g. the account's owner) can still sign in.
 LOGIN_MAX_FAILURES = int(os.getenv("LOGIN_MAX_FAILURES", "5"))
+# The ceiling: this many wrong passwords for one email from all clients
+# together locks the email for everyone, so guessing spread across many
+# addresses still stops.
+LOGIN_ACCOUNT_MAX_FAILURES = int(os.getenv("LOGIN_ACCOUNT_MAX_FAILURES", "20"))
 LOGIN_FAILURE_WINDOW_SECONDS = int(os.getenv("LOGIN_FAILURE_WINDOW_SECONDS", "900"))
 LOGIN_LOCKOUT_SECONDS = int(os.getenv("LOGIN_LOCKOUT_SECONDS", "1800"))
+if LOGIN_ACCOUNT_MAX_FAILURES < LOGIN_MAX_FAILURES:
+    raise RuntimeError("LOGIN_ACCOUNT_MAX_FAILURES must be at least LOGIN_MAX_FAILURES.")
 if LOGIN_MAX_FAILURES <= 0 or LOGIN_FAILURE_WINDOW_SECONDS <= 0 or LOGIN_LOCKOUT_SECONDS <= 0:
     raise RuntimeError("LOGIN_MAX_FAILURES, LOGIN_FAILURE_WINDOW_SECONDS and LOGIN_LOCKOUT_SECONDS must be more than 0.")
 

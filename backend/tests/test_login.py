@@ -136,3 +136,53 @@ def test_database_outage_returns_503(client, account):
     response = login(client)
 
     assert response.status_code == 503
+
+
+# --- Lockout per client, with a ceiling per account -------------------------
+
+
+def login_from(client, address, email="sam@example.com", password="correct-horse"):
+    return client.post(LOGIN_URL, json={"email": email, "password": password}, headers={"CF-Connecting-IP": address})
+
+
+@pytest.fixture
+def per_client(monkeypatch):
+    monkeypatch.setattr(config, "CLIENT_IP_SOURCE", "cf-connecting-ip")
+
+
+def test_a_strangers_guesses_dont_lock_the_owner_out(client, account, per_client):
+    for _ in range(config.LOGIN_MAX_FAILURES):
+        login_from(client, "203.0.113.66", password="wrong-horse")
+
+    assert login_from(client, "203.0.113.66").status_code == 423
+    assert login_from(client, "198.51.100.7").status_code == 200
+
+
+def test_guessing_spread_across_clients_hits_the_ceiling(client, account, per_client, monkeypatch):
+    monkeypatch.setattr(config, "LOGIN_ACCOUNT_MAX_FAILURES", 6)
+    # Three clients, two wrong guesses each: none reaches its own limit of 5.
+    for n in range(3):
+        for _ in range(2):
+            assert login_from(client, f"203.0.113.{n + 1}", password="wrong-horse").status_code in (401, 423)
+
+    response = login_from(client, "198.51.100.7")
+
+    assert response.status_code == 423
+    assert "access_token" not in response.text
+
+
+def test_owner_signing_in_doesnt_reset_the_ceiling(client, account, per_client, monkeypatch):
+    monkeypatch.setattr(config, "LOGIN_ACCOUNT_MAX_FAILURES", 6)
+    for n in range(5):
+        login_from(client, f"203.0.113.{n + 1}", password="wrong-horse")
+    assert login_from(client, "198.51.100.7").status_code == 200
+
+    assert login_from(client, "203.0.113.99", password="wrong-horse").status_code == 423
+
+
+def test_lockout_store_keeps_no_emails_or_addresses(client, account, per_client, login_failures):
+    login_from(client, "203.0.113.66", password="wrong-horse")
+
+    stored = " ".join(str(doc) for doc in login_failures.find())
+    assert "sam@example.com" not in stored
+    assert "203.0.113.66" not in stored
