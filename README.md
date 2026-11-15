@@ -82,7 +82,7 @@ Each row is a user story (see the
 | #16 Identity check | ✅ Done (SpeechBrain ECAPA) | — |
 | #17 Liveness / anti-spoof check | 🟡 First model live (AASIST, fine-tuned); about 1 fake in 4 still passes | — |
 | #18 Combine the three checks | ✅ All three must pass; liveness can veto | — |
-| #19 Result screen with retry | ✅ Counts failed checks; pauses them after 3 | ✅ Done (attempts left not shown yet) |
+| #19 Result screen with retry | ✅ Counts failed checks; pauses them after 3 | ✅ Done (shows attempts left and the pause) |
 | #20 Account recovery (email code) | ⏳ Not started | ⏳ Not started |
 
 An enrolled user who reads the passage live in their own voice is approved.

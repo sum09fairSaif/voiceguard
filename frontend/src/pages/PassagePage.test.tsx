@@ -122,4 +122,48 @@ describe("Passage screen", () => {
     expect(await screen.findByText("“Quilt tiger ocean”")).toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
+
+  it("says when voice checks are paused and offers nothing to retry", async () => {
+    mockRequest.mockRejectedValue(apiError(423, { detail: "server text" }, { "retry-after": "840" }));
+    renderPage();
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Voice checks are paused after too many failed attempts. Please try again in 14 minutes.",
+    );
+    expect(screen.queryByText(/server text/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /try again|new phrase/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Start recording" })).toBeDisabled();
+    expect(screen.getByText("Voice checks are paused")).toBeInTheDocument();
+    expect(mockRequest).toHaveBeenCalledTimes(1);
+  });
+
+  it("offers a new phrase again once the pause is over", async () => {
+    mockRequest
+      .mockRejectedValueOnce(apiError(423, {}, { "retry-after": "60" }))
+      .mockResolvedValueOnce(challenge("quilt tiger ocean"));
+    renderPage();
+    await screen.findByText(/Voice checks are paused after/);
+
+    await act(async () => {
+      vi.advanceTimersByTime(60_000);
+    });
+
+    expect(screen.getByRole("alert")).toHaveTextContent("Voice checks are available again.");
+    await userEvent.setup({ advanceTimers: vi.advanceTimersByTime }).click(
+      screen.getByRole("button", { name: /try again/i }),
+    );
+    expect(await screen.findByText("“Quilt tiger ocean”")).toBeInTheDocument();
+  });
+
+  it("stays paused when the server didn't say for how long", async () => {
+    mockRequest.mockRejectedValue(apiError(423));
+    renderPage();
+    await screen.findByText(/Voice checks are paused after/);
+
+    await act(async () => {
+      vi.advanceTimersByTime(24 * 3600 * 1000);
+    });
+
+    expect(screen.queryByRole("button", { name: /try again|new phrase/i })).not.toBeInTheDocument();
+  });
 });
