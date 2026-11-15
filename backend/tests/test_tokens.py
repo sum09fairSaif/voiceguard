@@ -17,6 +17,7 @@ from security import (
     get_current_user_id,
     get_verified_user_id,
 )
+from sessions import revoked_sessions
 
 USER = "64b000000000000000000001"
 
@@ -27,9 +28,11 @@ def secret(monkeypatch):
 
 
 @pytest.fixture
-def api():
-    # A stand-in for the real routes: one per level.
+def api(revoked):
+    # A stand-in for the real routes: one per level, with the same in-memory
+    # sign-out list as the real app in the tests.
     app = FastAPI()
+    app.dependency_overrides[revoked_sessions] = lambda: (lambda: revoked)
 
     @app.get("/step")
     def step(user_id: str = Depends(get_current_user_id)):

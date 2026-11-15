@@ -15,6 +15,14 @@ from sessions import revoked_sessions
 LOGOUT_URL = "/api/auth/logout"
 
 
+@pytest.fixture(autouse=True)
+def secret(monkeypatch):
+    # Never the .env's: CI has none, and tests must not depend on it.
+    import secrets
+
+    monkeypatch.setattr(config, "JWT_SECRET", secrets.token_urlsafe(32))
+
+
 def bearer(token):
     return {"Authorization": f"Bearer {token}"}
 
