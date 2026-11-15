@@ -4,7 +4,7 @@ from fastapi.testclient import TestClient
 
 import config
 from body_limit import DEFAULT_LIMIT
-from main import app, docs_settings
+from main import VoiceGuardAPI, app, docs_settings
 from security_headers import SECURITY_HEADERS
 
 client = TestClient(app)
@@ -31,6 +31,43 @@ def test_docs_can_be_turned_on(path):
     local = FastAPI(**docs_settings(True))
 
     assert TestClient(local).get(path).status_code == 200
+
+
+def test_the_real_app_follows_the_setting():
+    expected = docs_settings(config.DOCS_ENABLED)
+    assert (app.docs_url, app.redoc_url, app.openapi_url) == (
+        expected["docs_url"],
+        expected["redoc_url"],
+        expected["openapi_url"],
+    )
+
+
+def test_the_docs_pages_can_load_their_scripts_when_on(monkeypatch):
+    monkeypatch.setattr(config, "DOCS_ENABLED", True)
+    local = TestClient(VoiceGuardAPI(**docs_settings(True)))
+
+    response = local.get("/docs")
+
+    assert response.status_code == 200
+    assert "content-security-policy" not in response.headers
+    assert response.headers["x-content-type-options"] == "nosniff"
+
+
+def test_the_docs_paths_keep_the_strict_policy_when_off():
+    assert "content-security-policy" in client.get("/docs").headers
+
+
+def test_an_unexpected_500_still_carries_the_headers():
+    crashing = VoiceGuardAPI()
+
+    @crashing.get("/boom")
+    def boom():
+        raise RuntimeError("unexpected")
+
+    response = TestClient(crashing, raise_server_exceptions=False).get("/boom")
+
+    assert response.status_code == 500
+    assert_security_headers(response)
 
 
 @pytest.mark.parametrize(

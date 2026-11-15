@@ -23,11 +23,22 @@ ROUTE_LIMITS = {
     ("POST", "/api/enroll/samples"): AUDIO_LIMIT,
 }
 
+# All request bodies being held at once, across every request in flight. A
+# flood of uploads just under the limit gets 503 instead of filling the
+# instance's memory (512 MB on Render's free plan).
+MAX_BUFFERED_BYTES = 64 * 1024 * 1024
+
 TOO_LARGE = json.dumps({"detail": "That request is too large."}).encode()
+BUSY = json.dumps({"detail": "The service is busy. Please try again shortly."}).encode()
+
+# Bytes held right now by requests in flight. Only touched on the event
+# loop, so no lock is needed.
+_buffered = 0
 
 
 def limit_for(method: str, path: str) -> int:
-    return ROUTE_LIMITS.get((method, path), DEFAULT_LIMIT)
+    # "/api/verify/" is redirected to "/api/verify", so it gets the same limit.
+    return ROUTE_LIMITS.get((method, path.rstrip("/") or "/"), DEFAULT_LIMIT)
 
 
 def _declared_length(scope) -> int | None:
@@ -40,20 +51,24 @@ def _declared_length(scope) -> int | None:
     return None
 
 
-async def _send_too_large(send) -> None:
+async def _refuse(send, status: int, body: bytes) -> None:
     await send(
         {
             "type": "http.response.start",
-            "status": 413,
+            "status": status,
             "headers": [
                 (b"content-type", b"application/json"),
-                (b"content-length", str(len(TOO_LARGE)).encode()),
+                (b"content-length", str(len(body)).encode()),
                 # The rest of the body is never read, so the connection can't be reused.
                 (b"connection", b"close"),
             ],
         }
     )
-    await send({"type": "http.response.body", "body": TOO_LARGE})
+    await send({"type": "http.response.body", "body": body})
+
+
+async def _send_too_large(send) -> None:
+    await _refuse(send, 413, TOO_LARGE)
 
 
 class BodyLimitMiddleware:
@@ -61,6 +76,7 @@ class BodyLimitMiddleware:
         self.app = app
 
     async def __call__(self, scope, receive, send):
+        global _buffered
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
@@ -71,32 +87,39 @@ class BodyLimitMiddleware:
             await _send_too_large(send)
             return
 
-        # Read the body here, stopping as soon as it passes the limit.
+        # Read the body here, stopping as soon as it passes the limit, or
+        # if all requests together would hold too much.
         chunks: list[bytes] = []
         size = 0
-        while True:
-            message = await receive()
-            if message["type"] == "http.disconnect":
-                return
-            chunk = message.get("body", b"")
-            size += len(chunk)
-            if size > limit:
-                await _send_too_large(send)
-                return
-            chunks.append(chunk)
-            if not message.get("more_body", False):
-                break
+        try:
+            while True:
+                message = await receive()
+                if message["type"] == "http.disconnect":
+                    return
+                chunk = message.get("body", b"")
+                size += len(chunk)
+                if size > limit:
+                    await _send_too_large(send)
+                    return
+                if _buffered + len(chunk) > MAX_BUFFERED_BYTES:
+                    await _refuse(send, 503, BUSY)
+                    return
+                _buffered += len(chunk)
+                chunks.append(chunk)
+                if not message.get("more_body", False):
+                    break
 
-        body = b"".join(chunks)
-        replayed = False
+            # Hands the app the chunks already read, one at a time (no
+            # second, joined copy), then anything after them (e.g. the
+            # client disconnecting) as usual.
+            pending = list(chunks)
 
-        # Hands the app the body we already read, then anything after it
-        # (e.g. the client disconnecting) as usual.
-        async def replay():
-            nonlocal replayed
-            if not replayed:
-                replayed = True
-                return {"type": "http.request", "body": body, "more_body": False}
-            return await receive()
+            async def replay():
+                if pending:
+                    chunk = pending.pop(0)
+                    return {"type": "http.request", "body": chunk, "more_body": bool(pending)}
+                return await receive()
 
-        await self.app(scope, replay, send)
+            await self.app(scope, replay, send)
+        finally:
+            _buffered -= sum(len(chunk) for chunk in chunks)

@@ -31,7 +31,14 @@ def docs_settings(enabled: bool) -> dict:
     return {"docs_url": None, "redoc_url": None, "openapi_url": None}
 
 
-app = FastAPI(title="VoiceGuard API", version="0.1.0", **docs_settings(config.DOCS_ENABLED))
+class VoiceGuardAPI(FastAPI):
+    def build_middleware_stack(self):
+        # Security headers go outside everything, Starlette's own error
+        # handler included, so even an unexpected 500 carries them.
+        return SecurityHeadersMiddleware(super().build_middleware_stack())
+
+
+app = VoiceGuardAPI(title="VoiceGuard API", version="0.1.0", **docs_settings(config.DOCS_ENABLED))
 
 # Refuses oversized request bodies before anything reads them. Added before
 # CORS so CORS wraps it: the frontend can read the 413 like any other error.
@@ -49,10 +56,6 @@ app.add_middleware(
     # frontend reads Retry-After to say how long a lockout or rate limit lasts.
     expose_headers=["Retry-After"],
 )
-
-# Outermost, so every response gets the headers: errors, 413s and CORS
-# preflights included.
-app.add_middleware(SecurityHeadersMiddleware)
 
 app.include_router(auth.router)
 app.include_router(challenge.router)
