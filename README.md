@@ -57,6 +57,9 @@ as soon as the voiceprint is built or the checks have run.
   encrypted at rest. Recordings are never saved.
 - **Scores stay on the server:** the identity check answers only pass or
   fail, never its score, so nobody can tune a voice clone against it.
+- **Pause switches:** sign-ups, voice checks and enrollment can each be paused
+  in seconds without a redeploy (`backend/scripts/switch.py`); see the
+  [runbook](docs/runbook.md) for what to do when something goes wrong.
 - **Abuse limits:** sign-in locks for 30 minutes after 5 wrong passwords
   within 15 minutes, and per-user limits cap the paid speech-to-text calls.
 - **Fallback:** after 3 rejected voice checks within 30 minutes, voice
