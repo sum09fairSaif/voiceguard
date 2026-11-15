@@ -100,6 +100,13 @@ describe("Passage screen", () => {
     expect(screen.getByRole("button", { name: /get a new phrase/i })).toBeInTheDocument();
   });
 
+  it("says when voice checks are paused", async () => {
+    mockRequest.mockRejectedValue(apiError(503, { paused: "voice_checks" }));
+    renderPage();
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Voice checks are paused for now.");
+  });
+
   it("explains a failure and can try again", async () => {
     mockRequest.mockRejectedValueOnce(apiError(503)).mockResolvedValueOnce(challenge("quilt tiger ocean"));
     renderPage();
