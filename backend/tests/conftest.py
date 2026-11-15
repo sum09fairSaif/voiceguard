@@ -6,6 +6,7 @@ from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
 
 import config
+import switches
 from db import (
     get_challenges_collection,
     get_enrollments_collection,
@@ -66,6 +67,22 @@ def voice_failures():
     collection = mongomock.MongoClient()["voiceguard_test"]["voice_failures"]
     collection.create_index("expires_at", expireAfterSeconds=0)
     return collection
+
+
+@pytest.fixture
+def switch_store():
+    return mongomock.MongoClient()["voiceguard_test"]["switches"]
+
+
+@pytest.fixture(autouse=True)
+def in_memory_switches(switch_store):
+    # Every app in the tests reads switches from an in-memory collection,
+    # with nothing cached from an earlier test.
+    switches._cache.clear()
+    app.dependency_overrides[switches.switches_store] = lambda: (lambda: switch_store)
+    yield
+    app.dependency_overrides.pop(switches.switches_store, None)
+    switches._cache.clear()
 
 
 @pytest.fixture

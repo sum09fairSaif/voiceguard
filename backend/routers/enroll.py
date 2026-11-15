@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from pymongo.collection import Collection
 
 import config
+import switches
 from audio_upload import read_recording
 from db import get_enrollments_collection, get_rate_limits_collection, get_voiceprints_collection
 from embedding import Embedder, Embedding, get_embedder
@@ -54,7 +55,7 @@ def enrollment_status(
     return _status(voiceprints, enrollments, user_id)
 
 
-@router.post("/samples", response_model=EnrollmentStatus)
+@router.post("/samples", response_model=EnrollmentStatus, dependencies=[Depends(switches.require("enrollment"))])
 def add_enrollment_sample(
     audio: UploadFile = File(...),
     user_id: str = Depends(get_current_user_id),

@@ -8,6 +8,7 @@ from pymongo.collection import Collection
 from pymongo.errors import DuplicateKeyError
 
 import config
+import switches
 from db import get_login_failures_collection, get_rate_limits_collection, get_users_collection
 from login_lockout import clear_failures, record_failure, seconds_locked
 from rate_limit import count_request
@@ -19,7 +20,12 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 logger = logging.getLogger("voiceguard.auth")
 
 
-@router.post("/signup", response_model=SignupResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/signup",
+    response_model=SignupResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(switches.require("signups"))],
+)
 def signup(
     body: SignupRequest,
     users: Collection = Depends(get_users_collection),

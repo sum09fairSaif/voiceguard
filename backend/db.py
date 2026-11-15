@@ -7,6 +7,13 @@ import config
 
 
 @lru_cache
+def get_switches_collection() -> Collection:
+    # Pause switches (switches.py): one document per switch, set by
+    # scripts/switch.py. No index needed beyond _id.
+    return get_client()[config.MONGO_DB_NAME]["switches"]
+
+
+@lru_cache
 def get_client() -> MongoClient:
     if not config.MONGO_URI:
         raise config.NotConfigured("MONGO_URI is not set. Add it to your .env file.")

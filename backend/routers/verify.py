@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, s
 from pymongo.collection import Collection
 
 import config
+import switches
 from audio_upload import read_recording
 from challenges import use_challenge
 from content_check import check_content
@@ -30,7 +31,7 @@ router = APIRouter(prefix="/api", tags=["verify"])
 logger = logging.getLogger("voiceguard.verify")
 
 
-@router.post("/verify", response_model=VerifyResponse)
+@router.post("/verify", response_model=VerifyResponse, dependencies=[Depends(switches.require("voice_checks"))])
 def verify(
     audio: UploadFile = File(...),
     attempt_id: str = Form(...),

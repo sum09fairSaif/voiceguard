@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, status
 from pymongo.collection import Collection
 
 import config
+import switches
 from challenges import create_challenge
 from db import get_challenges_collection, get_rate_limits_collection, get_voice_failures_collection
 from rate_limit import count_request
@@ -12,7 +13,12 @@ from voice_attempts import ensure_not_locked
 router = APIRouter(prefix="/api", tags=["challenge"])
 
 
-@router.post("/challenge", response_model=ChallengeResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/challenge",
+    response_model=ChallengeResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(switches.require("voice_checks"))],
+)
 def new_challenge(
     user_id: str = Depends(get_current_user_id),
     challenges: Collection = Depends(get_challenges_collection),
