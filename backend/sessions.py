@@ -11,6 +11,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 
 from pymongo.collection import Collection
+from pymongo.errors import DuplicateKeyError
 
 import config
 from db import get_revoked_sessions_collection
@@ -22,19 +23,34 @@ def revoked_sessions() -> Callable[[], Collection]:
     return get_revoked_sessions_collection
 
 
+# Revocations are kept at least this long, so shortening the token settings
+# later can't let a revocation expire before a token issued under the old,
+# longer ones. A few bytes per sign-out.
+MINIMUM_KEEP = timedelta(hours=24)
+
+
 def session_lifetime() -> timedelta:
     # A verified token can be issued near the end of the limited one's life,
     # so a session can last up to both lifetimes together.
     return timedelta(minutes=config.JWT_EXPIRE_MINUTES + config.VERIFIED_TOKEN_MINUTES)
 
 
+def keep_for() -> timedelta:
+    return max(session_lifetime(), MINIMUM_KEEP)
+
+
 def revoke(revoked: Collection, sid: str, now: datetime | None = None) -> None:
     now = now or datetime.now(UTC)
-    revoked.update_one(
-        {"_id": sid},
-        {"$setOnInsert": {"revoked_at": now, "expires_at": now + session_lifetime()}},
-        upsert=True,
-    )
+    try:
+        revoked.update_one(
+            {"_id": sid},
+            {"$setOnInsert": {"revoked_at": now, "expires_at": now + keep_for()}},
+            upsert=True,
+        )
+    except DuplicateKeyError:
+        # Two sign-outs of one session at the same moment: the other one
+        # recorded it, which is all that's needed.
+        pass
 
 
 def is_revoked(revoked: Collection, sid: str) -> bool:

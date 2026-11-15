@@ -123,7 +123,11 @@ def test_the_revocation_lasts_as_long_as_the_sessions_tokens_could(client, users
 
     entry = revoked.find_one({"_id": claims(token)["sid"]})
     lifetime = timedelta(minutes=config.JWT_EXPIRE_MINUTES + config.VERIFIED_TOKEN_MINUTES)
-    assert entry["expires_at"].replace(tzinfo=UTC) - before >= lifetime - timedelta(seconds=5)
+    kept = entry["expires_at"].replace(tzinfo=UTC) - before
+    # At least the session's tokens' lifetime, and at least a day in case
+    # the token settings are shortened later.
+    assert kept >= lifetime - timedelta(seconds=5)
+    assert kept >= timedelta(hours=24) - timedelta(seconds=5)
     # Only the session id: no email, address or token stored.
     assert set(entry) == {"_id", "revoked_at", "expires_at"}
 
@@ -178,3 +182,27 @@ def test_no_token_never_touches_the_revocation_list(client):
     app.dependency_overrides[revoked_sessions] = lambda: must_not_be_called
 
     assert client.post("/api/challenge").status_code == 401
+
+
+def test_longer_token_settings_keep_revocations_longer(monkeypatch):
+    from sessions import keep_for
+
+    monkeypatch.setattr(config, "JWT_EXPIRE_MINUTES", 60 * 48)
+
+    assert keep_for() >= timedelta(hours=48)
+
+
+def test_two_sign_outs_at_once_both_succeed(revoked):
+    from pymongo.errors import DuplicateKeyError
+
+    from sessions import is_revoked, revoke
+
+    class Racing:
+        # The other sign-out inserted the entry between our check and write.
+        def update_one(self, *args, **kwargs):
+            revoked.insert_one({"_id": "s1"})
+            raise DuplicateKeyError("E11000 duplicate key")
+
+    revoke(Racing(), "s1")
+
+    assert is_revoked(revoked, "s1")
