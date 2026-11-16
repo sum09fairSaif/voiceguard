@@ -38,21 +38,31 @@ function features(policy: string): Record<string, string> {
   return parsed;
 }
 
+// Our PostHog project is in the US region.
+const POSTHOG_API = "https://us.i.posthog.com";
+const POSTHOG_ASSETS = "https://us-assets.i.posthog.com";
+
 describe("security headers in vercel.json", () => {
   it("apply to every page", () => {
     expect(everyPage).toBeDefined();
   });
 
-  it("limit what the page may load and run to our own origin and the API", () => {
+  it("limit what the page may load and run to our own origin, the API and PostHog", () => {
     const csp = directives(header("Content-Security-Policy"));
 
     expect(csp["default-src"]).toEqual(["'self'"]);
-    expect(csp["script-src"]).toEqual(["'self'"]);
+    // PostHog lazy-loads its extras (e.g. the session recorder) from its asset host.
+    expect(csp["script-src"]).toEqual(["'self'", POSTHOG_ASSETS]);
     expect(csp["style-src"]).toEqual(["'self'"]);
     expect(csp["img-src"]).toEqual(["'self'", "data:"]);
     expect(csp["font-src"]).toEqual(["'self'"]);
     expect(csp["media-src"]).toEqual(["'self'"]);
-    expect(csp["connect-src"]).toEqual(["'self'", "https://voiceguard-83cj.onrender.com"]);
+    expect(csp["connect-src"]).toEqual([
+      "'self'",
+      "https://voiceguard-83cj.onrender.com",
+      POSTHOG_API,
+      POSTHOG_ASSETS,
+    ]);
     expect(csp["object-src"]).toEqual(["'none'"]);
     expect(csp["base-uri"]).toEqual(["'self'"]);
     expect(csp["form-action"]).toEqual(["'self'"]);
