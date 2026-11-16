@@ -2,7 +2,7 @@ import logging
 from datetime import UTC, datetime
 
 from bson import ObjectId
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile, status
 from pymongo.collection import Collection
 from pymongo.errors import PyMongoError
 
@@ -24,6 +24,7 @@ from liveness_check import LivenessResult, check_liveness
 from rate_limit import count_request
 from schemas import ContentScore, VerifyResponse
 from security import create_verified_token, get_current_user_id, get_token_claims
+from session_cookie import set_session_cookie
 from transcription import Transcriber, get_transcriber, transcribe_and_log
 from voice_attempts import ensure_not_locked, record_outcome
 from voiceprints import load_voiceprint
@@ -35,6 +36,7 @@ logger = logging.getLogger("voiceguard.verify")
 
 @router.post("/verify", response_model=VerifyResponse)
 def verify(
+    response: Response,
     audio: UploadFile = File(...),
     attempt_id: str = Form(...),
     user_id: str = Depends(get_current_user_id),
@@ -106,6 +108,10 @@ def verify(
         # Only an approval opens the account: password, voice and liveness.
         # Same session as the token that ran the check: signing out ends both.
         access_token = create_verified_token(user_id, claims["sid"])
+        # The voice-verified token replaces the limited one in the cookie.
+        set_session_cookie(response, access_token, config.VERIFIED_TOKEN_MINUTES)
+        if not config.TOKEN_IN_RESPONSE_BODY:
+            access_token = None
         _record_sign_in(users, user_id)
         logger.info("voice_check_approved user=%s attempt=%s", user_id, attempt_id)
     return VerifyResponse(

@@ -12,6 +12,7 @@ from email_sender import EmailUnavailable
 from identity_check import IdentityUnavailable
 from rate_limit import RateLimited
 from routers import account, auth, challenge, enroll, verify
+from session_cookie import OriginCheckMiddleware
 from transcription import AudioNotUnderstood, TranscriptionUnavailable
 from voice_attempts import VoiceLockedOut
 
@@ -23,12 +24,19 @@ logger = logging.getLogger("voiceguard")
 
 app = FastAPI(title="VoiceGuard API", version="0.1.0")
 
+# Requests that change something must come from our own pages
+# (session_cookie.py): the cross-site request forgery check. Added before
+# CORS, so CORS wraps it.
+app.add_middleware(OriginCheckMiddleware)
+
 # CORS lets the frontend (a different address) call this API from the
-# browser. Only our own frontends are allowed (see config.ALLOWED_ORIGINS).
+# browser. Only our own frontends are allowed (see config.ALLOWED_ORIGINS),
+# and they may send the sign-in cookie (allow_credentials).
 app.add_middleware(
     CORSMiddleware,
     allow_origins=config.ALLOWED_ORIGINS,
     allow_origin_regex=config.ALLOWED_ORIGIN_REGEX,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
     # Browsers hide most response headers from another site's code. The

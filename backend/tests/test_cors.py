@@ -17,7 +17,6 @@ def preflight(origin: str):
 @pytest.mark.parametrize(
     "origin",
     [
-        "http://localhost:5173",
         "https://voiceguard-nu.vercel.app",
         # Vercel preview deployments, per branch and per commit.
         "https://voiceguard-git-feat-19-result-screen-voice-guard2.vercel.app",
@@ -29,6 +28,8 @@ def test_our_frontends_may_call_the_api(origin):
 
     assert response.status_code == 200
     assert response.headers["access-control-allow-origin"] == origin
+    # They may send the sign-in cookie (#102).
+    assert response.headers["access-control-allow-credentials"] == "true"
 
 
 @pytest.mark.parametrize(
@@ -38,6 +39,9 @@ def test_our_frontends_may_call_the_api(origin):
         "https://voiceguard-nu.vercel.app.evil.example",
         "https://voiceguard-git-main-someone-else.vercel.app",
         "http://voiceguard-git-main-voice-guard2.vercel.app",
+        # Local development adds itself in its own .env, never in production:
+        # an allowed origin can send requests carrying the sign-in cookie.
+        "http://localhost:5173",
     ],
 )
 def test_other_websites_may_not(origin):
