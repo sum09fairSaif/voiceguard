@@ -54,6 +54,7 @@ def verify(
     ensure_not_locked(voice_failures, user_id)
     count_client_request(rate_limits, "verify", request, config.VERIFY_CLIENT_LIMIT)
     count_request(rate_limits, "verify", user_id, config.VERIFY_RATE_LIMIT, config.RATE_LIMIT_WINDOW_SECONDS)
+    count_request(rate_limits, "verify-day", user_id, config.VERIFY_DAILY_LIMIT, 24 * 3600)
 
     recording, extension = read_recording(audio)
 

@@ -816,3 +816,54 @@ def test_the_voice_verified_token_belongs_to_the_same_sign_in(client, transcribe
 
     assert token_claims(verified)["sid"] == token_claims(limited)["sid"]
     assert token_claims(verified)["jti"] != token_claims(limited)["jti"]
+
+
+# --- Daily cap per account (Sumehra's review on #152) --------------------------
+
+
+def test_one_account_hits_its_daily_cap_while_the_shared_budget_has_room(
+    client, challenges, transcriber, rate_limits, monkeypatch
+):
+    monkeypatch.setattr(config, "VERIFY_RATE_LIMIT", 100)  # past the hourly limit
+    monkeypatch.setattr(config, "VERIFY_DAILY_LIMIT", 2)
+    monkeypatch.setattr(config, "TRANSCRIPTION_DAILY_BUDGET", 300)
+    transcriber.heard = "the quick brown fox jumps over"
+
+    statuses = []
+    for _ in range(3):
+        challenge = create_challenge(challenges, USER_ID)
+        statuses.append(submit(client, str(challenge["_id"])).status_code)
+
+    assert statuses[:2] == [200, 200]
+    assert statuses[2] == 429
+    # The refused check never reserved a slot of the shared budget.
+    budget = rate_limits.find_one({"_id": {"$regex": "^transcription-budget:"}})
+    assert budget["count"] == 2
+    assert len(transcriber.calls) == 2
+
+
+def test_the_daily_cap_is_per_account(client, challenges, transcriber, monkeypatch):
+    monkeypatch.setattr(config, "VERIFY_DAILY_LIMIT", 1)
+    transcriber.heard = "the quick brown fox jumps over"
+    other = str(ObjectId())
+
+    first = create_challenge(challenges, USER_ID)
+    assert submit(client, str(first["_id"])).status_code == 200
+    second = create_challenge(challenges, other)
+
+    response = submit(client, str(second["_id"]), headers=signed_in(other))
+
+    assert response.status_code == 200
+
+
+def test_the_daily_cap_resets_each_day(rate_limits):
+    from datetime import UTC, datetime, timedelta
+
+    from rate_limit import RateLimited, count_request
+
+    day = datetime(2026, 11, 16, 12, 0, tzinfo=UTC)
+    count_request(rate_limits, "verify-day", "u1", 1, 24 * 3600, now=day)
+    with pytest.raises(RateLimited):
+        count_request(rate_limits, "verify-day", "u1", 1, 24 * 3600, now=day)
+
+    count_request(rate_limits, "verify-day", "u1", 1, 24 * 3600, now=day + timedelta(hours=12, seconds=1))

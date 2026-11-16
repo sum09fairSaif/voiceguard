@@ -147,6 +147,13 @@ if VOICE_MAX_FAILURES <= 0 or VOICE_FAILURE_WINDOW_SECONDS <= 0 or VOICE_LOCKOUT
 RATE_LIMIT_WINDOW_SECONDS = int(os.getenv("RATE_LIMIT_WINDOW_SECONDS", "3600"))
 CHALLENGE_RATE_LIMIT = int(os.getenv("CHALLENGE_RATE_LIMIT", "20"))
 VERIFY_RATE_LIMIT = int(os.getenv("VERIFY_RATE_LIMIT", "10"))
+# Voice checks per account per day (UTC), so one account can't use most of
+# the shared TRANSCRIPTION_DAILY_BUDGET: at 10 an hour it could otherwise make
+# 240 a day. With 30, spending the whole budget takes 10+ accounts, which the
+# per-client signup limit slows down.
+VERIFY_DAILY_LIMIT = int(os.getenv("VERIFY_DAILY_LIMIT", "30"))
+if VERIFY_DAILY_LIMIT <= 0:
+    raise RuntimeError("VERIFY_DAILY_LIMIT must be more than 0.")
 # New accounts per window from everyone together: a backstop well above
 # normal use, in case client addresses turn out to be fakeable. Each account
 # gets its own voice-check allowance above, so without a cap one person could
