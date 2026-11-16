@@ -37,6 +37,15 @@ Three parts of the app can be paused without a code change or redeploy:
 Sign-in is never paused. A paused route answers `503` and the app says that part
 is paused for now.
 
+**Pause `signups` whenever you pause `enrollment`.** A new account can only set up
+its Voice ID within 30 minutes of signing up, so anyone who signs up while
+enrollment is paused misses that window for good (until account recovery exists).
+`switch.py` warns when enrollment is off and sign-ups are on.
+
+**Pausing `voice_checks` locks everyone out of their account.** Sign-in still
+works, but the account only opens after a passed voice check, so pause it only
+for a real emergency (for example, speech-to-text spend running away).
+
 From `backend/`, with the virtual environment active and the team `.env`:
 
 ```
@@ -60,8 +69,8 @@ stops paid calls when it runs out; pausing stops them now. Check the provider's
 usage page.
 
 **The voice model service failing or overloaded** (`voice_check_unavailable`
-for the voice model). Pause `enrollment` first (it's the heaviest); if voice
-checks fail too, pause `voice_checks`. Check the model service's status page.
+for the voice model). Pause `enrollment` first (it's the heaviest), **together with
+`signups`** (see above); if voice checks fail too, pause `voice_checks`. Check the model service's status page.
 
 **One client hammering the API.** Per-client limits answer `429` to it on their
 own. If it gets past them, pause the part it's hitting and tell the team; blocking
@@ -74,6 +83,8 @@ an address at the hosting edge needs the hosting account owner.
 | `JWT_SECRET` | New long random value on the server, redeploy | Everyone is signed out |
 | Database password | Change it in the database host, then on the server and in the team `.env` | Brief outage while switching |
 | Speech-to-text API key | New key in the provider's dashboard, then on the server; delete the old one | None |
+| `EMAIL_API_KEY` (email sending) | New key in the email provider's dashboard, then on the server; delete the old one | Emails fail until the new key is set |
+| `EMBEDDING_SERVICE_HF_TOKEN` (model service access) | New token in the model host's settings, then on the server; delete the old one | Voice checks fail until the new token is set |
 | `EMBEDDING_SERVICE_TOKEN` | New value on both the server and the model service | Voice checks fail until both match |
 | `VOICEPRINT_KEY` | **Don't just replace it**: existing voiceprints can't be read with a new key. Re-encrypt them first (not built yet) or everyone must re-enroll | Voice checks fail for enrolled users |
 

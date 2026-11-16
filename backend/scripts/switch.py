@@ -39,6 +39,22 @@ def status_lines(store: Collection) -> list[str]:
     return lines
 
 
+STRANDING_WARNING = (
+    "WARNING: enrollment is off but signups is on. A new account can only set up its Voice ID "
+    "within 30 minutes of signing up, so anyone who signs up now misses that window for good. "
+    "Turn signups off too:  python scripts/switch.py signups off --by <name> --reason <why>"
+)
+
+
+def strands_new_accounts(store: Collection) -> bool:
+    """True when sign-ups are on but enrollment is off."""
+
+    def is_on(name: str) -> bool:
+        return (store.find_one({"_id": name}) or {}).get("on", True)
+
+    return is_on("signups") and not is_on("enrollment")
+
+
 def main(argv: list[str] | None = None, store: Collection | None = None) -> int:
     parser = argparse.ArgumentParser(description="Show or flip the VoiceGuard pause switches.")
     parser.add_argument("switch", choices=["status", *NAMES])
@@ -50,11 +66,15 @@ def main(argv: list[str] | None = None, store: Collection | None = None) -> int:
     store = store if store is not None else get_switches_collection()
     if args.switch == "status":
         print("\n".join(status_lines(store)))
+        if strands_new_accounts(store):
+            print(STRANDING_WARNING, file=sys.stderr)
         return 0
     if args.state is None or not args.by or not args.reason:
         parser.error("flipping a switch needs on/off, --by and --reason")
     set_switch(store, args.switch, args.state == "on", by=args.by, reason=args.reason)
     print(f"{args.switch} is now {args.state.upper()}. The API picks this up within {CACHE_SECONDS} seconds.")
+    if strands_new_accounts(store):
+        print(STRANDING_WARNING, file=sys.stderr)
     print("\n".join(status_lines(store)))
     return 0
 

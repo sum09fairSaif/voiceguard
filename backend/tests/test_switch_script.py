@@ -54,3 +54,46 @@ def test_status_mentions_a_setting_that_forces_a_switch_off(switch_store, monkey
     script.main(["status"], store=switch_store)
 
     assert "forced off by VOICE_CHECKS_ENABLED=false" in capsys.readouterr().out
+
+
+# --- Pausing enrollment strands new sign-ups (Sumehra's review on #164) ---------
+
+
+def test_turning_enrollment_off_with_signups_on_warns(switch_store, capsys):
+    script.main(["enrollment", "off", "--by", "G", "--reason", "model service slow"], store=switch_store)
+
+    assert "WARNING: enrollment is off but signups is on" in capsys.readouterr().err
+
+
+def test_no_warning_once_signups_are_off_too(switch_store, capsys):
+    script.main(["signups", "off", "--by", "G", "--reason", "x"], store=switch_store)
+    capsys.readouterr()
+
+    script.main(["enrollment", "off", "--by", "G", "--reason", "x"], store=switch_store)
+
+    assert "WARNING" not in capsys.readouterr().err
+
+
+def test_turning_signups_back_on_while_enrollment_is_off_warns(switch_store, capsys):
+    script.main(["signups", "off", "--by", "G", "--reason", "x"], store=switch_store)
+    script.main(["enrollment", "off", "--by", "G", "--reason", "x"], store=switch_store)
+    capsys.readouterr()
+
+    script.main(["signups", "on", "--by", "G", "--reason", "x"], store=switch_store)
+
+    assert "WARNING: enrollment is off but signups is on" in capsys.readouterr().err
+
+
+def test_status_warns_about_the_stranding_combination(switch_store, capsys):
+    script.main(["enrollment", "off", "--by", "G", "--reason", "x"], store=switch_store)
+    capsys.readouterr()
+
+    script.main(["status"], store=switch_store)
+
+    assert "WARNING" in capsys.readouterr().err
+
+
+def test_no_warning_in_normal_operation(switch_store, capsys):
+    script.main(["status"], store=switch_store)
+
+    assert capsys.readouterr().err == ""
