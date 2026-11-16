@@ -21,8 +21,9 @@ export type ResultView = {
   // A line under the subtitle about attempts left, after a rejection only.
   note?: string;
   checks: CheckRow[];
-  // "done" goes back to the start; "retry" gets a fresh passage.
-  action: "done" | "retry";
+  // "home" opens the account (approved only); "done" goes back to the start;
+  // "retry" gets a fresh passage.
+  action: "home" | "done" | "retry";
   actionLabel: string;
 };
 
@@ -79,8 +80,10 @@ export function describeResult(result: VerifyResult): ResultView {
         title: "You’re in. Securely.",
         subtitle: "A more personal way to protect what matters to you.",
         checks,
-        action: "done",
-        actionLabel: "Done",
+        // Figma 19:371's button. Without a voice-verified token (a backend
+        // from before #153) there's no account to open, so finish as before.
+        action: result.access_token ? "home" : "done",
+        actionLabel: result.access_token ? "Continue to home" : "Done",
       };
     case "rejected":
       if (result.fallback_required) {

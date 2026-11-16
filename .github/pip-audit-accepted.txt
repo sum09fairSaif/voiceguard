@@ -1,0 +1,17 @@
+# Known vulnerabilities CI's pip-audit step accepts on purpose.
+# One per line: the finding ID, the folder it's accepted for (it's ignored only
+# there), then "#" and why: the package, why it can't be fixed or doesn't apply,
+# the date and who agreed. Remove a line as soon as the fix can be installed.
+# Anything not listed fails CI. "pending" = accepted for now so CI isn't blocked,
+# waiting for the folder owner's confirmation.
+
+# model-service: torchaudio has no release after 2.11 and SpeechBrain imports it,
+# so torch can't go past 2.11. The flaw is in torch.jit.script, which nothing in
+# the model service turns on or calls (see model-service/requirements.txt, #107).
+PYSEC-2025-194  model-service  # torch 2.11.0, fixed in 2.13.0 (2026-11-15, Gabriel; pending Sumehra)
+
+# model-service: setuptools 81 comes in with the model service's dependencies.
+# Both flaws are in packaging tools the Space doesn't use at runtime: building
+# a source distribution on macOS, and installing an old-style wheel on Windows.
+PYSEC-2026-3447  model-service  # setuptools 81.0.0, fixed in 83.0.0 (2026-11-15, Gabriel; pending Sumehra)
+GHSA-xmj3-9gf7-h52w  model-service  # setuptools 81.0.0, fixed in 84.1.0 (2026-11-15, Gabriel; pending Sumehra)

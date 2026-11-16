@@ -14,12 +14,12 @@ WRONG = "The email or password is incorrect."
 @pytest.fixture
 def account(client):
     response = client.post(
-        SIGNUP_URL, json={"full_name": "Sam Lee", "email": "sam@example.com", "password": "correct-horse"}
+        SIGNUP_URL, json={"full_name": "Sam Lee", "email": "sam@example.com", "password": "correct-horse-battery"}
     )
     return response.json()["user"]
 
 
-def login(client, email="sam@example.com", password="correct-horse"):
+def login(client, email="sam@example.com", password="correct-horse-battery"):
     return client.post(LOGIN_URL, json={"email": email, "password": password})
 
 
@@ -34,7 +34,10 @@ def test_right_password_logs_in_with_a_token(client, account):
     assert body["user"]["created_at"].endswith("Z")
     assert body["user"]["created_at"][:23] == account["created_at"][:23]
     assert body["token_type"] == "bearer"
-    claims = jwt.decode(body["access_token"], config.JWT_SECRET, algorithms=[config.JWT_ALGORITHM])
+    claims = jwt.decode(
+        body["access_token"], config.JWT_SECRET, algorithms=[config.JWT_ALGORITHM],
+        audience=config.JWT_AUDIENCE, issuer=config.JWT_ISSUER
+    )
     assert claims["sub"] == account["id"]
 
 
@@ -54,7 +57,7 @@ def test_email_case_does_not_matter(client, account):
     "email, password",
     [
         ("sam@example.com", "wrong-horse"),
-        ("nobody@example.com", "correct-horse"),
+        ("nobody@example.com", "correct-horse-battery"),
         ("sam@example.com", "c" * 73),
     ],
 )
@@ -118,11 +121,11 @@ def test_right_password_resets_the_count(client, account):
 
 
 def test_one_account_locked_leaves_others_alone(client, account):
-    client.post(SIGNUP_URL, json={"full_name": "Alex Kim", "email": "alex@example.com", "password": "alex-password"})
+    client.post(SIGNUP_URL, json={"full_name": "Alex Kim", "email": "alex@example.com", "password": "alex-long-password"})
     for _ in range(config.LOGIN_MAX_FAILURES):
         login(client, password="wrong-horse")
 
-    assert login(client, email="alex@example.com", password="alex-password").status_code == 200
+    assert login(client, email="alex@example.com", password="alex-long-password").status_code == 200
 
 
 class UnreachableDatabase:
@@ -141,7 +144,7 @@ def test_database_outage_returns_503(client, account):
 # --- Lockout per client, with a ceiling per account -------------------------
 
 
-def login_from(client, address, email="sam@example.com", password="correct-horse"):
+def login_from(client, address, email="sam@example.com", password="correct-horse-battery"):
     return client.post(LOGIN_URL, json={"email": email, "password": password}, headers={"CF-Connecting-IP": address})
 
 

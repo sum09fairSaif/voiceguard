@@ -1,14 +1,16 @@
 import { useState, type FormEvent } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { describeLoginError, logIn } from "../api/auth";
 import { getEnrollment } from "../api/enroll";
 import { invalidFields } from "../api/errors";
 import { clearToken, saveToken } from "../api/session";
+import posthog, { isPostHogConfigured } from "../posthog";
 import { Button } from "../components/Button";
 import { Logo } from "../components/Logo";
 import { Page } from "../components/Page";
 import { PageHeading } from "../components/PageHeading";
 import { TextField } from "../components/TextField";
+import type { SignOutState } from "../hooks/useSignOut";
 import { useStillShown } from "../hooks/useStillShown";
 import styles from "./SignInPage.module.css";
 import { validateSignIn, type SignInErrors, type SignInForm } from "./signInValidation";
@@ -17,6 +19,7 @@ import { validateSignIn, type SignInErrors, type SignInForm } from "./signInVali
 // a voice check needs a token, which needs the password first.
 export function SignInPage() {
   const navigate = useNavigate();
+  const serverSignOutFailed = (useLocation().state as SignOutState | null)?.serverSignOutFailed === true;
   const [form, setForm] = useState<SignInForm>({ email: "", password: "" });
   const [errors, setErrors] = useState<SignInErrors>({});
   const [formError, setFormError] = useState("");
@@ -40,7 +43,8 @@ export function SignInPage() {
       const result = await logIn({ email: form.email.trim(), password: form.password });
       // The user may have gone to Create account while this was running.
       if (!shown.current) return;
-      saveToken(result.access_token);
+      saveToken(result.access_token, result.user);
+      if (isPostHogConfigured) posthog.capture("signed_in");
       // People without a Voice ID set one up first (#10). If the status can't
       // be read, the enrollment page explains, retries, and shows enrolled
       // users the way on.
@@ -81,6 +85,13 @@ export function SignInPage() {
           subtitle="Sign in to your own little corner of peace of mind."
         />
       </div>
+
+      {serverSignOutFailed && (
+        <p className={styles.notice} role="status">
+          You're signed out on this device, but we couldn't reach VoiceGuard to end your session everywhere. It ends
+          on its own within 75 minutes.
+        </p>
+      )}
 
       {/* Fields lock while sending, so a server error always matches what was sent. */}
       <form className={styles.form} onSubmit={handleSubmit} noValidate>

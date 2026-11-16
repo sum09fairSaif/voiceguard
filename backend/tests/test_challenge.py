@@ -55,7 +55,7 @@ def test_each_request_gets_a_new_passage(client, challenges):
 def test_token_from_signup_works(client, challenges):
     signup = client.post(
         "/api/auth/signup",
-        json={"full_name": "Sam Lee", "email": "sam@example.com", "password": "correct-horse"},
+        json={"full_name": "Sam Lee", "email": "sam@example.com", "password": "correct-horse-battery"},
     ).json()
     headers = {"Authorization": f"Bearer {signup['access_token']}"}
     response = client.post(CHALLENGE_URL, headers=headers)
@@ -98,7 +98,18 @@ def test_invalid_token_is_refused(client, challenges, make_token):
 
 def test_expired_token_is_refused(client, challenges):
     an_hour_ago = datetime.now(UTC) - timedelta(hours=1)
-    token = jwt.encode({"sub": USER_ID, "exp": an_hour_ago}, config.JWT_SECRET, algorithm="HS256")
+    token = jwt.encode(
+        {
+            "sub": USER_ID,
+            "sid": "s",
+            "jti": "j",
+            "iss": config.JWT_ISSUER,
+            "aud": config.JWT_AUDIENCE,
+            "exp": an_hour_ago,
+        },
+        config.JWT_SECRET,
+        algorithm="HS256",
+    )
     response = client.post(CHALLENGE_URL, headers={"Authorization": f"Bearer {token}"})
 
     assert response.status_code == 401

@@ -11,7 +11,7 @@ import config
 from email_sender import EmailUnavailable
 from identity_check import IdentityUnavailable
 from rate_limit import RateLimited
-from routers import auth, challenge, enroll, verify
+from routers import account, auth, challenge, enroll, verify
 from transcription import AudioNotUnderstood, TranscriptionUnavailable
 from transcription_budget import BudgetUsedUp
 from voice_attempts import VoiceLockedOut
@@ -41,6 +41,7 @@ app.include_router(auth.router)
 app.include_router(challenge.router)
 app.include_router(enroll.router)
 app.include_router(verify.router)
+app.include_router(account.router)
 
 
 @app.exception_handler(RequestValidationError)
