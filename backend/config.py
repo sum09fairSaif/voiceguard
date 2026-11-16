@@ -31,6 +31,10 @@ ALLOWED_ORIGIN_REGEX = os.getenv("ALLOWED_ORIGIN_REGEX", r"https://voiceguard-[a
 
 JWT_SECRET = os.getenv("JWT_SECRET", "")
 JWT_ALGORITHM = "HS256"
+# Who issues our tokens and who they're for: a token minted for anything
+# else (or before these were added) is refused.
+JWT_ISSUER = "voiceguard-api"
+JWT_AUDIENCE = "voiceguard-app"
 JWT_EXPIRE_MINUTES = int(os.getenv("JWT_EXPIRE_MINUTES", "60"))
 if JWT_EXPIRE_MINUTES <= 0:
     raise RuntimeError("JWT_EXPIRE_MINUTES must be more than 0.")

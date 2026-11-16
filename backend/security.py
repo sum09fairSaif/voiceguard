@@ -1,4 +1,6 @@
 import secrets
+import uuid
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from functools import lru_cache
 
@@ -8,6 +10,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 import config
+from sessions import is_revoked, revoked_sessions
 
 # Reads the "Authorization: Bearer <token>" header. auto_error=False lets us
 # send our own clear 401 message when it's missing.
@@ -50,23 +53,32 @@ def _encode(payload: dict, minutes: int) -> str:
     if not config.JWT_SECRET:
         raise config.NotConfigured("JWT_SECRET is not set. Add it to your .env file.")
     now = datetime.now(UTC)
-    payload = {**payload, "iat": now, "exp": now + timedelta(minutes=minutes)}
+    payload = {
+        **payload,
+        "jti": uuid.uuid4().hex,
+        "iss": config.JWT_ISSUER,
+        "aud": config.JWT_AUDIENCE,
+        "iat": now,
+        "exp": now + timedelta(minutes=minutes),
+    }
     return jwt.encode(payload, config.JWT_SECRET, algorithm=config.JWT_ALGORITHM)
 
 
 def create_access_token(user_id: str, source: str = "login") -> str:
-    """A limited token after a password: `source` is "signup" or "login"
-    (enrollment uses it to tell the signup session apart)."""
+    """A limited token after a password, starting a new session: `source` is
+    "signup" or "login" (enrollment uses it to tell the signup session apart)."""
     return _encode(
-        {"sub": user_id, "scope": PENDING, "amr": ["pwd"], "src": source},
+        {"sub": user_id, "sid": uuid.uuid4().hex, "scope": PENDING, "amr": ["pwd"], "src": source},
         config.JWT_EXPIRE_MINUTES,
     )
 
 
-def create_verified_token(user_id: str) -> str:
-    """A voice-verified token, only after an approved voice check."""
+def create_verified_token(user_id: str, session_id: str) -> str:
+    """A voice-verified token, only after an approved voice check. It belongs
+    to the same session as the limited token that ran the check, so signing
+    out ends both."""
     return _encode(
-        {"sub": user_id, "scope": VERIFIED, "amr": ["pwd", "voice"]},
+        {"sub": user_id, "sid": session_id, "scope": VERIFIED, "amr": ["pwd", "voice"]},
         config.VERIFIED_TOKEN_MINUTES,
     )
 
@@ -81,23 +93,31 @@ def _not_signed_in(detail: str) -> HTTPException:
 
 def get_token_claims(
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
+    revoked: Callable = Depends(revoked_sessions),
 ) -> dict:
-    """The claims of any valid sign-in token, limited or voice-verified."""
+    """The claims of any valid sign-in token, limited or voice-verified, whose
+    session hasn't been signed out."""
     if credentials is None:
         raise _not_signed_in("Please sign in first.")
     if not config.JWT_SECRET:
         raise config.NotConfigured("JWT_SECRET is not set. Add it to your .env file.")
     try:
-        return jwt.decode(
+        claims = jwt.decode(
             credentials.credentials,
             config.JWT_SECRET,
             algorithms=[config.JWT_ALGORITHM],
-            options={"require": ["sub", "exp"]},
+            audience=config.JWT_AUDIENCE,
+            issuer=config.JWT_ISSUER,
+            options={"require": ["sub", "exp", "jti", "sid", "iss", "aud"]},
         )
     except jwt.ExpiredSignatureError:
         raise _not_signed_in("Your session has expired. Please sign in again.")
     except jwt.InvalidTokenError:
         raise _not_signed_in("Your login token is not valid. Please sign in again.")
+    # Only now the database: a database error here is a 503, never access.
+    if is_revoked(revoked(), claims["sid"]):
+        raise _not_signed_in("You've signed out. Please sign in again.")
+    return claims
 
 
 def get_current_user_id(claims: dict = Depends(get_token_claims)) -> str:

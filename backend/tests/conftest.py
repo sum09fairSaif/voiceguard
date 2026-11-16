@@ -16,6 +16,7 @@ from db import (
     get_voiceprints_collection,
 )
 from main import app
+from sessions import revoked_sessions
 
 
 @pytest.fixture
@@ -66,6 +67,21 @@ def voice_failures():
     collection = mongomock.MongoClient()["voiceguard_test"]["voice_failures"]
     collection.create_index("expires_at", expireAfterSeconds=0)
     return collection
+
+
+@pytest.fixture
+def revoked():
+    collection = mongomock.MongoClient()["voiceguard_test"]["revoked_sessions"]
+    collection.create_index("expires_at", expireAfterSeconds=0)
+    return collection
+
+
+@pytest.fixture(autouse=True)
+def no_real_revocation_store(revoked):
+    # Every app in the tests checks sign-outs against an in-memory list.
+    app.dependency_overrides[revoked_sessions] = lambda: (lambda: revoked)
+    yield
+    app.dependency_overrides.pop(revoked_sessions, None)
 
 
 @pytest.fixture

@@ -1,13 +1,14 @@
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
-import { clearToken } from "../api/session";
 import type { VerifyResult } from "../api/verify";
-import { Logo } from "../components/Logo";
+import { SignedInHeader } from "../components/SignedInHeader";
+import { useSignOut } from "../hooks/useSignOut";
 import { Page } from "../components/Page";
 import { ResultView } from "../components/ResultView";
 import { describeResult } from "../utils/resultWording";
 
 export function ResultPage() {
   const navigate = useNavigate();
+  const signOut = useSignOut();
   const result = (useLocation().state as { result?: VerifyResult } | null)?.result;
   if (!result) {
     // Opened directly, or refreshed: there's nothing to show.
@@ -28,14 +29,13 @@ export function ResultPage() {
       navigate("/verify", { replace: true });
       return;
     }
-    // Done: there's no home screen yet, so finish the session and go back to sign in.
-    clearToken();
-    navigate("/signin", { replace: true });
+    // Done: finish the session (on the server too) and go back to sign in.
+    void signOut();
   }
 
   return (
     <Page>
-      <Logo />
+      <SignedInHeader />
       <ResultView view={view} onAction={handleAction} />
     </Page>
   );
