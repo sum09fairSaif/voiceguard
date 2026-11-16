@@ -1,6 +1,6 @@
 import { isAxiosError } from "axios";
 import { useNavigate } from "react-router-dom";
-import { clearToken } from "../api/session";
+import { clearToken, saveToken } from "../api/session";
 import { useEffect, useState } from "react";
 import {
   AVAILABLE_AGAIN,
@@ -10,13 +10,15 @@ import {
   submitAttempt,
 } from "../api/verify";
 import { Button } from "../components/Button";
-import { Logo } from "../components/Logo";
+import { SignedInHeader } from "../components/SignedInHeader";
 import { Page } from "../components/Page";
 import { PageHeading } from "../components/PageHeading";
 import { RecordButton } from "../components/RecordButton";
 import { StepProgress } from "../components/StepProgress";
 import { useChallenge } from "../hooks/useChallenge";
 import { useRecorder } from "../hooks/useRecorder";
+import { useStillShown } from "../hooks/useStillShown";
+import posthog, { isPostHogConfigured } from "../posthog";
 import { formatCountdown } from "../utils/countdown";
 import { displayPassage } from "../utils/passage";
 import styles from "./PassagePage.module.css";
@@ -30,6 +32,7 @@ export function PassagePage() {
   const navigate = useNavigate();
   const { challenge, loading, error, secondsRemaining, expired, paused: challengePaused, newPhrase } = useChallenge();
   const recorder = useRecorder();
+  const shown = useStillShown();
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
   const [needsNewPhrase, setNeedsNewPhrase] = useState(false);
@@ -70,10 +73,29 @@ export function PassagePage() {
     if (!challenge || !recorder.recording) return;
     setSubmitting(true);
     setSubmitError("");
+    if (isPostHogConfigured) posthog.capture("voice_verification_submitted");
     try {
       const result = await submitAttempt(recorder.recording, challenge.attempt_id);
+      // Left the screen meanwhile (e.g. signed out): don't bring a token back.
+      if (!shown.current) return;
+      if (result.access_token) saveToken(result.access_token);
+      if (isPostHogConfigured) {
+        posthog.capture("voice_verification_completed", {
+          decision: result.decision,
+          identity: result.identity,
+          liveness: result.liveness,
+          content_passed: result.content.passed,
+        });
+        posthog.logger.info("voice verification completed", {
+          decision: result.decision,
+          identity: result.identity,
+          liveness: result.liveness,
+          content_passed: result.content.passed,
+        });
+      }
       navigate("/result", { state: { result } });
     } catch (err) {
+      if (!shown.current) return;
       if (isAxiosError(err) && err.response?.status === 401) {
         clearToken();
         navigate("/signin", { replace: true });
@@ -93,7 +115,7 @@ export function PassagePage() {
 
   return (
     <Page>
-      <Logo />
+      <SignedInHeader />
       <div className={styles.progress}>
         <StepProgress current={2} total={3} />
       </div>

@@ -36,7 +36,7 @@ async function fillAndSubmit(email = "alex@example.com") {
   const user = userEvent.setup();
   await user.type(screen.getByLabelText("Full name"), "  Alex Morgan ");
   await user.type(screen.getByLabelText("Email address"), email);
-  await user.type(screen.getByLabelText("Password"), "correct-horse");
+  await user.type(screen.getByLabelText("Password"), "correct-horse-battery");
   await user.click(screen.getByRole("button", { name: /create account/i }));
 }
 
@@ -57,7 +57,7 @@ describe("Create account screen", () => {
 
     expect(screen.getByText("Enter your full name.")).toBeInTheDocument();
     expect(screen.getByText("Enter a valid email address.")).toBeInTheDocument();
-    expect(screen.getByText("Use at least 8 characters.")).toBeInTheDocument();
+    expect(screen.getByText("Use at least 15 characters.")).toBeInTheDocument();
     expect(mockSignup).not.toHaveBeenCalled();
   });
 
@@ -70,7 +70,7 @@ describe("Create account screen", () => {
     expect(mockSignup).toHaveBeenCalledWith({
       full_name: "Alex Morgan",
       email: "alex@example.com",
-      password: "correct-horse",
+      password: "correct-horse-battery",
     });
     expect(getToken()).toBe("token-abc");
   });
@@ -106,6 +106,35 @@ describe("Create account screen", () => {
     await fillAndSubmit();
 
     expect(await screen.findByText("Check this field and try again.")).toBeInTheDocument();
+  });
+
+  it.each([
+    ["password_common", "too common or has appeared in a data breach"],
+    ["password_personal", "too close to your email or to VoiceGuard"],
+    ["password_repetitive", "repeats the same characters or words"],
+    ["password_sequential", "simple sequence"],
+  ])("says why the server refused a password (%s)", async (type, reason) => {
+    mockSignup.mockRejectedValue(
+      apiError(422, { detail: [{ type, loc: ["body", "password"], msg: "server text that must not be shown" }] }),
+    );
+    renderApp();
+
+    await fillAndSubmit();
+
+    expect(await screen.findByText(new RegExp(reason))).toBeInTheDocument();
+    expect(screen.queryByText(/server text/)).not.toBeInTheDocument();
+  });
+
+  it("shows a strength guide while typing the password", async () => {
+    renderApp();
+    const user = userEvent.setup();
+
+    await user.type(screen.getByLabelText("Password"), "short");
+    expect(screen.getByText("Password strength: 10 more characters")).toBeInTheDocument();
+
+    await user.clear(screen.getByLabelText("Password"));
+    await user.type(screen.getByLabelText("Password"), "lantern orchid tide river");
+    expect(screen.getByText("Password strength: Strong")).toBeInTheDocument();
   });
 
   it("says when creating accounts is paused", async () => {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { apiError, networkError } from "../test/apiError";
-import { MESSAGES, PAUSED_MESSAGES, describeApiError, invalidFields } from "./errors";
+import { MESSAGES, PAUSED_MESSAGES, describeApiError, invalidFieldProblems, invalidFields } from "./errors";
 
 describe("describeApiError", () => {
   it("explains a missing connection", () => {
@@ -65,6 +65,21 @@ describe("invalidFields", () => {
   });
 });
 
+
+describe("invalidFieldProblems", () => {
+  it("says which field and what kind of problem, never the value", () => {
+    const error = apiError(422, {
+      detail: [{ type: "password_common", loc: ["body", "password"], msg: "server text" }],
+    });
+
+    expect(invalidFieldProblems(error)).toEqual([{ field: "password", type: "password_common" }]);
+  });
+
+  it("is empty for other errors", () => {
+    expect(invalidFieldProblems(apiError(409))).toEqual([]);
+    expect(invalidFieldProblems(networkError())).toEqual([]);
+  });
+});
 
 describe("paused parts of VoiceGuard", () => {
   it.each([

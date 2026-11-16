@@ -8,6 +8,10 @@ export type Enrollment = {
   samples_required: number;
   // A fresh phrase to read for the next sample on every call; null once enrolled.
   prompt: string | null;
+  // Whether this session may record a Voice ID: only right after signup
+  // (or during a one-off grace period). Missing from an older backend,
+  // which allowed it.
+  can_enroll?: boolean;
 };
 
 export async function getEnrollment(): Promise<Enrollment> {
@@ -57,6 +61,11 @@ const REJECTION_REASONS: [RegExp, string][] = [
   [/doesn't sound like|does not sound like/i, ENROLL_MESSAGES.inconsistent],
   [/couldn't read|could not read/i, ENROLL_MESSAGES.unreadable],
 ];
+
+// The server only lets the signup session record a Voice ID (403 otherwise).
+export function isEnrollmentClosed(error: unknown): boolean {
+  return isAxiosError(error) && error.response?.status === 403;
+}
 
 export function isAlreadyEnrolled(error: unknown): boolean {
   return isAxiosError(error) && error.response?.status === 409;

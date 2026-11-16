@@ -55,6 +55,20 @@ export function describeApiError(
   }
 }
 
+// For a 422, each rejected form field with the kind of problem (the backend
+// says which field and why, never echoing the value back).
+export function invalidFieldProblems(error: unknown): { field: string; type: string }[] {
+  if (!isAxiosError(error) || error.response?.status !== 422) return [];
+  const detail = error.response.data?.detail;
+  if (!Array.isArray(detail)) return [];
+  return detail
+    .map((item) => ({
+      field: Array.isArray(item?.loc) ? item.loc[item.loc.length - 1] : undefined,
+      type: typeof item?.type === "string" ? item.type : "",
+    }))
+    .filter((problem): problem is { field: string; type: string } => typeof problem.field === "string");
+}
+
 // For a 422, the names of the form fields the server rejected (the backend
 // says which field, never echoing the value back).
 export function invalidFields(error: unknown): string[] {
