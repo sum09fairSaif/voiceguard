@@ -3,7 +3,8 @@ import { Link, useNavigate } from "react-router-dom";
 import { describeLoginError, logIn } from "../api/auth";
 import { getEnrollment } from "../api/enroll";
 import { invalidFields } from "../api/errors";
-import { clearToken, saveToken } from "../api/session";
+import { clearToken, saveAuthenticatedSession } from "../api/session";
+import posthog, { isPosthogConfigured } from "../posthog";
 import { Button } from "../components/Button";
 import { Logo } from "../components/Logo";
 import { Page } from "../components/Page";
@@ -40,7 +41,8 @@ export function SignInPage() {
       const result = await logIn({ email: form.email.trim(), password: form.password });
       // The user may have gone to Create account while this was running.
       if (!shown.current) return;
-      saveToken(result.access_token);
+      saveAuthenticatedSession(result.access_token, result.user);
+      if (isPosthogConfigured) posthog.capture("signed_in");
       // People without a Voice ID set one up first (#10). If the status can't
       // be read, the enrollment page explains, retries, and shows enrolled
       // users the way on.

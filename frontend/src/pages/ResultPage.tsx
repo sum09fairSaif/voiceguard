@@ -1,5 +1,6 @@
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { clearToken } from "../api/session";
+import posthog, { isPosthogConfigured } from "../posthog";
 import type { VerifyResult } from "../api/verify";
 import { Logo } from "../components/Logo";
 import { Page } from "../components/Page";
@@ -18,6 +19,7 @@ export function ResultPage() {
 
   function handleAction() {
     if (view.action === "retry") {
+      if (isPosthogConfigured) posthog.capture("voice_verification_retry_requested");
       // Passages are single-use, so the passage screen fetches a fresh one.
       navigate("/verify", { replace: true });
       return;

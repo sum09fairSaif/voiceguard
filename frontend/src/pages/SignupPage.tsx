@@ -2,7 +2,8 @@ import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { signup } from "../api/auth";
 import { describeApiError, invalidFields } from "../api/errors";
-import { saveToken } from "../api/session";
+import { saveAuthenticatedSession } from "../api/session";
+import posthog, { isPosthogConfigured } from "../posthog";
 import { Button } from "../components/Button";
 import { Logo } from "../components/Logo";
 import { Page } from "../components/Page";
@@ -50,7 +51,8 @@ export function SignupPage() {
       });
       // The user may have gone to Sign in while this was running.
       if (!shown.current) return;
-      saveToken(result.access_token);
+      saveAuthenticatedSession(result.access_token, result.user);
+      if (isPosthogConfigured) posthog.capture("account_created");
       // A new account has no Voice ID yet, so set one up first (#10).
       navigate("/enroll", { replace: true });
     } catch (error) {

@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { describeApiError } from "../api/errors";
 import { clearToken } from "../api/session";
+import posthog, { isPosthogConfigured } from "../posthog";
 import { VERIFY_MESSAGES, submitAttempt } from "../api/verify";
 import { Button } from "../components/Button";
 import { Logo } from "../components/Logo";
@@ -52,6 +53,22 @@ export function PassagePage() {
     setSubmitError("");
     try {
       const result = await submitAttempt(recorder.recording, challenge.attempt_id);
+      if (isPosthogConfigured) {
+        posthog.capture("voice_verification_completed", {
+          decision: result.decision,
+          identity: result.identity,
+          liveness: result.liveness,
+          content_passed: result.content.passed,
+          content_matched: result.content.matched,
+          content_total: result.content.total,
+        });
+        posthog.logger.info("voice verification completed", {
+          decision: result.decision,
+          identity: result.identity,
+          liveness: result.liveness,
+          content_passed: result.content.passed,
+        });
+      }
       navigate("/result", { state: { result } });
     } catch (err) {
       if (isAxiosError(err) && err.response?.status === 401) {

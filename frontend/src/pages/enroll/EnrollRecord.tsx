@@ -5,6 +5,7 @@ import { Button } from "../../components/Button";
 import { PageHeading } from "../../components/PageHeading";
 import { RecordButton } from "../../components/RecordButton";
 import { StepProgress } from "../../components/StepProgress";
+import posthog, { isPosthogConfigured } from "../../posthog";
 import { useRecorder } from "../../hooks/useRecorder";
 import { useStillShown } from "../../hooks/useStillShown";
 import { formatCountdown } from "../../utils/countdown";
@@ -41,7 +42,21 @@ export function EnrollRecord({ enrollment, onChange, onEnrolled, onSignedOut }: 
     try {
       const next = await action();
       if (!shown.current) return;
+      if (kind === "sending" && isPosthogConfigured) {
+        posthog.capture("voice_enrollment_sample_saved", {
+          samples_accepted: next.samples_accepted,
+          samples_required: next.samples_required,
+        });
+        posthog.logger.info("voice enrollment sample accepted", {
+          samples_accepted: next.samples_accepted,
+          samples_required: next.samples_required,
+        });
+      }
       if (next.status === "enrolled") {
+        if (isPosthogConfigured) {
+          posthog.capture("voice_enrollment_completed");
+          posthog.logger.info("voice enrollment completed");
+        }
         onEnrolled();
         return;
       }

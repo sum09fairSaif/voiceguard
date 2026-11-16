@@ -1,4 +1,6 @@
+import { useEffect } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { restoreSessionIdentity } from "./api/session";
 import { RequireSession } from "./components/RequireSession";
 import { EnrollPage } from "./pages/enroll/EnrollPage";
 import { PassagePage } from "./pages/PassagePage";
@@ -8,6 +10,10 @@ import { SignupPage } from "./pages/SignupPage";
 import { WelcomePage } from "./pages/WelcomePage";
 
 function App() {
+  useEffect(() => {
+    restoreSessionIdentity();
+  }, []);
+
   return (
     <BrowserRouter>
       <Routes>
