@@ -1,0 +1,41 @@
+name: CodeQL
+
+# GitHub's code scanning for Python and JavaScript/TypeScript. Findings show
+# on the pull request and in the repo's Security tab. The weekly run only
+# starts once this file is on the default branch (main).
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+  schedule:
+    - cron: "23 6 * * 1"
+
+permissions:
+  contents: read
+
+# Actions are pinned to a full commit, because this job can write security
+# results; the comment says which release that commit is. Only branches in
+# this repo are scanned with results uploaded (the team doesn't use forks).
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      # Needed only to upload the results to code scanning.
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [python, javascript-typescript]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          languages: ${{ matrix.language }}
+          # Python and TypeScript need no build step.
+          build-mode: none
+      - uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          category: /language:${{ matrix.language }}
