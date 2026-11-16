@@ -299,6 +299,36 @@ because LA's test set uses attack types not in training. Common Voice has no
 fakes, so its 1.6% may partly be the model learning that dataset's sound as
 "real"; the team recordings will measure real users being rejected better.
 
+### Echo and noise model
+
+`echo-noise` (November 2026): the same 10 epochs from the ASVspoof 5
+checkpoint, with room echo (25% of clips) and background noise (30%, 5-25 dB)
+from RIRS_NOISES added in training (step 8 above). Best dev EER 21.3%
+against first-try's 17.8%.
+
+On clean processed test audio (5,500 clips) it's slightly worse: pooled EER
+29.0% against 27.3%, In-the-Wild 25.4% against 22.4%, real Common Voice clips
+rejected 1.2% against 1.6%.
+
+On the same test clips as a phone or laptop in a room would hear them (2,700
+clips, each with a room echo, noise at 10-20 dB and Opus compression):
+
+| Room audio | echo-noise | first-try |
+|---|---|---|
+| Pooled EER % | **40.1** | 45.8 |
+| In-the-Wild EER % | **43.7** | 49.3 |
+| Real Common Voice clips rejected at threshold 0.0 | **6.0%** | 12.7% |
+| Real In-the-Wild clips rejected at threshold 0.0 | **10.0%** | 19.7% |
+| In-the-Wild fakes passing at threshold 0.0 | 79.7% | 80.3% |
+
+So it does what it was trained for, about half as many live voices wrongly
+rejected in a room, and the app uses it. But neither model separates fakes
+from real speech once room noise is added (EER 40-50%, near guessing). The
+echoes here come from the same RIRS_NOISES rooms used in training, so its
+numbers are if anything optimistic. Next: a model with a self-supervised
+front end (wav2vec 2.0 + AASIST), which holds up much better to microphones
+and noise.
+
 soundfile 0.13.1 (needed for its `compression_level`) bundles libsndfile
 1.2.2, which fails partway through about half of the raw ASVspoof 2019 PA FLAC
 files. The files aren't damaged: they match their stored MD5 checksums, and
