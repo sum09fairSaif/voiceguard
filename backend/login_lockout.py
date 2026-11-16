@@ -1,3 +1,7 @@
+"""Counting failures and locking out after too many: wrong passwords, by
+email (routers/auth.py), and rejected voice checks, by user id
+(voice_attempts.py). Each kind uses its own collection."""
+
 import hashlib
 import math
 from datetime import UTC, datetime, timedelta
@@ -7,10 +11,10 @@ from pymongo.collection import Collection
 from pymongo.errors import DuplicateKeyError
 
 
-def _key(email: str) -> str:
+def _key(subject: str) -> str:
     # Stored as a hash, so the collection never keeps the addresses people
     # mistype or try out, only a count against each.
-    return hashlib.sha256(email.lower().encode("utf-8")).hexdigest()
+    return hashlib.sha256(subject.lower().encode("utf-8")).hexdigest()
 
 
 def _utc(moment: datetime) -> datetime:
@@ -18,28 +22,35 @@ def _utc(moment: datetime) -> datetime:
     return moment if moment.tzinfo else moment.replace(tzinfo=UTC)
 
 
-def seconds_locked(login_failures: Collection, email: str, now: datetime | None = None) -> int:
-    """How many seconds until this email may try again; 0 if it isn't locked."""
+def seconds_locked(login_failures: Collection, subject: str, now: datetime | None = None) -> int:
+    """How many seconds until this email (or user) may try again; 0 if it isn't locked."""
     now = now or datetime.now(UTC)
-    record = login_failures.find_one({"_id": _key(email), "locked_until": {"$gt": now}})
+    record = login_failures.find_one({"_id": _key(subject), "locked_until": {"$gt": now}})
     if record is None:
         return 0
     return max(1, math.ceil((_utc(record["locked_until"]) - now).total_seconds()))
 
 
+def failure_count(login_failures: Collection, subject: str, now: datetime | None = None) -> int:
+    """Failures counted in the current window; 0 if there's no open window."""
+    now = now or datetime.now(UTC)
+    record = login_failures.find_one({"_id": _key(subject), "window_ends": {"$gt": now}})
+    return record["failures"] if record else 0
+
+
 def record_failure(
     login_failures: Collection,
-    email: str,
+    subject: str,
     max_failures: int,
     window_seconds: int,
     lockout_seconds: int,
     now: datetime | None = None,
 ) -> int:
-    """Count one wrong password for this email. Returns how many seconds it
+    """Count one failure for this email (or user). Returns how many seconds it
     is now locked for: 0 unless this failure reached `max_failures` within
     `window_seconds` of the first one."""
     now = now or datetime.now(UTC)
-    key = _key(email)
+    key = _key(subject)
     window_end = now + timedelta(seconds=window_seconds)
     record = None
     # Two tries: if another wrong password for the same email starts a
@@ -81,6 +92,6 @@ def record_failure(
     return lockout_seconds
 
 
-def clear_failures(login_failures: Collection, email: str) -> None:
-    """Forget earlier wrong passwords once the right one is given."""
-    login_failures.delete_one({"_id": _key(email)})
+def clear_failures(login_failures: Collection, subject: str) -> None:
+    """Forget earlier failures once one succeeds."""
+    login_failures.delete_one({"_id": _key(subject)})

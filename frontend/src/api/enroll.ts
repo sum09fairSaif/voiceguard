@@ -8,6 +8,10 @@ export type Enrollment = {
   samples_required: number;
   // A fresh phrase to read for the next sample on every call; null once enrolled.
   prompt: string | null;
+  // Whether this session may record a Voice ID: only right after signup
+  // (or during a one-off grace period). Missing from an older backend,
+  // which allowed it.
+  can_enroll?: boolean;
 };
 
 export async function getEnrollment(): Promise<Enrollment> {
@@ -36,6 +40,9 @@ export const ENROLL_MESSAGES = {
   tooLoud: "That one sounded distorted, as if it was too loud. Move a little further from your microphone and try again.",
   inconsistent:
     "That one didn't sound quite like your other samples. Record it again in the same quiet place. If it keeps happening, start over.",
+  notLive:
+    "That one didn't sound like someone speaking live. Read the phrase yourself, straight into your microphone, not from a recording or a speaker.",
+  missingWords: "We didn't catch every word of the phrase. Read all of it, word for word, without skipping any.",
   unreadable: "We couldn't make out that recording. Please record it again.",
   rejected: "That recording didn't work. Please record it again.",
   tooLong: "That recording is too long. Please read just the phrase.",
@@ -49,9 +56,16 @@ export const ENROLL_MESSAGES = {
 const REJECTION_REASONS: [RegExp, string][] = [
   [/too short|too quiet/i, ENROLL_MESSAGES.tooShort],
   [/too loud|distorted/i, ENROLL_MESSAGES.tooLoud],
+  [/live voice/i, ENROLL_MESSAGES.notLive],
+  [/every word/i, ENROLL_MESSAGES.missingWords],
   [/doesn't sound like|does not sound like/i, ENROLL_MESSAGES.inconsistent],
   [/couldn't read|could not read/i, ENROLL_MESSAGES.unreadable],
 ];
+
+// The server only lets the signup session record a Voice ID (403 otherwise).
+export function isEnrollmentClosed(error: unknown): boolean {
+  return isAxiosError(error) && error.response?.status === 403;
+}
 
 export function isAlreadyEnrolled(error: unknown): boolean {
   return isAxiosError(error) && error.response?.status === 409;

@@ -1,10 +1,16 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { logOut } from "../api/auth";
 import { getToken, saveToken } from "../api/session";
 import type { VerifyResult } from "../api/verify";
 import { ResultPage } from "./ResultPage";
+
+vi.mock("../api/auth", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../api/auth")>()),
+  logOut: vi.fn().mockResolvedValue(undefined),
+}));
 
 function result(overrides: Partial<VerifyResult> = {}): VerifyResult {
   return {
@@ -13,6 +19,8 @@ function result(overrides: Partial<VerifyResult> = {}): VerifyResult {
     content: { passed: true, score: 1, matched: 6, total: 6 },
     identity: "not_enrolled",
     liveness: "not_checked",
+    attempts_left: 3,
+    fallback_required: false,
     ...overrides,
   };
 }
@@ -23,6 +31,7 @@ function renderResult(state?: { result: VerifyResult }) {
       <Routes>
         <Route path="/result" element={<ResultPage />} />
         <Route path="/verify" element={<p>passage screen</p>} />
+        <Route path="/account" element={<p>account screen</p>} />
         <Route path="/signin" element={<p>sign-in screen</p>} />
       </Routes>
     </MemoryRouter>,
@@ -81,12 +90,35 @@ describe("Result page", () => {
     expect(getToken()).toBe("token");
   });
 
-  it("finishes the session on Done", async () => {
+  it("continues to the account after an approved check, keeping the session", async () => {
+    saveToken("voice-verified");
+    renderResult({
+      result: result({ decision: "approved", identity: "passed", liveness: "passed", access_token: "voice-verified" }),
+    });
+
+    await userEvent.setup().click(screen.getByRole("button", { name: /continue to home/i }));
+
+    expect(screen.getByText("account screen")).toBeInTheDocument();
+    expect(getToken()).toBe("voice-verified");
+  });
+
+  it("shows the attempts left after a rejection", () => {
+    renderResult({ result: result({ decision: "rejected", identity: "failed", attempts_left: 1 }) });
+
+    expect(screen.getByText(/1 attempt left/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /try again/i })).toBeInTheDocument();
+  });
+
+  it("offers no retry once voice checks are paused", async () => {
     saveToken("token");
-    renderResult({ result: result({ decision: "approved", identity: "passed", liveness: "passed" }) });
+    renderResult({
+      result: result({ decision: "rejected", identity: "failed", attempts_left: 0, fallback_required: true }),
+    });
+
+    expect(screen.getByRole("heading", { name: "Voice checks are paused." })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /try again/i })).not.toBeInTheDocument();
 
     await userEvent.setup().click(screen.getByRole("button", { name: /done/i }));
-
     expect(screen.getByText("sign-in screen")).toBeInTheDocument();
     expect(getToken()).toBeNull();
   });
@@ -95,5 +127,22 @@ describe("Result page", () => {
     renderResult();
 
     expect(screen.getByText("passage screen")).toBeInTheDocument();
+  });
+
+  it("ends the session on the server when finishing with Done", async () => {
+    saveToken("token");
+    renderResult({ result: result({ decision: "approved", identity: "passed", liveness: "passed" }) });
+
+    await userEvent.setup().click(screen.getByRole("button", { name: /^done$/i }));
+
+    expect(await screen.findByText("sign-in screen")).toBeInTheDocument();
+    expect(vi.mocked(logOut)).toHaveBeenCalled();
+    expect(getToken()).toBeNull();
+  });
+
+  it("offers sign-out on the result screen", () => {
+    renderResult({ result: result() });
+
+    expect(screen.getByRole("button", { name: "Sign out" })).toBeInTheDocument();
   });
 });

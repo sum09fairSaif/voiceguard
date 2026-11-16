@@ -15,6 +15,7 @@ export function ResultView({ view, onAction }: { view: View; onAction: () => voi
       <p className={`${styles.eyebrow} ${styles[view.tone]}`}>{view.eyebrow}</p>
       <h1 className={styles.title}>{view.title}</h1>
       <p className={styles.subtitle}>{view.subtitle}</p>
+      {view.note && <p className={styles.note}>{view.note}</p>}
 
       {SHOW_CHECK_DETAILS && (
         <ul className={styles.checks} aria-label="Checks">

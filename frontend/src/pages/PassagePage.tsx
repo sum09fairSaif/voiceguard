@@ -1,17 +1,24 @@
 import { isAxiosError } from "axios";
-import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { describeApiError } from "../api/errors";
-import { clearToken } from "../api/session";
-import { VERIFY_MESSAGES, submitAttempt } from "../api/verify";
+import { clearToken, saveToken } from "../api/session";
+import { useEffect, useState } from "react";
+import {
+  AVAILABLE_AGAIN,
+  describeVoiceCheckError,
+  isVoiceCheckPaused,
+  pauseSeconds,
+  submitAttempt,
+} from "../api/verify";
 import { Button } from "../components/Button";
-import { Logo } from "../components/Logo";
+import { SignedInHeader } from "../components/SignedInHeader";
 import { Page } from "../components/Page";
 import { PageHeading } from "../components/PageHeading";
 import { RecordButton } from "../components/RecordButton";
 import { StepProgress } from "../components/StepProgress";
 import { useChallenge } from "../hooks/useChallenge";
 import { useRecorder } from "../hooks/useRecorder";
+import { useStillShown } from "../hooks/useStillShown";
+import posthog, { isPostHogConfigured } from "../posthog";
 import { formatCountdown } from "../utils/countdown";
 import { displayPassage } from "../utils/passage";
 import styles from "./PassagePage.module.css";
@@ -23,13 +30,29 @@ const PASSAGE_STILL_VALID = new Set([413, 415, 429]);
 
 export function PassagePage() {
   const navigate = useNavigate();
-  const { challenge, loading, error, secondsRemaining, expired, newPhrase } = useChallenge();
+  const { challenge, loading, error, secondsRemaining, expired, paused: challengePaused, newPhrase } = useChallenge();
   const recorder = useRecorder();
+  const shown = useStillShown();
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
   const [needsNewPhrase, setNeedsNewPhrase] = useState(false);
+  const [submitPaused, setSubmitPaused] = useState(false);
+  const [submitPausedFor, setSubmitPausedFor] = useState<number | undefined>(undefined);
 
-  const passageUsable = challenge !== null && !expired && !loading && !needsNewPhrase;
+  // Once a pause from a submit is over, offer a new phrase again.
+  useEffect(() => {
+    if (!submitPaused || !submitPausedFor) return;
+    const timer = setTimeout(() => {
+      setSubmitPaused(false);
+      setSubmitError(AVAILABLE_AGAIN);
+    }, submitPausedFor * 1000);
+    return () => clearTimeout(timer);
+  }, [submitPaused, submitPausedFor]);
+
+  // Voice checks are paused (423 on the passage or the submit): nothing on
+  // this screen can be retried until the wait is over, so no buttons to try.
+  const paused = challengePaused || submitPaused;
+  const passageUsable = challenge !== null && !expired && !loading && !needsNewPhrase && !paused;
   // Changing the passage mid-recording would pair the recording with the wrong one.
   const microphoneBusy = recorder.status === "recording" || recorder.status === "requesting";
 
@@ -50,10 +73,29 @@ export function PassagePage() {
     if (!challenge || !recorder.recording) return;
     setSubmitting(true);
     setSubmitError("");
+    if (isPostHogConfigured) posthog.capture("voice_verification_submitted");
     try {
       const result = await submitAttempt(recorder.recording, challenge.attempt_id);
+      // Left the screen meanwhile (e.g. signed out): don't bring a token back.
+      if (!shown.current) return;
+      if (result.access_token) saveToken(result.access_token);
+      if (isPostHogConfigured) {
+        posthog.capture("voice_verification_completed", {
+          decision: result.decision,
+          identity: result.identity,
+          liveness: result.liveness,
+          content_passed: result.content.passed,
+        });
+        posthog.logger.info("voice verification completed", {
+          decision: result.decision,
+          identity: result.identity,
+          liveness: result.liveness,
+          content_passed: result.content.passed,
+        });
+      }
       navigate("/result", { state: { result } });
     } catch (err) {
+      if (!shown.current) return;
       if (isAxiosError(err) && err.response?.status === 401) {
         clearToken();
         navigate("/signin", { replace: true });
@@ -61,7 +103,9 @@ export function PassagePage() {
       }
       const status = isAxiosError(err) ? err.response?.status : undefined;
       setNeedsNewPhrase(!(status && PASSAGE_STILL_VALID.has(status)));
-      setSubmitError(describeApiError(err, VERIFY_MESSAGES));
+      setSubmitPaused(isVoiceCheckPaused(err));
+      setSubmitPausedFor(pauseSeconds(err));
+      setSubmitError(describeVoiceCheckError(err));
       setSubmitting(false);
     }
   }
@@ -71,7 +115,7 @@ export function PassagePage() {
 
   return (
     <Page>
-      <Logo />
+      <SignedInHeader />
       <div className={styles.progress}>
         <StepProgress current={2} total={3} />
       </div>
@@ -106,7 +150,7 @@ export function PassagePage() {
 
         <div className={styles.footer}>
           {loading && challenge && <span className={styles.status}>Getting a new phrase…</span>}
-          {!loading && challenge && !expired && !submitting && (
+          {!loading && challenge && !expired && !submitting && !paused && (
             <>
               <span className={styles.countdown}>Expires in {formatCountdown(secondsRemaining)}</span>
               <span aria-hidden="true">·</span>
@@ -115,7 +159,7 @@ export function PassagePage() {
               </button>
             </>
           )}
-          {!loading && challenge && expired && (
+          {!loading && challenge && expired && !paused && (
             <>
               <span className={styles.countdown}>This phrase has expired.</span>
               <button type="button" className={styles.link} onClick={handleNewPhrase} disabled={microphoneBusy}>
@@ -123,7 +167,7 @@ export function PassagePage() {
               </button>
             </>
           )}
-          {!loading && !challenge && error && (
+          {!loading && !challenge && error && !paused && (
             <button type="button" className={styles.link} onClick={handleNewPhrase}>
               ↻ Try again
             </button>
@@ -132,7 +176,7 @@ export function PassagePage() {
       </section>
 
       <section className={styles.recorder} aria-label="Record your voice">
-        {recorded && !submitError ? (
+        {recorded && !submitError && !paused ? (
           <>
             <p className={styles.recorderTitle}>Recording ready</p>
             <p className={styles.recorderHint}>Send it to check your voice, or record it again.</p>
@@ -159,6 +203,11 @@ export function PassagePage() {
                 <p className={styles.recorderTitle}>Listening… {formatCountdown(recorder.elapsed)}</p>
                 <p className={styles.recorderHint}>Tap to stop when you’ve read the phrase.</p>
               </>
+            ) : paused ? (
+              <>
+                <p className={styles.recorderTitle}>Voice checks are paused</p>
+                <p className={styles.recorderHint}>You can try again once the wait is over.</p>
+              </>
             ) : recorder.status === "requesting" ? (
               <>
                 <p className={styles.recorderTitle}>Waiting for your microphone…</p>
@@ -178,7 +227,7 @@ export function PassagePage() {
             <p className={styles.error} role="alert">
               {submitError || recorder.error}
             </p>
-            {submitError && needsNewPhrase ? (
+            {paused ? null : submitError && needsNewPhrase ? (
               <button type="button" className={styles.link} onClick={handleNewPhrase}>
                 ↻ Get a new phrase
               </button>

@@ -25,27 +25,28 @@ def make_audio(seconds=1.0, fmt="wav", codec="pcm_s16le", source=None):
     return result.stdout
 
 
-class FakeEncoder:
-    # Stands in for the model: remembers the samples it was given.
+class FakeModels:
+    # Stands in for both models: remembers the samples it was given.
     def __init__(self):
         self.calls = []
+        self.liveness = 1.5
 
     def __call__(self, samples):
         self.calls.append(samples)
-        return [0.1, -0.2, 0.3]
+        return [0.1, -0.2, 0.3], self.liveness
 
 
 @pytest.fixture
-def encoder():
-    return FakeEncoder()
+def models():
+    return FakeModels()
 
 
 @pytest.fixture
-def client(encoder, monkeypatch):
-    # The request handler behind the Gradio `embed` endpoint, with a stand-in
-    # model. Gradio itself only passes the three strings through.
+def client(models, monkeypatch):
+    # The request handler behind the Gradio `embed` endpoint, with stand-in
+    # models. Gradio itself only passes the three strings through.
     monkeypatch.setenv("SERVICE_TOKEN", TOKEN)
-    return lambda token, audio_base64, extension: embed_recording(token, audio_base64, extension, encoder)
+    return lambda token, audio_base64, extension: embed_recording(token, audio_base64, extension, models)
 
 
 def send(client, audio, filename="attempt.wav", token=TOKEN):
@@ -56,16 +57,39 @@ def error(body):
     return body.get("error")
 
 
-def test_recording_becomes_an_embedding(client, encoder):
+def test_recording_becomes_an_embedding(client, models):
     body = send(client, make_audio(seconds=1.0))
 
     assert error(body) is None
     assert body["embedding"] == [0.1, -0.2, 0.3]
     assert body["model"] == "speechbrain/spkrec-ecapa-voxceleb"
     # Decoded to one second of 16 kHz mono before reaching the model.
-    [samples] = encoder.calls
+    [samples] = models.calls
     assert samples.dtype == np.float32
     assert abs(len(samples) - SAMPLE_RATE) < 200
+
+
+def test_recording_gets_a_liveness_score(client, models):
+    body = send(client, make_audio(seconds=1.0))
+
+    assert body["liveness"] == 1.5
+    assert body["liveness_model"] == "aasist-first-try"
+
+
+def test_no_liveness_score_is_passed_on_as_none(client, models):
+    models.liveness = None
+
+    body = send(client, make_audio(seconds=1.0))
+
+    assert error(body) is None
+    assert body["liveness"] is None
+
+
+def test_refused_recordings_are_not_run_through_the_models(client, models):
+    body = send(client, b"definitely not audio")
+
+    assert error(body) == "not_audio"
+    assert models.calls == []
 
 
 # Browsers record webm or ogg (Opus) or mp4 (AAC); m4a has its index at the
@@ -75,7 +99,7 @@ def test_recording_becomes_an_embedding(client, encoder):
     [("webm", "libopus", "attempt.webm"), ("ogg", "libopus", "attempt.ogg"), ("ipod", "aac", "attempt.m4a")],
     ids=["webm", "ogg", "m4a"],
 )
-def test_browser_formats_are_decoded(client, encoder, fmt, codec, filename):
+def test_browser_formats_are_decoded(client, models, fmt, codec, filename):
     if fmt == "ipod":
         # mp4 can't be written to a pipe either, so make it via a file.
         handle, path = tempfile.mkstemp(suffix=".m4a")
@@ -94,7 +118,7 @@ def test_browser_formats_are_decoded(client, encoder, fmt, codec, filename):
         audio = make_audio(fmt=fmt, codec=codec)
 
     assert error(send(client, audio, filename)) is None
-    assert abs(len(encoder.calls[0]) - SAMPLE_RATE) < 1000
+    assert abs(len(models.calls[0]) - SAMPLE_RATE) < 1000
 
 
 def test_recording_is_not_kept(client, monkeypatch):
@@ -114,41 +138,41 @@ def test_recording_is_not_kept(client, monkeypatch):
     assert not any(os.path.exists(path) for path in made)
 
 
-def test_not_audio_is_refused(client, encoder):
+def test_not_audio_is_refused(client, models):
     assert error(send(client, b"definitely not audio", "attempt.webm")) == "not_audio"
-    assert encoder.calls == []
+    assert models.calls == []
 
 
-def test_too_short_is_refused(client, encoder):
+def test_too_short_is_refused(client, models):
     assert error(send(client, make_audio(seconds=0.2))) == "not_audio"
-    assert encoder.calls == []
+    assert models.calls == []
 
 
-def test_too_large_is_refused(client, encoder):
+def test_too_large_is_refused(client, models):
     assert error(send(client, b"\0" * (MAX_AUDIO_BYTES + 1))) == "too_large"
-    assert encoder.calls == []
+    assert models.calls == []
 
 
 @pytest.mark.parametrize("token", ["wrong-token", "", TOKEN + "x"], ids=["wrong", "empty", "longer"])
-def test_wrong_token_is_refused(client, encoder, token):
+def test_wrong_token_is_refused(client, models, token):
     assert error(send(client, make_audio(), token=token)) == "unauthorized"
-    assert encoder.calls == []
+    assert models.calls == []
 
 
-def test_service_without_a_token_refuses_everything(client, encoder, monkeypatch):
+def test_service_without_a_token_refuses_everything(client, models, monkeypatch):
     monkeypatch.delenv("SERVICE_TOKEN")
 
     assert error(send(client, make_audio())) == "service_token_not_set"
-    assert encoder.calls == []
+    assert models.calls == []
 
 
 @pytest.mark.parametrize("filename", ["attempt.m3u8", "attempt.txt", "attempt", "attempt.webm.exe"])
-def test_other_formats_are_refused(client, encoder, filename):
+def test_other_formats_are_refused(client, models, filename):
     assert error(send(client, make_audio(), filename)) == "unsupported_format"
-    assert encoder.calls == []
+    assert models.calls == []
 
 
-def test_playlist_disguised_as_audio_is_not_followed(client, encoder, tmp_path):
+def test_playlist_disguised_as_audio_is_not_followed(client, models, tmp_path):
     # An HLS playlist pointing at real audio. If ffmpeg guessed the format
     # from the contents, it would open the other file and succeed.
     real = tmp_path / "real.wav"
@@ -157,16 +181,16 @@ def test_playlist_disguised_as_audio_is_not_followed(client, encoder, tmp_path):
 
     for filename in ("attempt.webm", "attempt.wav", "attempt.mp3"):
         assert error(send(client, playlist, filename)) == "not_audio"
-    assert encoder.calls == []
+    assert models.calls == []
 
 
-def test_mp3_is_decoded(client, encoder):
+def test_mp3_is_decoded(client, models):
     assert error(send(client, make_audio(fmt="mp3", codec="libmp3lame"), "attempt.mp3")) is None
 
 
-def test_text_that_is_not_base64_is_refused(client, encoder):
+def test_text_that_is_not_base64_is_refused(client, models):
     assert error(client(TOKEN, "this is not base64!", ".wav")) == "not_audio"
-    assert encoder.calls == []
+    assert models.calls == []
 
 
 # --- Recording quality, for enrollment ----------------------------------------
@@ -200,18 +224,18 @@ def test_a_too_loud_recording_is_clipped(client):
 # --- ZeroGPU ------------------------------------------------------------------
 
 
-def test_without_zerogpu_the_model_runs_on_the_cpu(monkeypatch):
+def test_without_zerogpu_the_models_run_on_the_cpu(monkeypatch):
     monkeypatch.setattr(service, "spaces", None)
-    monkeypatch.setattr(service, "_embed", lambda samples, device: [device])
+    monkeypatch.setattr(service, "_run", lambda samples, device: ([device], 0.0))
 
-    assert service.encode(np.zeros(16000, dtype=np.float32)) == ["cpu"]
+    assert service.run_models(np.zeros(16000, dtype=np.float32)) == (["cpu"], 0.0)
 
 
-def test_on_zerogpu_the_model_runs_on_the_gpu(monkeypatch):
+def test_on_zerogpu_the_models_run_on_the_gpu(monkeypatch):
     monkeypatch.setattr(service, "spaces", object())
-    monkeypatch.setattr(service, "_embed_on_gpu", lambda samples: ["cuda"])
+    monkeypatch.setattr(service, "_run_on_gpu", lambda samples: (["cuda"], 0.0))
 
-    assert service.encode(np.zeros(16000, dtype=np.float32)) == ["cuda"]
+    assert service.run_models(np.zeros(16000, dtype=np.float32)) == (["cuda"], 0.0)
 
 
 def test_falls_back_to_the_cpu_when_no_gpu_is_free(monkeypatch):
@@ -219,7 +243,18 @@ def test_falls_back_to_the_cpu_when_no_gpu_is_free(monkeypatch):
         raise RuntimeError("ZeroGPU quota exceeded")
 
     monkeypatch.setattr(service, "spaces", object())
-    monkeypatch.setattr(service, "_embed_on_gpu", no_gpu)
-    monkeypatch.setattr(service, "_embed", lambda samples, device: [device])
+    monkeypatch.setattr(service, "_run_on_gpu", no_gpu)
+    monkeypatch.setattr(service, "_run", lambda samples, device: ([device], 0.0))
 
-    assert service.encode(np.zeros(16000, dtype=np.float32)) == ["cpu"]
+    assert service.run_models(np.zeros(16000, dtype=np.float32)) == (["cpu"], 0.0)
+
+
+def test_both_models_get_the_same_samples_on_the_same_device(monkeypatch):
+    seen = []
+    monkeypatch.setattr(service, "_embed", lambda samples, device: seen.append(("embed", samples, device)) or [0.0])
+    monkeypatch.setattr(service.liveness, "score", lambda samples, device: seen.append(("live", samples, device)) or 2.0)
+    samples = np.zeros(16000, dtype=np.float32)
+
+    assert service._run(samples, "cuda") == ([0.0], 2.0)
+    assert [(name, device) for name, _, device in seen] == [("embed", "cuda"), ("live", "cuda")]
+    assert all(s is samples for _, s, _ in seen)

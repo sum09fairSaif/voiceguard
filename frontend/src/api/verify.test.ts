@@ -2,7 +2,14 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { apiError } from "../test/apiError";
 import { api } from "./client";
 import { describeApiError } from "./errors";
-import { VERIFY_MESSAGES, submitAttempt, type VerifyResult } from "./verify";
+import {
+  VERIFY_MESSAGES,
+  describeVoiceCheckError,
+  isVoiceCheckPaused,
+  pausedMessage,
+  submitAttempt,
+  type VerifyResult,
+} from "./verify";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -14,6 +21,8 @@ const RESULT: VerifyResult = {
   content: { passed: true, score: 1, matched: 6, total: 6 },
   identity: "not_enrolled",
   liveness: "not_checked",
+  attempts_left: 3,
+  fallback_required: false,
 };
 
 describe("submitAttempt", () => {
@@ -46,5 +55,39 @@ describe("VERIFY_MESSAGES", () => {
     expect(describeApiError(apiError(503), VERIFY_MESSAGES)).toBe(
       "VoiceGuard is temporarily unavailable. Please try again shortly.",
     );
+  });
+});
+
+describe("voice-check pause", () => {
+  it.each([
+    ["900", "Voice checks are paused after too many failed attempts. Please try again in 15 minutes."],
+    ["60", "Voice checks are paused after too many failed attempts. Please try again in 1 minute."],
+    ["5", "Voice checks are paused after too many failed attempts. Please try again in 1 minute."],
+  ])("turns Retry-After %s seconds into minutes", (seconds, message) => {
+    expect(describeVoiceCheckError(apiError(423, {}, { "retry-after": seconds }))).toBe(message);
+  });
+
+  it.each([undefined, "0", "soon"])("falls back when Retry-After is %s", (seconds) => {
+    const headers: Record<string, string> = seconds === undefined ? {} : { "retry-after": seconds };
+    expect(describeVoiceCheckError(apiError(423, {}, headers))).toBe(pausedMessage(undefined));
+    expect(pausedMessage(undefined)).toMatch(/try again later/);
+  });
+
+  it("never shows the server's own text", () => {
+    const error = apiError(423, { detail: "locked: voice_failures doc 42" }, { "retry-after": "60" });
+
+    expect(describeVoiceCheckError(error)).not.toMatch(/voice_failures/);
+  });
+
+  it("is told apart from other errors", () => {
+    expect(isVoiceCheckPaused(apiError(423))).toBe(true);
+    expect(isVoiceCheckPaused(apiError(429))).toBe(false);
+    expect(isVoiceCheckPaused(new Error("boom"))).toBe(false);
+  });
+
+  it("leaves other statuses to the usual messages", () => {
+    expect(describeVoiceCheckError(apiError(400))).toBe(VERIFY_MESSAGES[400]);
+    expect(describeVoiceCheckError(apiError(503))).toBe(describeApiError(apiError(503)));
+    expect(describeVoiceCheckError(apiError(400), {})).toBe(describeApiError(apiError(400)));
   });
 });
