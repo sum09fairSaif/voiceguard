@@ -5,5 +5,5 @@
 # has to match torchaudio): 2.13.0 fixes all 4 of PyTorch's alerts (#107),
 # and scores the liveness model the same as 2.8.0 (within 0.000001).
 -r requirements.txt
-torch==2.13.0
+torch==2.15.0
 kaggle==2.2.5  # uploads the pack and starts training on Kaggle (kaggle_pack.py)
