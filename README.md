@@ -46,10 +46,10 @@ as soon as the voiceprint is built or the checks have run.
 
 ## Key features
 
-- **Password, then voice:** the intended flow makes voice a second factor on
-  top of a password, not a replacement for it. This isn't enforced yet:
-  sign-in issues a token after the password alone, and nothing requires a
-  passed voice check until a voice check can be approved (#17 and #18).
+- **Password, then voice:** voice is a second factor on top of a password,
+  not a replacement for it. A password alone gives a limited token that can
+  only start the voice check; only an approved check (words, voice and
+  liveness) gives the short-lived token that opens the account (#153).
 - **Single-use passages:** each passage is a random sentence (about 508
   million combinations of the six words that are checked), can be used once,
   and expires after two minutes, so an old recording can't be replayed.
@@ -140,13 +140,21 @@ curl -X POST $API/api/verify -H "Authorization: Bearer <access_token>" \
 | Method | Path | What it does | Sign-in needed |
 |---|---|---|---|
 | GET | `/health` | Is the server up? | No |
-| POST | `/api/auth/signup` | Create an account; returns an access token | No |
-| POST | `/api/auth/login` | Sign in with email and password; locks for 30 min after 5 wrong tries within 15 min | No |
-| POST | `/api/challenge` | Get a fresh, single-use passage to read (expires in 2 min); 423 while voice checks are paused | Yes |
-| POST | `/api/verify` | Send a recording of the passage; runs the checks and returns the decision, `attempts_left` and `fallback_required`; 423 while voice checks are paused | Yes |
-| GET | `/api/enroll` | Enrollment progress, and a sentence to read for the next sample | Yes |
-| POST | `/api/enroll/samples` | Add one voice sample; the voiceprint is built after 3 good ones | Yes |
-| DELETE | `/api/enroll/samples` | Start enrollment over | Yes |
+| POST | `/api/auth/signup` | Create an account; returns a limited token (password only) | No |
+| POST | `/api/auth/login` | Sign in with email and password; returns a limited token; locks for 30 min after 5 wrong tries within 15 min | No |
+| POST | `/api/auth/logout` | Sign out: ends this sign-in on the server, so its limited and voice-verified tokens both stop working (204) | Any token |
+| POST | `/api/challenge` | Get a fresh, single-use passage to read (expires in 2 min); 423 while voice checks are paused | Limited token |
+| POST | `/api/verify` | Send a recording of the passage; runs the checks and returns the decision, `attempts_left` and `fallback_required`, plus a voice-verified `access_token` (15 min) when approved; 423 while voice checks are paused | Limited token |
+| GET | `/api/enroll` | Enrollment progress, a sentence to read for the next sample, and whether this session may enroll (`can_enroll`) | Limited token |
+| POST | `/api/enroll/samples` | Add one voice sample (it must hold every word of the sentence, in order, sound live, and match the earlier samples); the voiceprint is built after 3 good ones. Only the signup session, within 30 min of creating the account; until 2026-11-16 00:00 ET, accounts made before this rule may also enroll after signing in (403 otherwise) | Signup token (or sign-in token during the grace period) |
+| DELETE | `/api/enroll/samples` | Start enrollment over | Limited token |
+| GET | `/api/me` | The account summary (name, email, dates, previous sign-in); 403 with a limited token | Voice-verified token |
+
+A password alone gives a **limited token**: it can only start the voice check.
+Only an approved voice check (words, voice and liveness) gives a
+**voice-verified token**, the only kind that opens the account. Both belong
+to one sign-in session; signing out ends the session on the server, so a
+copied token stops working too.
 
 Full request and response details are in the interactive docs at `/docs`.
 
@@ -222,7 +230,7 @@ Fill in `.env`. It is git-ignored: never commit it.
 |---|---|---|
 | `MONGO_URI` | Everything except `/health` | Create a free cluster on [MongoDB Atlas](https://www.mongodb.com/atlas), then **Connect → Drivers** and copy the connection string. Allow your IP under **Network Access**. |
 | `JWT_SECRET` | Everything except `/health` | Any long random string: `python -c "import secrets; print(secrets.token_urlsafe(32))"` |
-| `OPENAI_API_KEY` | `/api/verify` (content check) | [platform.openai.com](https://platform.openai.com/api-keys). Each check is a paid call. |
+| `OPENAI_API_KEY` | `/api/verify` (content check) and enrollment (every-word check) | [platform.openai.com](https://platform.openai.com/api-keys). Each check, and each enrollment sample that passes the sound checks, is a paid call. |
 | `VOICEPRINT_KEY` | Enrollment and identity check | `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"` (run after installing the backend) |
 | `EMBEDDING_SERVICE_URL`, `EMBEDDING_SERVICE_TOKEN` | Enrollment and identity check | Your model service's address and token (step 3). |
 
@@ -287,7 +295,7 @@ runs the tests, lint and the frontend build on every pull request.
 |---|---|
 | `pip install` fails building packages | Use Python 3.11 (`py -3.11 -m venv venv` on Windows). Newer versions, such as 3.14, have no ready-built packages for some pins. |
 | `/health` works but other calls answer 503 "The service is temporarily unavailable" | `MONGO_URI` or `JWT_SECRET` is missing from `.env` (the server log names the missing setting), or the database can't be reached (check `MONGO_URI`, and that your IP is allowed under **Network Access** in Atlas). An unreachable database gives the same message, and the log doesn't name a setting for it. |
-| Voice checks answer "Voice checks are temporarily unavailable" | `OPENAI_API_KEY` (content check), `VOICEPRINT_KEY` (enrollment, identity check) or the model service settings (identity check, enrollment) are missing, or the model service is asleep: try again in a minute. |
+| Voice checks answer "Voice checks are temporarily unavailable" | `OPENAI_API_KEY` (content check, enrollment), `VOICEPRINT_KEY` (enrollment, identity check) or the model service settings (identity check, enrollment) are missing, or the model service is asleep: try again in a minute. |
 | The browser shows a CORS error | Add the frontend's address (e.g. `http://localhost:5173`) to `ALLOWED_ORIGINS` in `.env`, then restart the backend. |
 | The frontend talks to the wrong backend | Set `VITE_API_BASE_URL` in `frontend/.env.local` (not the root `.env`) and restart `npm run dev`. |
 | Model service tests fail with "ffmpeg not found" | Install ffmpeg, or set `FFMPEG_BINARY` to the full path of an ffmpeg file. `pip install imageio-ffmpeg` provides one; print its path with `python -c "import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())"`. |
