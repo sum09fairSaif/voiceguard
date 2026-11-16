@@ -5,6 +5,7 @@ From ml/liveness/, after preprocess.py:
     python train.py --init <weights.pth> --name first-try
     python train.py --init <weights.pth> --name smoke --epochs 1 --steps 20 --dev-per-group 20
     python train.py --name first-try --resume     # carry on after a stop
+    python train.py --arch ssl --name xlsr        # wav2vec 2.0 XLS-R + AASIST (models/ssl_aasist.py)
 
 --data-dir can also be a pack made by kaggle_pack.py, for training on Kaggle.
 
@@ -16,6 +17,11 @@ Writes, in data/runs/<name>/:
   like a public checkpoint: --model ours=data/runs/<name>/best.pth
 - last.pth: everything needed to carry on (weights, optimizer, epoch).
 - log.csv: loss and dev EER by epoch; settings.json: how it was run.
+
+--arch ssl puts a pretrained wav2vec 2.0 front end (XLS-R, downloaded from
+Hugging Face) before AASIST's graph back end. It needs no --init, trains the
+front end at --ssl-lr and the new back end at --lr, and uses mixed precision
+on a GPU to fit its 300M parameters.
 
 The dev score is the mean of each dataset's EER, so each dataset counts the
 same whatever its size.
@@ -45,7 +51,7 @@ def evaluate(model: torch.nn.Module, loader: DataLoader, clips: pd.DataFrame, de
     """EER on the dev sample: each dataset's, and their mean."""
     model.eval()
     scores = []
-    with torch.inference_mode():
+    with torch.inference_mode(), torch.autocast("cuda", dtype=torch.float16, enabled=device == "cuda" and hasattr(model, "ssl")):
         for x, _ in loader:
             scores.append(model(x.to(device))[1][:, REAL].float().cpu().numpy())
     clips = clips.assign(score=np.concatenate(scores))
@@ -62,13 +68,16 @@ def evaluate(model: torch.nn.Module, loader: DataLoader, clips: pd.DataFrame, de
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--name", required=True, help="folder under data/runs/")
-    parser.add_argument("--init", type=Path, help="checkpoint to start from")
+    parser.add_argument("--arch", choices=["aasist", "ssl"], default="aasist",
+                        help="aasist: AASIST alone; ssl: wav2vec 2.0 XLS-R + AASIST")
+    parser.add_argument("--init", type=Path, help="checkpoint to start from (AASIST only)")
     parser.add_argument("--resume", action="store_true", help="carry on from data/runs/<name>/last.pth")
     parser.add_argument("--data-dir", type=Path, default=DEFAULT_DATA_DIR)
     parser.add_argument("--epochs", type=int, default=10)
     parser.add_argument("--steps", type=int, default=2000, help="batches per epoch")
     parser.add_argument("--batch", type=int, default=32)
-    parser.add_argument("--lr", type=float, default=3e-5)
+    parser.add_argument("--lr", type=float, default=3e-5, help="for AASIST, or the ssl back end")
+    parser.add_argument("--ssl-lr", type=float, default=1e-5, help="for the pretrained wav2vec 2.0 front end")
     parser.add_argument("--dev-per-group", type=int, default=500, help="dev clips per dataset and label")
     parser.add_argument("--workers", type=int, default=8, help="DataLoader processes")
     parser.add_argument("--noise-dir", type=Path, help=f"default: <data-dir>/{NOISE_DIR}")
@@ -85,25 +94,39 @@ def main() -> None:
         sys.exit(f"nothing to resume: {last} not found")
     if not args.resume and run.exists():
         sys.exit(f"{run} exists; pick another --name, or add --resume")
-    if not args.resume and args.init is None:
-        sys.exit("give --init <checkpoint> (training from scratch isn't supported)")
+    if not args.resume and args.init is None and args.arch == "aasist":
+        sys.exit("give --init <checkpoint> (training AASIST from scratch isn't supported)")
     run.mkdir(parents=True, exist_ok=True)
 
     torch.manual_seed(args.seed)
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    model = Model(MODEL_CONFIG).to(device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=1e-4)
+    if args.arch == "ssl":
+        from models.ssl_aasist import SslAasist
+
+        model = SslAasist(MODEL_CONFIG).to(device)
+        groups = [{"params": list(model.ssl_parameters()), "lr": args.ssl_lr},
+                  {"params": model.backend_parameters(), "lr": args.lr}]
+    else:
+        model = Model(MODEL_CONFIG).to(device)
+        groups = [{"params": list(model.parameters()), "lr": args.lr}]
+    optimizer = torch.optim.Adam(groups, weight_decay=1e-4)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, args.epochs * args.steps, eta_min=args.lr / 30)
+    # Half precision where it's safe, for the large ssl model on a GPU.
+    mixed = args.arch == "ssl" and device == "cuda"
+    scaler = torch.amp.GradScaler("cuda", enabled=mixed)
     start_epoch, best = 1, float("inf")
     if args.resume:
         state = torch.load(last, map_location=device, weights_only=True)
         model.load_state_dict(state["model"])
         optimizer.load_state_dict(state["optimizer"])
         scheduler.load_state_dict(state["scheduler"])
+        if "scaler" in state:
+            scaler.load_state_dict(state["scaler"])
         start_epoch, best = state["epoch"] + 1, state["best"]
         print(f"resuming after epoch {state['epoch']} (best dev EER {best:.2f}%)")
     else:
-        model.load_state_dict(torch.load(args.init, map_location=device, weights_only=True))
+        if args.init is not None:
+            model.load_state_dict(torch.load(args.init, map_location=device, weights_only=True))
         (run / "settings.json").write_text(json.dumps({k: str(v) for k, v in vars(args).items()}, indent=2))
 
     train = load_split(args.data_dir, "train")
@@ -123,10 +146,16 @@ def main() -> None:
         started, total = time.time(), 0.0
         for step, (x, y) in enumerate(loader, start=1):
             x, y = x.to(device, non_blocking=True), y.to(device, non_blocking=True)
-            loss = loss_fn(model(x, Freq_aug=True)[1], y)
+            with torch.autocast("cuda", dtype=torch.float16, enabled=mixed):
+                loss = loss_fn(model(x, Freq_aug=True)[1].float(), y)
             optimizer.zero_grad(set_to_none=True)
-            loss.backward()
-            optimizer.step()
+            scaler.scale(loss).backward()
+            if args.arch == "ssl":
+                # Keeps a bad batch from wrecking the pretrained front end.
+                scaler.unscale_(optimizer)
+                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+            scaler.step(optimizer)
+            scaler.update()
             scheduler.step()
             total += loss.item()
             if step % 100 == 0 or step == args.steps:
@@ -146,7 +175,7 @@ def main() -> None:
         # Saved last, and under a temporary name first, so a stop mid-save
         # can't leave a broken last.pth.
         state = {"model": model.state_dict(), "optimizer": optimizer.state_dict(),
-                 "scheduler": scheduler.state_dict(), "epoch": epoch, "best": best}
+                 "scheduler": scheduler.state_dict(), "scaler": scaler.state_dict(), "epoch": epoch, "best": best}
         torch.save(state, run / "last.partial")
         (run / "last.partial").replace(last)
 

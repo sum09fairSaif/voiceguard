@@ -7,3 +7,4 @@
 -r requirements.txt
 torch==2.13.0
 kaggle==2.2.5  # uploads the pack and starts training on Kaggle (kaggle_pack.py)
+transformers==5.21.1  # the wav2vec 2.0 front end for --arch ssl (models/ssl_aasist.py)

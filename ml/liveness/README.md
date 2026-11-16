@@ -251,6 +251,12 @@ Kaggle gives about 30 free GPU hours a week, in sessions of up to 9-12 hours.
    the noise dataset, and the run stops at once on Kaggle if it can't find
    it, rather than spending GPU hours training without it.
 
+9. For wav2vec 2.0 XLS-R + AASIST (`models/ssl_aasist.py`), add `--arch ssl`
+   to `kaggle_pack.py --script-only` (resumes included). Nothing new is
+   uploaded: Kaggle downloads XLS-R (1.2 GB) from Hugging Face, and the run
+   installs `transformers`. It trains with batches of 8, the front end at
+   1e-5 and the new back end at 1e-4, in mixed precision.
+
 If `download.py rirs_noises` says openslr.org's certificate isn't valid
 while a browser opens the site fine, Python's certificate list is out of
 date rather than the site being unsafe: download `rirs_noises.zip` in the
