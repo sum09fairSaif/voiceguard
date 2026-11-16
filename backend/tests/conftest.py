@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 import config
 from db import (
     get_challenges_collection,
+    get_email_codes_collection,
     get_enroll_prompts_collection,
     get_enrollments_collection,
     get_login_failures_collection,
@@ -16,6 +17,7 @@ from db import (
     get_voice_failures_collection,
     get_voiceprints_collection,
 )
+from email_sender import get_optional_email_sender
 from main import app
 from sessions import revoked_sessions
 
@@ -78,6 +80,13 @@ def voice_failures():
 
 
 @pytest.fixture
+def email_codes():
+    collection = mongomock.MongoClient()["voiceguard_test"]["email_codes"]
+    collection.create_index("expires_at", expireAfterSeconds=0)
+    return collection
+
+
+@pytest.fixture
 def revoked():
     collection = mongomock.MongoClient()["voiceguard_test"]["revoked_sessions"]
     collection.create_index("expires_at", expireAfterSeconds=0)
@@ -95,7 +104,7 @@ def no_real_revocation_store(revoked):
 @pytest.fixture
 def client(
     users, challenges, rate_limits, voiceprints, enrollments, enroll_prompts, login_failures, voice_failures,
-    monkeypatch,
+    email_codes, monkeypatch,
 ):
     # A fresh random key each run, so the code can't pass by hard-coding one.
     monkeypatch.setattr(config, "JWT_SECRET", secrets.token_urlsafe(32))
@@ -107,5 +116,10 @@ def client(
     app.dependency_overrides[get_enroll_prompts_collection] = lambda: enroll_prompts
     app.dependency_overrides[get_login_failures_collection] = lambda: login_failures
     app.dependency_overrides[get_voice_failures_collection] = lambda: voice_failures
+    app.dependency_overrides[get_email_codes_collection] = lambda: email_codes
+    # Tests never send real email; test_email_verification.py records it.
+    app.dependency_overrides[get_optional_email_sender] = lambda: None
+    # Verification stays off unless a test turns it on, as in production.
+    monkeypatch.setattr(config, "EMAIL_VERIFICATION_REQUIRED", False)
     yield TestClient(app)
     app.dependency_overrides.clear()
