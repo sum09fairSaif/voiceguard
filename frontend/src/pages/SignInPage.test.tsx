@@ -28,9 +28,9 @@ const account = {
   token_type: "bearer",
 };
 
-function renderApp() {
+function renderApp(state?: unknown) {
   render(
-    <MemoryRouter initialEntries={["/signin"]}>
+    <MemoryRouter initialEntries={[{ pathname: "/signin", state }]}>
       <Routes>
         <Route path="/signin" element={<SignInPage />} />
         <Route path="/signup" element={<p>signup screen</p>} />
@@ -214,5 +214,17 @@ describe("SignInPage", () => {
       expect(screen.getByText("signup screen")).toBeInTheDocument();
       expect(getToken()).toBeNull();
     });
+  });
+
+  it("says when a sign-out couldn't end the session on the server", () => {
+    renderApp({ serverSignOutFailed: true });
+
+    expect(screen.getByRole("status")).toHaveTextContent("couldn't reach VoiceGuard to end your session everywhere");
+  });
+
+  it("says nothing extra after a normal visit or sign-out", () => {
+    renderApp({ serverSignOutFailed: false });
+
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 });

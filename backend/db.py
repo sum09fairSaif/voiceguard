@@ -7,6 +7,16 @@ import config
 
 
 @lru_cache
+def get_revoked_sessions_collection() -> Collection:
+    # Signed-out sessions (sessions.py). MongoDB deletes each once all the
+    # session's tokens would have expired. Checked on every signed-in
+    # request, so the index is made once per process, not every time.
+    revoked = get_client()[config.MONGO_DB_NAME]["revoked_sessions"]
+    revoked.create_index("expires_at", expireAfterSeconds=0)
+    return revoked
+
+
+@lru_cache
 def get_client() -> MongoClient:
     if not config.MONGO_URI:
         raise config.NotConfigured("MONGO_URI is not set. Add it to your .env file.")
@@ -76,3 +86,14 @@ def get_enrollments_collection() -> Collection:
     enrollments = get_client()[config.MONGO_DB_NAME]["enrollments"]
     enrollments.create_index("expires_at", expireAfterSeconds=0)
     return enrollments
+
+
+@lru_cache
+def get_enroll_prompts_collection() -> Collection:
+    # Sentences handed out for enrollment samples, one per document, so a
+    # sample can be checked against what the user was asked to read.
+    # MongoDB deletes each once it has expired.
+    prompts = get_client()[config.MONGO_DB_NAME]["enroll_prompts"]
+    prompts.create_index("expires_at", expireAfterSeconds=0)
+    prompts.create_index("user_id")
+    return prompts
