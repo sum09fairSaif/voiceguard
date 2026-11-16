@@ -1,5 +1,4 @@
 import logging
-import time
 from datetime import UTC, datetime
 
 from bson import ObjectId
@@ -24,8 +23,8 @@ from identity_check import IdentityResult, IdentityUnavailable, check_identity
 from liveness_check import LivenessResult, check_liveness
 from rate_limit import count_request
 from schemas import ContentScore, VerifyResponse
-from security import create_verified_token, get_current_user_id
-from transcription import AudioNotUnderstood, Transcriber, TranscriptionUnavailable, get_transcriber
+from security import create_verified_token, get_current_user_id, get_token_claims
+from transcription import Transcriber, get_transcriber, transcribe_and_log
 from voice_attempts import ensure_not_locked, record_outcome
 from voiceprints import load_voiceprint
 
@@ -39,6 +38,7 @@ def verify(
     audio: UploadFile = File(...),
     attempt_id: str = Form(...),
     user_id: str = Depends(get_current_user_id),
+    claims: dict = Depends(get_token_claims),
     challenges: Collection = Depends(get_challenges_collection),
     rate_limits: Collection = Depends(get_rate_limits_collection),
     voiceprints: Collection = Depends(get_voiceprints_collection),
@@ -69,7 +69,7 @@ def verify(
             detail="This passage has expired or was already used. Please get a new one.",
         )
 
-    transcript = _transcribe_and_log(transcribe, recording, extension, user_id, attempt_id)
+    transcript = transcribe_and_log(transcribe, recording, f"attempt.{extension}", user_id, attempt_id, logger)
     content = check_content(passage, transcript)
     identity = liveness = None
     if voiceprint is not None:
@@ -104,7 +104,8 @@ def verify(
     access_token = None
     if result.decision == "approved":
         # Only an approval opens the account: password, voice and liveness.
-        access_token = create_verified_token(user_id)
+        # Same session as the token that ran the check: signing out ends both.
+        access_token = create_verified_token(user_id, claims["sid"])
         _record_sign_in(users, user_id)
         logger.info("voice_check_approved user=%s attempt=%s", user_id, attempt_id)
     return VerifyResponse(
@@ -152,37 +153,3 @@ def _liveness_status(liveness: LivenessResult | None) -> str:
         return "not_checked"
     return "passed" if liveness.passed else "failed"
 
-
-def _transcribe_and_log(
-    transcribe: Transcriber, recording: bytes, extension: str, user_id: str, attempt_id: str
-) -> str:
-    """Transcribe the recording and log one line per paid speech-to-text
-    call, so spend can be traced to a user. Never logs the audio, the
-    passage or what was heard."""
-    started = time.monotonic()
-    outcome = "error"
-    error = "-"
-    try:
-        transcript = transcribe(recording, f"attempt.{extension}")
-        outcome = "ok"
-        return transcript
-    except AudioNotUnderstood as exc:
-        outcome = "unreadable"
-        error = exc.details
-        raise
-    except TranscriptionUnavailable as exc:
-        outcome = "unavailable"
-        error = exc.details
-        raise
-    finally:
-        logger.info(
-            "transcription user=%s attempt=%s model=%s format=%s bytes=%d outcome=%s seconds=%.2f error=%s",
-            user_id,
-            attempt_id,
-            config.WHISPER_MODEL,
-            extension,
-            len(recording),
-            outcome,
-            time.monotonic() - started,
-            error,
-        )

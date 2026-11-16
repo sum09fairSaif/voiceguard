@@ -6,6 +6,7 @@ import { getMe, type Me } from "../api/me";
 import { clearToken } from "../api/session";
 import { Button } from "../components/Button";
 import { Logo } from "../components/Logo";
+import { useSignOut } from "../hooks/useSignOut";
 import { Page } from "../components/Page";
 import { PageHeading } from "../components/PageHeading";
 import styles from "./AccountPage.module.css";
@@ -46,9 +47,10 @@ export function AccountPage() {
       });
   }, [navigate]);
 
+  const signOut = useSignOut();
+
   function handleSignOut() {
-    clearToken();
-    navigate("/signin", { replace: true });
+    void signOut();
   }
 
   return (

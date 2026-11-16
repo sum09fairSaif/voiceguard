@@ -701,7 +701,9 @@ def test_rejections_are_logged_with_what_is_left(client, challenges, transcriber
 
 
 def token_claims(token):
-    return jwt.decode(token, config.JWT_SECRET, algorithms=[config.JWT_ALGORITHM])
+    return jwt.decode(
+        token, config.JWT_SECRET, algorithms=[config.JWT_ALGORITHM], audience=config.JWT_AUDIENCE, issuer=config.JWT_ISSUER
+    )
 
 
 def test_an_approved_check_returns_a_voice_verified_token(client, transcriber, embedder, enrolled, attempt):
@@ -763,3 +765,13 @@ def test_an_approval_moves_the_last_sign_in_to_previous(client, users, transcrib
     record = users.find_one({"_id": ObjectId(USER_ID)})
     assert record["previous_verified_at"] == earlier
     assert record["last_verified_at"] > earlier
+
+
+def test_the_voice_verified_token_belongs_to_the_same_sign_in(client, transcriber, embedder, enrolled, attempt):
+    limited = create_access_token(USER_ID)
+    transcriber.heard = attempt["passage"]
+
+    verified = submit(client, attempt["id"], headers={"Authorization": f"Bearer {limited}"}).json()["access_token"]
+
+    assert token_claims(verified)["sid"] == token_claims(limited)["sid"]
+    assert token_claims(verified)["jti"] != token_claims(limited)["jti"]

@@ -17,6 +17,7 @@ from security import (
     get_current_user_id,
     get_verified_user_id,
 )
+from sessions import revoked_sessions
 
 USER = "64b000000000000000000001"
 
@@ -27,9 +28,11 @@ def secret(monkeypatch):
 
 
 @pytest.fixture
-def api():
-    # A stand-in for the real routes: one per level.
+def api(revoked):
+    # A stand-in for the real routes: one per level, with the same in-memory
+    # sign-out list as the real app in the tests.
     app = FastAPI()
+    app.dependency_overrides[revoked_sessions] = lambda: (lambda: revoked)
 
     @app.get("/step")
     def step(user_id: str = Depends(get_current_user_id)):
@@ -47,13 +50,24 @@ def bearer(token):
 
 
 def claims(token):
-    return jwt.decode(token, config.JWT_SECRET, algorithms=[config.JWT_ALGORITHM])
+    return jwt.decode(
+        token, config.JWT_SECRET, algorithms=[config.JWT_ALGORITHM], audience=config.JWT_AUDIENCE, issuer=config.JWT_ISSUER
+    )
 
 
 def forge(payload, key=None, minutes=10):
+    # Every claim a genuine token has; a test overrides or drops what it checks.
     now = datetime.now(UTC)
-    payload = {"iat": now, "exp": now + timedelta(minutes=minutes), **payload}
-    return jwt.encode(payload, key or config.JWT_SECRET, algorithm=config.JWT_ALGORITHM)
+    standard = {
+        "jti": "forged-jti",
+        "sid": "forged-session",
+        "iss": config.JWT_ISSUER,
+        "aud": config.JWT_AUDIENCE,
+        "iat": now,
+        "exp": now + timedelta(minutes=minutes),
+    }
+    claims = {key_: value for key_, value in {**standard, **payload}.items() if value is not None}
+    return jwt.encode(claims, key or config.JWT_SECRET, algorithm=config.JWT_ALGORITHM)
 
 
 # --- What each token says ------------------------------------------------------
@@ -78,7 +92,7 @@ def test_a_signup_token_says_so_and_is_limited():
 
 
 def test_an_approved_voice_check_gives_a_short_voice_verified_token():
-    token = claims(create_verified_token(USER))
+    token = claims(create_verified_token(USER, "session-1"))
 
     assert token["scope"] == "verified"
     assert token["amr"] == ["pwd", "voice"]
@@ -98,7 +112,7 @@ def test_a_limited_token_reaches_the_sign_in_steps_but_not_the_account(api):
 
 
 def test_a_voice_verified_token_reaches_both(api):
-    token = create_verified_token(USER)
+    token = create_verified_token(USER, "session-1")
 
     assert api.get("/step", headers=bearer(token)).json() == {"user": USER}
     assert api.get("/account", headers=bearer(token)).json() == {"user": USER}

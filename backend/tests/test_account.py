@@ -38,7 +38,7 @@ def test_a_voice_verified_session_sees_the_account(client, users, voiceprints, m
     user_id = make_account(users, previous_verified_at=datetime(2026, 11, 13, 18, 30, tzinfo=UTC))
     save_voiceprint(voiceprints, user_id, [0.6, 0.8, 0.0])
 
-    response = client.get(ME_URL, headers=bearer(create_verified_token(user_id)))
+    response = client.get(ME_URL, headers=bearer(create_verified_token(user_id, "session-1")))
 
     assert response.status_code == 200
     body = response.json()
@@ -54,7 +54,7 @@ def test_a_voice_verified_session_sees_the_account(client, users, voiceprints, m
 def test_first_sign_in_and_not_enrolled_are_empty(client, users):
     user_id = make_account(users)
 
-    body = client.get(ME_URL, headers=bearer(create_verified_token(user_id))).json()
+    body = client.get(ME_URL, headers=bearer(create_verified_token(user_id, "session-1"))).json()
 
     assert body["enrolled_at"] is None
     assert body["previous_sign_in_at"] is None
@@ -74,7 +74,7 @@ def test_no_token_gets_401(client):
 
 
 def test_a_deleted_account_gets_401(client):
-    response = client.get(ME_URL, headers=bearer(create_verified_token(str(ObjectId()))))
+    response = client.get(ME_URL, headers=bearer(create_verified_token(str(ObjectId()), "session-1")))
 
     assert response.status_code == 401
 
@@ -140,7 +140,7 @@ def test_dates_say_they_are_utc(client, users):
     user_id = make_account(users, previous_verified_at=datetime(2026, 11, 13, 18, 30))
     users.update_one({"_id": ObjectId(user_id)}, {"$set": {"created_at": datetime(2026, 11, 1, 9, 0)}})
 
-    body = client.get(ME_URL, headers=bearer(create_verified_token(user_id))).json()
+    body = client.get(ME_URL, headers=bearer(create_verified_token(user_id, "session-1"))).json()
 
     assert body["created_at"] == "2026-11-01T09:00:00Z"
     assert body["previous_sign_in_at"] == "2026-11-13T18:30:00Z"

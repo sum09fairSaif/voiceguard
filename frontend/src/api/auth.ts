@@ -37,6 +37,12 @@ export async function logIn(body: LoginRequest): Promise<LoginResponse> {
   return data;
 }
 
+// Ends this sign-in on the server: its tokens (limited and voice-verified)
+// stop working everywhere, not just in this tab.
+export async function logOut(): Promise<void> {
+  await api.post("/api/auth/logout");
+}
+
 // The same words whether the email or the password was wrong, as the
 // server does, so the screen never gives away which emails have accounts.
 export const WRONG_CREDENTIALS = "The email or password is incorrect.";
