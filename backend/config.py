@@ -1,5 +1,6 @@
 import math
 import os
+from datetime import UTC, datetime
 
 from dotenv import load_dotenv
 
@@ -152,6 +153,27 @@ ENROLL_SESSION_TTL_SECONDS = int(os.getenv("ENROLL_SESSION_TTL_SECONDS", "1800")
 # Each sample is a model-service call. A user who has to redo every take
 # still stays well under this.
 ENROLL_RATE_LIMIT = int(os.getenv("ENROLL_RATE_LIMIT", "20"))
+# Enrollment only in the signup session: with the signup token, this long
+# after the account was created (see enrollment_window.py).
+ENROLL_WINDOW_MINUTES = int(os.getenv("ENROLL_WINDOW_MINUTES", "30"))
+if ENROLL_WINDOW_MINUTES <= 0:
+    raise RuntimeError("ENROLL_WINDOW_MINUTES must be more than 0.")
+
+
+def grace_until(value: str):
+    """The one-off grace period's end (ISO 8601, UTC if no zone given), or
+    None when empty (no grace period)."""
+    value = value.strip()
+    if not value:
+        return None
+    moment = datetime.fromisoformat(value)
+    return moment if moment.tzinfo else moment.replace(tzinfo=UTC)
+
+
+# Accounts created before this moment that never enrolled may enroll after
+# signing in, until it. Default: the start of the security test week
+# (Monday 2026-11-16 00:00 US Eastern).
+ENROLL_GRACE_UNTIL = grace_until(os.getenv("ENROLL_GRACE_UNTIL", "2026-11-16T05:00:00Z"))
 if ENROLL_SAMPLES_REQUIRED <= 0 or ENROLL_SESSION_TTL_SECONDS <= 0 or ENROLL_RATE_LIMIT <= 0:
     raise RuntimeError("ENROLL_SAMPLES_REQUIRED, ENROLL_SESSION_TTL_SECONDS and ENROLL_RATE_LIMIT must be more than 0.")
 if ENROLL_MIN_SPEECH_SECONDS < 0 or not 0.0 <= ENROLL_MAX_CLIPPED_SHARE <= 1.0:

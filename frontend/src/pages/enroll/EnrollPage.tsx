@@ -5,12 +5,13 @@ import { describeEnrollError, getEnrollment, type Enrollment } from "../../api/e
 import { clearToken } from "../../api/session";
 import { Logo } from "../../components/Logo";
 import { Page } from "../../components/Page";
+import { EnrollClosed } from "./EnrollClosed";
 import { EnrollDone } from "./EnrollDone";
 import { EnrollIntro } from "./EnrollIntro";
 import { EnrollRecord } from "./EnrollRecord";
 import styles from "../PassagePage.module.css";
 
-type Step = "loading" | "intro" | "record" | "done";
+type Step = "loading" | "intro" | "record" | "done" | "closed";
 
 // /enroll: the three enrollment steps on one route. Where it starts depends on
 // the account: new → intro, part-way → straight back to recording,
@@ -28,7 +29,10 @@ export function EnrollPage() {
       .then((status) => {
         if (!current) return;
         setEnrollment(status);
-        setStep(status.status === "enrolled" ? "done" : status.status === "in_progress" ? "record" : "intro");
+        if (status.status === "enrolled") setStep("done");
+        // Only the signup session may record; explain before anyone records.
+        else if (status.can_enroll === false) setStep("closed");
+        else setStep(status.status === "in_progress" ? "record" : "intro");
       })
       .catch((err) => {
         if (!current) return;
@@ -77,9 +81,11 @@ export function EnrollPage() {
           onChange={setEnrollment}
           onEnrolled={() => setStep("done")}
           onSignedOut={signOut}
+          onClosed={() => setStep("closed")}
         />
       )}
       {step === "done" && <EnrollDone onContinue={() => navigate("/verify")} />}
+      {step === "closed" && <EnrollClosed onSignOut={signOut} />}
     </Page>
   );
 }

@@ -107,3 +107,6 @@ class EnrollmentStatus(BaseModel):
     # take is a few seconds of natural speech. Not checked, just a guide.
     # None once enrolled.
     prompt: str | None
+    # Whether this session may add samples: only the signup session, or
+    # during the one-off grace period (see enrollment_window.py).
+    can_enroll: bool

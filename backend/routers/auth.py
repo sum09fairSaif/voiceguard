@@ -39,6 +39,9 @@ def signup(
         "email": body.email.lower(),
         "password_hash": hash_password(body.password),
         "created_at": datetime.now(UTC),
+        # Made under the signup-session enrollment rule, so the one-off
+        # grace period for older accounts never applies (enrollment_window.py).
+        "signup_session_enrollment": True,
     }
     try:
         users.insert_one(user)

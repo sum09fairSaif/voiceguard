@@ -1,6 +1,14 @@
 import { isAxiosError } from "axios";
 import { useState } from "react";
-import { addSample, describeEnrollError, getEnrollment, isAlreadyEnrolled, startOver, type Enrollment } from "../../api/enroll";
+import {
+  addSample,
+  describeEnrollError,
+  getEnrollment,
+  isAlreadyEnrolled,
+  isEnrollmentClosed,
+  startOver,
+  type Enrollment,
+} from "../../api/enroll";
 import { Button } from "../../components/Button";
 import { PageHeading } from "../../components/PageHeading";
 import { RecordButton } from "../../components/RecordButton";
@@ -17,12 +25,14 @@ type Props = {
   onChange: (enrollment: Enrollment) => void;
   onEnrolled: () => void;
   onSignedOut: () => void;
+  // The server says this session can't record a Voice ID (403).
+  onClosed: () => void;
 };
 
 // Figma 19:246 "Record voice": step 2 of enrollment. The user reads a phrase
 // and sends it as one sample, until the backend has enough to build the
 // voiceprint. Each recording is sent once and not kept.
-export function EnrollRecord({ enrollment, onChange, onEnrolled, onSignedOut }: Props) {
+export function EnrollRecord({ enrollment, onChange, onEnrolled, onSignedOut, onClosed }: Props) {
   const recorder = useRecorder();
   const [busy, setBusy] = useState<"" | "sending" | "phrase" | "restart">("");
   const [error, setError] = useState("");
@@ -45,6 +55,11 @@ export function EnrollRecord({ enrollment, onChange, onEnrolled, onSignedOut }: 
         onEnrolled();
         return;
       }
+      // The window can end while this screen is open: say so straight away.
+      if (next.can_enroll === false) {
+        onClosed();
+        return;
+      }
       if (kind === "sending") setSaved(`Sample ${next.samples_accepted} saved.`);
       recorder.reset();
       onChange(next);
@@ -56,6 +71,10 @@ export function EnrollRecord({ enrollment, onChange, onEnrolled, onSignedOut }: 
       }
       if (isAlreadyEnrolled(err)) {
         onEnrolled();
+        return;
+      }
+      if (isEnrollmentClosed(err)) {
+        onClosed();
         return;
       }
       setError(describeEnrollError(err));

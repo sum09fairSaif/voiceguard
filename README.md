@@ -144,8 +144,8 @@ curl -X POST $API/api/verify -H "Authorization: Bearer <access_token>" \
 | POST | `/api/auth/login` | Sign in with email and password; returns a limited token; locks for 30 min after 5 wrong tries within 15 min | No |
 | POST | `/api/challenge` | Get a fresh, single-use passage to read (expires in 2 min); 423 while voice checks are paused | Limited token |
 | POST | `/api/verify` | Send a recording of the passage; runs the checks and returns the decision, `attempts_left` and `fallback_required`, plus a voice-verified `access_token` (15 min) when approved; 423 while voice checks are paused | Limited token |
-| GET | `/api/enroll` | Enrollment progress, and a sentence to read for the next sample | Limited token |
-| POST | `/api/enroll/samples` | Add one voice sample; the voiceprint is built after 3 good ones | Limited token |
+| GET | `/api/enroll` | Enrollment progress, a sentence to read for the next sample, and whether this session may enroll (`can_enroll`) | Limited token |
+| POST | `/api/enroll/samples` | Add one voice sample; the voiceprint is built after 3 good ones. Only the signup session, within 30 min of creating the account; until 2026-11-16 00:00 ET, accounts made before this rule may also enroll after signing in (403 otherwise) | Signup token (or sign-in token during the grace period) |
 | DELETE | `/api/enroll/samples` | Start enrollment over | Limited token |
 | GET | `/api/me` | The account summary (name, email, dates, previous sign-in); 403 with a limited token | Voice-verified token |
 
