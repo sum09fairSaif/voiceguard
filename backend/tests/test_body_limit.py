@@ -169,3 +169,68 @@ def test_held_bytes_are_released_after_each_request():
     run([], [b"x" * 4096] * 100)
 
     assert body_limit._buffered == before
+
+
+# --- Stalled uploads (a deadline for the whole body) ------------------------------
+
+
+async def _stalled_upload(chunk_size, sent):
+    """An upload that sends one chunk, says more is coming, then stops."""
+    calls = 0
+    responses = []
+
+    async def receive():
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return {"type": "http.request", "body": b"x" * chunk_size, "more_body": True}
+        await asyncio.sleep(3600)  # never sends the rest
+
+    async def send(message):
+        responses.append(message)
+
+    async def app(scope, receive, send):
+        raise AssertionError("a stalled upload must never reach the app")
+
+    scope = {"type": "http", "method": "POST", "path": "/api/verify", "headers": []}
+    await BodyLimitMiddleware(app)(scope, receive, send)
+    sent.extend(responses)
+
+
+def test_an_upload_that_stalls_is_answered_408_and_gives_its_bytes_back(monkeypatch):
+    monkeypatch.setattr(body_limit, "BODY_READ_SECONDS", 0.05)
+    before = body_limit._buffered
+    sent = []
+
+    asyncio.run(_stalled_upload(1024 * 1024, sent))
+
+    status = next(m["status"] for m in sent if m["type"] == "http.response.start")
+    assert status == 408
+    assert body_limit._buffered == before
+
+
+def test_stalled_uploads_cant_block_a_real_one(monkeypatch):
+    # Many uploads stall at once (enough to fill the shared budget); once their
+    # deadline passes, a normal recording still gets through.
+    monkeypatch.setattr(body_limit, "BODY_READ_SECONDS", 0.05)
+    monkeypatch.setattr(body_limit, "MAX_BUFFERED_BYTES", 4 * 1024 * 1024)
+
+    async def flood_then_real():
+        sent = []
+        await asyncio.gather(*(_stalled_upload(1024 * 1024, sent) for _ in range(6)))
+        return sent
+
+    sent = asyncio.run(flood_then_real())
+    statuses = sorted(m["status"] for m in sent if m["type"] == "http.response.start")
+    assert set(statuses) <= {408, 503}
+    assert body_limit._buffered == 0
+
+    status, _, called = run([], [b"x" * 200 * 1024], path="/api/verify")
+    assert status == 200
+    assert called == [b"x" * 200 * 1024]
+
+
+def test_the_deadline_is_long_enough_for_a_real_recording():
+    # 1 MB in 30 s is about 270 kbit/s: slower than any connection that can
+    # use the app.
+    assert body_limit.BODY_READ_SECONDS >= 30

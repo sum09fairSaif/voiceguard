@@ -29,13 +29,14 @@ ALLOWED_ORIGINS = [
 # cookie, so CORS is a second line of defence here, not the only one.
 ALLOWED_ORIGIN_REGEX = os.getenv("ALLOWED_ORIGIN_REGEX", r"https://voiceguard-[a-z0-9-]+-voice-guard2\.vercel\.app") or None
 
-# The interactive API docs (/docs, /redoc, /openapi.json). Handy locally,
-# but in production they'd hand anyone a map of every route, so off unless
-# set to true.
 def is_true(value: str) -> bool:
+    """Only the word "true" (any case, spaces ignored) turns a switch on."""
     return value.strip().lower() == "true"
 
 
+# The interactive API docs (/docs, /redoc, /openapi.json). Handy locally,
+# but in production they'd hand anyone a map of every route, so off unless
+# set to true.
 DOCS_ENABLED = is_true(os.getenv("DOCS_ENABLED", ""))
 
 JWT_SECRET = os.getenv("JWT_SECRET", "")

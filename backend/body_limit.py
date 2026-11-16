@@ -8,6 +8,7 @@ counted as it arrives and refused at the limit. Memory use per request is
 bounded by the limit.
 """
 
+import asyncio
 import json
 
 from audio_upload import MAX_AUDIO_BYTES
@@ -28,7 +29,15 @@ ROUTE_LIMITS = {
 # instance's memory (512 MB on Render's free plan).
 MAX_BUFFERED_BYTES = 64 * 1024 * 1024
 
+# The whole body must arrive within this many seconds. Without a deadline, an
+# upload that stalls part-way would hold its share of MAX_BUFFERED_BYTES for
+# as long as the connection stays open, so a handful of stalled uploads could
+# leave everyone else with "busy". A real recording (about 100 KB, at most
+# about 1 MB) arrives well within it even on a slow phone connection.
+BODY_READ_SECONDS = 30
+
 TOO_LARGE = json.dumps({"detail": "That request is too large."}).encode()
+TOO_SLOW = json.dumps({"detail": "That request took too long to arrive. Please try again."}).encode()
 BUSY = json.dumps({"detail": "The service is busy. Please try again shortly."}).encode()
 
 # Bytes held right now by requests in flight. Only touched on the event
@@ -92,22 +101,28 @@ class BodyLimitMiddleware:
         chunks: list[bytes] = []
         size = 0
         try:
-            while True:
-                message = await receive()
-                if message["type"] == "http.disconnect":
-                    return
-                chunk = message.get("body", b"")
-                size += len(chunk)
-                if size > limit:
-                    await _send_too_large(send)
-                    return
-                if _buffered + len(chunk) > MAX_BUFFERED_BYTES:
-                    await _refuse(send, 503, BUSY)
-                    return
-                _buffered += len(chunk)
-                chunks.append(chunk)
-                if not message.get("more_body", False):
-                    break
+            try:
+                async with asyncio.timeout(BODY_READ_SECONDS):
+                    while True:
+                        message = await receive()
+                        if message["type"] == "http.disconnect":
+                            return
+                        chunk = message.get("body", b"")
+                        size += len(chunk)
+                        if size > limit:
+                            await _send_too_large(send)
+                            return
+                        if _buffered + len(chunk) > MAX_BUFFERED_BYTES:
+                            await _refuse(send, 503, BUSY)
+                            return
+                        _buffered += len(chunk)
+                        chunks.append(chunk)
+                        if not message.get("more_body", False):
+                            break
+            except TimeoutError:
+                # The finally below gives the held bytes back.
+                await _refuse(send, 408, TOO_SLOW)
+                return
 
             # Hands the app the chunks already read, one at a time (no
             # second, joined copy), then anything after them (e.g. the

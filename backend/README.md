@@ -33,7 +33,7 @@ is set in `.env` (they're off by default, and must stay off on the live server).
 
 Request bodies are capped before anything reads them (`body_limit.py`): 16 KB
 for JSON routes, and the 1 MB recording limit plus 64 KB of form overhead for
-`/api/verify` and `/api/enroll/samples`. Anything bigger gets a 413.
+`/api/verify` and `/api/enroll/samples`. Anything bigger gets a 413. The whole body must arrive within 30 seconds (408 otherwise), so a stalled upload can't hold memory.
 
 ## Tests and lint
 
