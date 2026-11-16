@@ -49,6 +49,24 @@ WEIGHTS_SOURCE = "external/asvspoof5/Baseline-AASIST/models/weights/AASIST/best.
 NOISE_SOURCE = "augment/RIRS_NOISES"
 CODE = ["audio.py", "augment.py", "manifest.py", "score_baseline.py", "train.py", "training_data.py",
         "validate.py", "models/__init__.py", "models/aasist.py", "models/LICENSE-AASIST"]
+# What Kaggle has to install. It already has torch, numpy and pandas, and
+# reinstalling our numpy over its own could break its torch, so only these.
+# Their versions come from requirements.txt, so Kaggle trains on the same
+# versions as everywhere else and Dependabot's bumps reach it too.
+KAGGLE_INSTALLS = ["soxr", "soundfile", "miniaudio"]
+
+
+def kaggle_pins(requirements: Path) -> list[str]:
+    """KAGGLE_INSTALLS as pinned in requirements, e.g. ["soxr==1.1.0", ...]."""
+    pins = {}
+    for line in requirements.read_text(encoding="utf-8").splitlines():
+        line = line.split("#", 1)[0].strip()
+        if "==" in line:
+            pins[line.split("==", 1)[0].strip().lower()] = line
+    missing = [name for name in KAGGLE_INSTALLS if name not in pins]
+    if missing:
+        raise ValueError(f"{requirements} doesn't pin {', '.join(missing)} with ==")
+    return [pins[name] for name in KAGGLE_INSTALLS]
 
 
 def choose_clips(data_dir: Path) -> pd.DataFrame:
@@ -150,8 +168,7 @@ work = Path("/kaggle/working")
 code = work / "code"
 with tarfile.open(fileobj=io.BytesIO(base64.b64decode(CODE))) as t:
     t.extractall(code, filter="data")
-subprocess.run([sys.executable, "-m", "pip", "install", "-q", "soxr==0.5.0.post1", "soundfile==0.13.1", "miniaudio==1.71"],
-               check=True)
+subprocess.run([sys.executable, "-m", "pip", "install", "-q", *{pins!r}], check=True)
 
 data = Path(find("manifest.processed.parquet")[0]).parent
 args = ["--name", NAME, "--data-dir", str(data), "--out-dir", str(work / "runs"), "--epochs", str(EPOCHS),
@@ -191,7 +208,7 @@ def write_script(here: Path, out: Path, user: str, name: str, epochs: int, max_h
     out.mkdir(parents=True, exist_ok=True)
     (out / "run.py").write_text(RUN_SCRIPT.format(
         name=name, epochs=epochs, max_hours=max_hours, resume=resume, weights=WEIGHTS,
-        code=base64.b64encode(buffer.getvalue()).decode()), encoding="utf-8")
+        pins=kaggle_pins(here / "requirements.txt"), code=base64.b64encode(buffer.getvalue()).decode()), encoding="utf-8")
     (out / "kernel-metadata.json").write_text(json.dumps({
         "id": f"{user}/{SCRIPT}", "title": SCRIPT, "code_file": "run.py", "language": "python",
         "kernel_type": "script", "is_private": True, "enable_gpu": True, "enable_internet": True,
