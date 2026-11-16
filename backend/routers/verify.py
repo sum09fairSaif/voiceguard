@@ -103,7 +103,7 @@ def verify(
     if result.decision == "rejected":
         logger.info("voice_check_rejected user=%s attempt=%s attempts_left=%d", user_id, attempt_id, attempts_left)
     # Which check decided it, as a word: never a score.
-    track(f"voice_check_{result.decision}", user_id, reason=_failed_check(content, identity, liveness))
+    track(f"voice_check_{result.decision}", user_id, reason=result.check)
     if result.decision == "rejected" and attempts_left == 0:
         track("voice_checks_paused", user_id)
     access_token = None
@@ -145,18 +145,6 @@ def _record_sign_in(users: Collection, user_id: str) -> None:
         )
     except PyMongoError as exc:
         logger.warning("sign_in_history_not_saved user=%s reason=%s", user_id, type(exc).__name__)
-
-
-def _failed_check(content, identity: IdentityResult | None, liveness: LivenessResult | None) -> str | None:
-    if not content.passed:
-        return "words"
-    if identity is None:
-        return "not_enrolled"
-    if not identity.passed:
-        return "voice"
-    if liveness is not None and not liveness.passed:
-        return "liveness"
-    return None
 
 
 def _identity_status(identity: IdentityResult | None) -> str:

@@ -800,6 +800,21 @@ def test_a_rejection_records_which_check_failed(client, transcriber, embedder, e
     assert recorded(audit_events) == [("voice_check_rejected", "voice")]
 
 
+def test_a_clone_that_fails_both_checks_is_recorded_as_liveness(
+    client, transcriber, embedder, enrolled, attempt, audit_events
+):
+    # Sumehra's review on #168: liveness is the veto, so it's what the user is
+    # told and what the record says.
+    transcriber.heard = attempt["passage"]
+    embedder.voice = OTHER_VOICE
+    embedder.liveness = SPOOFED
+
+    body = submit(client, attempt["id"]).json()
+
+    assert body["reason"] == "The recording didn't sound like a live voice."
+    assert recorded(audit_events) == [("voice_check_rejected", "liveness")]
+
+
 def test_an_unenrolled_check_is_recorded_as_incomplete(client, transcriber, attempt, audit_events):
     transcriber.heard = attempt["passage"]
     submit(client, attempt["id"])

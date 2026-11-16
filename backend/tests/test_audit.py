@@ -22,10 +22,10 @@ def events(store, name=None):
 
 
 def test_a_record_holds_only_the_fixed_fields(audit_events):
-    track("login_succeeded", "64b000000000000000000001", outcome="ok", reason="test")
+    track("login_succeeded", "64b000000000000000000001", reason="test")
 
     (record,) = events(audit_events)
-    assert set(record) == {"at", "event", "user", "outcome", "reason", "expires_at"}
+    assert set(record) == {"at", "event", "user", "reason", "expires_at"}
     assert record["user"] == hashed("64b000000000000000000001")
     assert "64b000000000000000000001" not in str(record)
 
@@ -75,7 +75,7 @@ def test_a_database_failure_never_fails_the_caller(monkeypatch, caplog):
 
 def test_nothing_leaves_the_server_without_a_posthog_key(monkeypatch):
     sent = []
-    monkeypatch.setattr(audit._sender, "submit", lambda *args: sent.append(args))
+    monkeypatch.setattr(audit, "_enqueue", lambda *args: sent.append(args))
 
     track("signup", "u1")
 
@@ -85,13 +85,11 @@ def test_nothing_leaves_the_server_without_a_posthog_key(monkeypatch):
 def test_with_a_key_the_same_event_goes_to_posthog_in_the_background(monkeypatch):
     sent = []
     monkeypatch.setattr(config, "POSTHOG_API_KEY", "phc_test")
-    monkeypatch.setattr(audit._sender, "submit", lambda fn, *args: sent.append((fn, args)))
+    monkeypatch.setattr(audit, "_enqueue", lambda *args: sent.append(args))
 
     track("voice_check_rejected", "u1", reason="voice")
 
-    ((fn, args),) = sent
-    assert fn is audit._send_to_posthog
-    assert args == ("voice_check_rejected", hashed("u1"), None, "voice")
+    assert sent == [("voice_check_rejected", hashed("u1"), "voice")]
 
 
 def test_the_posthog_payload_holds_no_personal_data(monkeypatch):
@@ -102,18 +100,18 @@ def test_the_posthog_payload_holds_no_personal_data(monkeypatch):
         def raise_for_status(self):
             return None
 
-    def fake_post(url, json, timeout):
-        posted.update(url=url, json=json, timeout=timeout)
+    def fake_post(url, json):
+        posted.update(url=url, json=json)
         return Response()
 
-    monkeypatch.setattr(audit.httpx, "post", fake_post)
+    monkeypatch.setattr(audit._http, "post", fake_post)
 
-    audit._send_to_posthog("login_failed", hashed("u1"), None, "wrong_password")
+    audit._send_to_posthog("login_failed", hashed("u1"), "wrong_password")
 
     assert posted["url"] == "https://us.i.posthog.com/capture/"
-    assert posted["timeout"] == 2.0
+    assert audit._http.timeout.read == 2.0
     assert posted["json"]["distinct_id"] == hashed("u1")
-    assert posted["json"]["properties"] == {"outcome": None, "reason": "wrong_password", "source": "backend"}
+    assert posted["json"]["properties"] == {"reason": "wrong_password", "source": "backend"}
 
 
 def test_a_posthog_failure_is_only_logged(monkeypatch, caplog):
@@ -122,11 +120,84 @@ def test_a_posthog_failure_is_only_logged(monkeypatch, caplog):
     def unreachable(*args, **kwargs):
         raise audit.httpx.ConnectError("unreachable")
 
-    monkeypatch.setattr(audit.httpx, "post", unreachable)
+    monkeypatch.setattr(audit._http, "post", unreachable)
 
-    audit._send_to_posthog("signup", None, None, None)  # no exception
+    audit._send_to_posthog("signup", None, None)  # no exception
 
     assert "audit_not_recorded where=posthog event=signup" in caplog.text
+
+
+def test_queued_events_are_sent_by_the_background_thread(monkeypatch):
+    import threading
+
+    delivered = threading.Event()
+    sent = []
+
+    def fake_send(*args):
+        sent.append(args)
+        delivered.set()
+
+    monkeypatch.setattr(audit, "_send_to_posthog", fake_send)
+
+    audit._enqueue("signup", hashed("u1"), None)
+
+    assert delivered.wait(2)
+    assert sent == [("signup", hashed("u1"), None)]
+
+
+def test_a_full_queue_drops_events_with_a_log_line_instead_of_growing(monkeypatch, caplog):
+    import queue
+
+    small = queue.Queue(maxsize=2)
+    monkeypatch.setattr(audit, "_queue", small)
+    monkeypatch.setattr(audit, "_dropped", 0)
+    # A worker that's busy (never takes from the queue), as in a flood.
+    monkeypatch.setattr(audit, "_worker", type("Busy", (), {"is_alive": lambda self: True})())
+
+    for _ in range(5):
+        audit._enqueue("login_failed", None, "wrong_password")
+
+    assert small.qsize() == 2
+    assert audit._dropped == 3
+    # Logged once for the first drop, not once per drop.
+    assert caplog.text.count("where=posthog_queue_full") == 1
+
+
+def test_the_queue_has_a_limit():
+    assert 0 < audit._queue.maxsize == audit.QUEUE_LIMIT <= 10_000
+
+
+# --- The user-id stand-in is keyed (Sumehra's review on #168) ------------------
+
+
+def test_the_stand_in_needs_the_server_secret(monkeypatch):
+    import hashlib
+
+    user_id = "64b000000000000000000001"
+    monkeypatch.setattr(config, "JWT_SECRET", "secret-one")
+    first = hashed(user_id)
+
+    # A plain hash of the id (what anyone could compute) doesn't match it...
+    assert first != hashlib.sha256(user_id.encode()).hexdigest()[:16]
+    # ...and another server secret gives another stand-in.
+    monkeypatch.setattr(config, "JWT_SECRET", "secret-two")
+    assert hashed(user_id) != first
+
+
+def test_the_database_write_has_a_short_deadline(monkeypatch, audit_events):
+    from pymongo import _csot  # where pymongo.timeout() keeps the current deadline
+
+    seen = []
+
+    class Watching:
+        def insert_one(self, document):
+            seen.append(_csot.get_timeout())
+
+    monkeypatch.setattr(audit, "_collection", lambda: Watching())
+
+    track("signup", "u1")
+
+    assert seen and 0 < seen[0] <= audit.WRITE_SECONDS
 
 
 # --- From the routes --------------------------------------------------------------

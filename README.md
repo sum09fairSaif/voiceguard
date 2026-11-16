@@ -62,7 +62,7 @@ as soon as the voiceprint is built or the checks have run.
   person's own email name, or a simple repeat or sequence.
 - **Security events and uptime:** sign-ups, sign-ins, lockouts, enrollment,
   voice-check decisions and sign-outs are recorded for 30 days without personal
-  data (hashed user ids, no emails, addresses or scores), and also sent to
+  data (user ids hashed with a server key, no emails, addresses or scores), and also sent to
   PostHog when `POSTHOG_API_KEY` is set. A scheduled check opens an
   "API is down" issue when `/health` stops answering.
 - **Abuse limits:** sign-in locks for 30 minutes after 5 wrong passwords
