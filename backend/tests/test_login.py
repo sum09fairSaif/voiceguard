@@ -34,7 +34,10 @@ def test_right_password_logs_in_with_a_token(client, account):
     assert body["user"]["created_at"].endswith("Z")
     assert body["user"]["created_at"][:23] == account["created_at"][:23]
     assert body["token_type"] == "bearer"
-    claims = jwt.decode(body["access_token"], config.JWT_SECRET, algorithms=[config.JWT_ALGORITHM])
+    claims = jwt.decode(
+        body["access_token"], config.JWT_SECRET, algorithms=[config.JWT_ALGORITHM],
+        audience=config.JWT_AUDIENCE, issuer=config.JWT_ISSUER
+    )
     assert claims["sub"] == account["id"]
 
 

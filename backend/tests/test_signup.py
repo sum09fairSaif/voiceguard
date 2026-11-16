@@ -29,7 +29,13 @@ def test_signup_creates_account_and_returns_token(client, users):
     assert "password_hash" not in body["user"]
     assert body["token_type"] == "bearer"
 
-    claims = jwt.decode(body["access_token"], config.JWT_SECRET, algorithms=[config.JWT_ALGORITHM])
+    claims = jwt.decode(
+        body["access_token"],
+        config.JWT_SECRET,
+        algorithms=[config.JWT_ALGORITHM],
+        audience=config.JWT_AUDIENCE,
+        issuer=config.JWT_ISSUER,
+    )
     assert claims["sub"] == body["user"]["id"]
     with pytest.raises(jwt.InvalidSignatureError):
         jwt.decode(body["access_token"], "a-different-key-" * 4, algorithms=[config.JWT_ALGORITHM])

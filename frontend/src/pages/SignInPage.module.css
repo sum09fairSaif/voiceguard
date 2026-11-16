@@ -46,3 +46,11 @@
   color: var(--color-primary);
   text-decoration: underline;
 }
+
+/* Shown after a sign-out the server couldn't confirm. */
+.notice {
+  margin-top: 20px;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--color-muted);
+}

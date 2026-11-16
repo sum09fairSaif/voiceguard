@@ -104,13 +104,32 @@ class VerifyResponse(BaseModel):
     # True when this rejection used up the last attempt: voice checks are
     # now locked, and the user should be offered the email code (#20).
     fallback_required: bool
+    # Only when approved: a short-lived voice-verified token, the only kind
+    # that opens the account (GET /api/me). None otherwise.
+    access_token: str | None = None
+
+
+class MeResponse(BaseModel):
+    """The account summary, for a voice-verified session only."""
+
+    full_name: str
+    email: EmailStr
+    created_at: datetime
+    # When the voiceprint was recorded; None if the account hasn't enrolled.
+    enrolled_at: datetime | None
+    # The voice-verified sign-in before this one, so the user can spot one
+    # that wasn't them; None on the first.
+    previous_sign_in_at: datetime | None
 
 
 class EnrollmentStatus(BaseModel):
     status: Literal["not_started", "in_progress", "enrolled"]
     samples_accepted: int
     samples_required: int
-    # Something for the user to read aloud for their next sample, so each
-    # take is a few seconds of natural speech. Not checked, just a guide.
-    # None once enrolled.
+    # The sentence to read aloud for the next sample. The sample must hold
+    # every word of it, in order. None once enrolled, or when this session
+    # may not enroll (can_enroll is false).
     prompt: str | None
+    # Whether this session may add samples: only the signup session, or
+    # during the one-off grace period (see enrollment_window.py).
+    can_enroll: bool
