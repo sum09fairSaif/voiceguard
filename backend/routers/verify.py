@@ -18,6 +18,7 @@ from db import (
     get_voiceprints_collection,
 )
 from decision import decide
+from email_verification import require_verified_email
 from embedding import Embedder, get_embedder
 from identity_check import IdentityResult, IdentityUnavailable, check_identity
 from liveness_check import LivenessResult, check_liveness
@@ -33,7 +34,13 @@ router = APIRouter(prefix="/api", tags=["verify"])
 logger = logging.getLogger("voiceguard.verify")
 
 
-@router.post("/verify", response_model=VerifyResponse)
+@router.post(
+    "/verify",
+    response_model=VerifyResponse,
+    # Before the paid speech-to-text call: no voice checks until the email
+    # address is confirmed (#110).
+    dependencies=[Depends(require_verified_email)],
+)
 def verify(
     audio: UploadFile = File(...),
     attempt_id: str = Form(...),
