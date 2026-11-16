@@ -7,6 +7,7 @@ import { RecordButton } from "../../components/RecordButton";
 import { StepProgress } from "../../components/StepProgress";
 import { useRecorder } from "../../hooks/useRecorder";
 import { useStillShown } from "../../hooks/useStillShown";
+import posthog, { isPostHogConfigured } from "../../posthog";
 import { formatCountdown } from "../../utils/countdown";
 import { displayPassage } from "../../utils/passage";
 // Same layout as the passage screen (Figma 19:246 matches 19:329).
@@ -42,10 +43,19 @@ export function EnrollRecord({ enrollment, onChange, onEnrolled, onSignedOut }: 
       const next = await action();
       if (!shown.current) return;
       if (next.status === "enrolled") {
+        if (isPostHogConfigured) posthog.capture("voice_id_enrollment_completed");
         onEnrolled();
         return;
       }
-      if (kind === "sending") setSaved(`Sample ${next.samples_accepted} saved.`);
+      if (kind === "sending") {
+        if (isPostHogConfigured) {
+          posthog.capture("voice_id_sample_saved", {
+            samples_accepted: next.samples_accepted,
+            samples_required: next.samples_required,
+          });
+        }
+        setSaved(`Sample ${next.samples_accepted} saved.`);
+      }
       recorder.reset();
       onChange(next);
     } catch (err) {

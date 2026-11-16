@@ -7,6 +7,7 @@ import voiceIdMark from "../../assets/icons/voice-id-mark.svg";
 import { Button } from "../../components/Button";
 import { PageHeading } from "../../components/PageHeading";
 import { StepProgress } from "../../components/StepProgress";
+import posthog, { isPostHogConfigured } from "../../posthog";
 import styles from "./EnrollIntro.module.css";
 
 const FEATURES = [
@@ -66,7 +67,15 @@ export function EnrollIntro({ onStart }: { onStart: () => void }) {
       </label>
 
       <div className={styles.action}>
-        <Button type="button" showArrow disabled={!agreed} onClick={onStart}>
+        <Button
+          type="button"
+          showArrow
+          disabled={!agreed}
+          onClick={() => {
+            if (isPostHogConfigured) posthog.capture("voice_id_setup_started");
+            onStart();
+          }}
+        >
           Set up my Voice ID
         </Button>
       </div>

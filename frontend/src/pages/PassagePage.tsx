@@ -12,6 +12,7 @@ import { RecordButton } from "../components/RecordButton";
 import { StepProgress } from "../components/StepProgress";
 import { useChallenge } from "../hooks/useChallenge";
 import { useRecorder } from "../hooks/useRecorder";
+import posthog, { isPostHogConfigured } from "../posthog";
 import { formatCountdown } from "../utils/countdown";
 import { displayPassage } from "../utils/passage";
 import styles from "./PassagePage.module.css";
@@ -20,6 +21,7 @@ import styles from "./PassagePage.module.css";
 // so the same passage can be read again. After any other failure the passage
 // may already be used, so a new one is needed.
 const PASSAGE_STILL_VALID = new Set([413, 415, 429]);
+const voiceVerificationLogger = posthog.logger;
 
 export function PassagePage() {
   const navigate = useNavigate();
@@ -50,16 +52,35 @@ export function PassagePage() {
     if (!challenge || !recorder.recording) return;
     setSubmitting(true);
     setSubmitError("");
+    if (isPostHogConfigured) posthog.capture("voice_verification_submitted");
     try {
       const result = await submitAttempt(recorder.recording, challenge.attempt_id);
+      if (isPostHogConfigured) {
+        posthog.capture("voice_verification_completed", {
+          decision: result.decision,
+          identity: result.identity,
+          liveness: result.liveness,
+        });
+        voiceVerificationLogger.info("voice verification completed", {
+          decision: result.decision,
+          identity: result.identity,
+          liveness: result.liveness,
+        });
+      }
       navigate("/result", { state: { result } });
     } catch (err) {
-      if (isAxiosError(err) && err.response?.status === 401) {
+      const status = isAxiosError(err) ? err.response?.status : undefined;
+      if (isPostHogConfigured) {
+        voiceVerificationLogger.warn("voice verification request failed", {
+          failure_kind: isAxiosError(err) ? "http_error" : "network_or_unexpected_error",
+          ...(status === undefined ? {} : { http_status: status }),
+        });
+      }
+      if (status === 401) {
         clearToken();
         navigate("/signin", { replace: true });
         return;
       }
-      const status = isAxiosError(err) ? err.response?.status : undefined;
       setNeedsNewPhrase(!(status && PASSAGE_STILL_VALID.has(status)));
       setSubmitError(describeApiError(err, VERIFY_MESSAGES));
       setSubmitting(false);

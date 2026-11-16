@@ -7,7 +7,11 @@ import '@fontsource/sn-pro/400.css'
 import '@fontsource/sn-pro/600.css'
 import '@fontsource/sn-pro/700.css'
 import './index.css'
+import './posthog.ts'
+import { restoreSessionIdentity } from './api/session.ts'
 import App from './App.tsx'
+
+restoreSessionIdentity()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

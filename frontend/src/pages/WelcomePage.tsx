@@ -1,5 +1,6 @@
 import { Navigate, useNavigate } from "react-router-dom";
 import { getToken } from "../api/session";
+import posthog, { isPostHogConfigured } from "../posthog";
 import footerShield from "../assets/icons/welcome-footer-shield.svg";
 import mark from "../assets/icons/welcome-mark.svg";
 import shieldInner from "../assets/icons/welcome-shield-inner.svg";
@@ -48,7 +49,14 @@ export function WelcomePage() {
       </div>
 
       <div className={styles.actions}>
-        <Button type="button" showArrow onClick={() => navigate("/signup")}>
+        <Button
+          type="button"
+          showArrow
+          onClick={() => {
+            if (isPostHogConfigured) posthog.capture("get_started_clicked");
+            navigate("/signup");
+          }}
+        >
           Get started
         </Button>
         <Button type="button" variant="secondary" onClick={() => navigate("/signin")}>
