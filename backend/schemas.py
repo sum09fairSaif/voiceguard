@@ -1,13 +1,27 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, EmailStr, Field, ValidationInfo, field_validator
+from pydantic_core import PydanticCustomError
+
+from password_policy import MIN_LENGTH, password_problem
+
+# Why a password was refused, sent as the error's "type" so the screen can
+# say it in its own words (NIST: say why).
+PASSWORD_PROBLEMS = {
+    "common": "This password is too common or has appeared in a data breach.",
+    "personal": "This password is too close to your email or the app's name.",
+    "repetitive": "This password repeats the same characters or words.",
+    "sequential": "This password is a simple sequence, like letters or keys in order.",
+}
 
 
 class SignupRequest(BaseModel):
     full_name: str = Field(min_length=1, max_length=100)
     email: EmailStr
-    password: str = Field(min_length=8)
+    # NIST SP 800-63B-4: at least 15 when the password is one factor; no
+    # rules about which kinds of character it must contain.
+    password: str = Field(min_length=MIN_LENGTH)
 
     @field_validator("full_name")
     @classmethod
@@ -23,6 +37,15 @@ class SignupRequest(BaseModel):
         # bcrypt only reads the first 72 bytes of a password.
         if len(value.encode("utf-8")) > 72:
             raise ValueError("Password is too long (72 bytes at most).")
+        return value
+
+    @field_validator("password")
+    @classmethod
+    def password_not_known_bad(cls, value: str, info: ValidationInfo) -> str:
+        # The email is checked before the password, so it's here if valid.
+        problem = password_problem(value, str(info.data.get("email") or ""))
+        if problem:
+            raise PydanticCustomError(f"password_{problem}", PASSWORD_PROBLEMS[problem])
         return value
 
 
@@ -103,9 +126,9 @@ class EnrollmentStatus(BaseModel):
     status: Literal["not_started", "in_progress", "enrolled"]
     samples_accepted: int
     samples_required: int
-    # Something for the user to read aloud for their next sample, so each
-    # take is a few seconds of natural speech. Not checked, just a guide.
-    # None once enrolled.
+    # The sentence to read aloud for the next sample. The sample must hold
+    # every word of it, in order. None once enrolled, or when this session
+    # may not enroll (can_enroll is false).
     prompt: str | None
     # Whether this session may add samples: only the signup session, or
     # during the one-off grace period (see enrollment_window.py).
