@@ -46,10 +46,10 @@ as soon as the voiceprint is built or the checks have run.
 
 ## Key features
 
-- **Password, then voice:** the intended flow makes voice a second factor on
-  top of a password, not a replacement for it. This isn't enforced yet:
-  sign-in issues a token after the password alone, and nothing requires a
-  passed voice check until a voice check can be approved (#17 and #18).
+- **Password, then voice:** voice is a second factor on top of a password,
+  not a replacement for it. A password alone gives a limited token that can
+  only start the voice check; only an approved check (words, voice and
+  liveness) gives the short-lived token that opens the account (#153).
 - **Single-use passages:** each passage is a random sentence (about 508
   million combinations of the six words that are checked), can be used once,
   and expires after two minutes, so an old recording can't be replayed.
@@ -140,13 +140,18 @@ curl -X POST $API/api/verify -H "Authorization: Bearer <access_token>" \
 | Method | Path | What it does | Sign-in needed |
 |---|---|---|---|
 | GET | `/health` | Is the server up? | No |
-| POST | `/api/auth/signup` | Create an account; returns an access token | No |
-| POST | `/api/auth/login` | Sign in with email and password; locks for 30 min after 5 wrong tries within 15 min | No |
-| POST | `/api/challenge` | Get a fresh, single-use passage to read (expires in 2 min); 423 while voice checks are paused | Yes |
-| POST | `/api/verify` | Send a recording of the passage; runs the checks and returns the decision, `attempts_left` and `fallback_required`; 423 while voice checks are paused | Yes |
-| GET | `/api/enroll` | Enrollment progress, and a sentence to read for the next sample | Yes |
-| POST | `/api/enroll/samples` | Add one voice sample; the voiceprint is built after 3 good ones | Yes |
-| DELETE | `/api/enroll/samples` | Start enrollment over | Yes |
+| POST | `/api/auth/signup` | Create an account; returns a limited token (password only) | No |
+| POST | `/api/auth/login` | Sign in with email and password; returns a limited token; locks for 30 min after 5 wrong tries within 15 min | No |
+| POST | `/api/challenge` | Get a fresh, single-use passage to read (expires in 2 min); 423 while voice checks are paused | Limited token |
+| POST | `/api/verify` | Send a recording of the passage; runs the checks and returns the decision, `attempts_left` and `fallback_required`, plus a voice-verified `access_token` (15 min) when approved; 423 while voice checks are paused | Limited token |
+| GET | `/api/enroll` | Enrollment progress, and a sentence to read for the next sample | Limited token |
+| POST | `/api/enroll/samples` | Add one voice sample; the voiceprint is built after 3 good ones | Limited token |
+| DELETE | `/api/enroll/samples` | Start enrollment over | Limited token |
+| GET | `/api/me` | The account summary (name, email, dates, previous sign-in); 403 with a limited token | Voice-verified token |
+
+A password alone gives a **limited token**: it can only start the voice check.
+Only an approved voice check (words, voice and liveness) gives a
+**voice-verified token**, the only kind that opens the account.
 
 Full request and response details are in the interactive docs at `/docs`.
 

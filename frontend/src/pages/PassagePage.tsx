@@ -1,6 +1,6 @@
 import { isAxiosError } from "axios";
 import { useNavigate } from "react-router-dom";
-import { clearToken } from "../api/session";
+import { clearToken, saveToken } from "../api/session";
 import { useEffect, useState } from "react";
 import {
   AVAILABLE_AGAIN,
@@ -72,6 +72,7 @@ export function PassagePage() {
     setSubmitError("");
     try {
       const result = await submitAttempt(recorder.recording, challenge.attempt_id);
+      if (result.access_token) saveToken(result.access_token);
       navigate("/result", { state: { result } });
     } catch (err) {
       if (isAxiosError(err) && err.response?.status === 401) {

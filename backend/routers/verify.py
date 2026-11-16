@@ -1,8 +1,11 @@
 import logging
 import time
+from datetime import UTC, datetime
 
+from bson import ObjectId
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from pymongo.collection import Collection
+from pymongo.errors import PyMongoError
 
 import config
 from audio_upload import read_recording
@@ -11,6 +14,7 @@ from content_check import check_content
 from db import (
     get_challenges_collection,
     get_rate_limits_collection,
+    get_users_collection,
     get_voice_failures_collection,
     get_voiceprints_collection,
 )
@@ -20,7 +24,7 @@ from identity_check import IdentityResult, IdentityUnavailable, check_identity
 from liveness_check import LivenessResult, check_liveness
 from rate_limit import count_request
 from schemas import ContentScore, VerifyResponse
-from security import get_current_user_id
+from security import create_verified_token, get_current_user_id
 from transcription import AudioNotUnderstood, Transcriber, TranscriptionUnavailable, get_transcriber
 from voice_attempts import ensure_not_locked, record_outcome
 from voiceprints import load_voiceprint
@@ -39,6 +43,7 @@ def verify(
     rate_limits: Collection = Depends(get_rate_limits_collection),
     voiceprints: Collection = Depends(get_voiceprints_collection),
     voice_failures: Collection = Depends(get_voice_failures_collection),
+    users: Collection = Depends(get_users_collection),
     transcribe: Transcriber = Depends(get_transcriber),
     embed: Embedder | None = Depends(get_embedder),
 ) -> VerifyResponse:
@@ -96,6 +101,12 @@ def verify(
     attempts_left = record_outcome(voice_failures, user_id, result.decision)
     if result.decision == "rejected":
         logger.info("voice_check_rejected user=%s attempt=%s attempts_left=%d", user_id, attempt_id, attempts_left)
+    access_token = None
+    if result.decision == "approved":
+        # Only an approval opens the account: password, voice and liveness.
+        access_token = create_verified_token(user_id)
+        _record_sign_in(users, user_id)
+        logger.info("voice_check_approved user=%s attempt=%s", user_id, attempt_id)
     return VerifyResponse(
         decision=result.decision,
         reason=result.reason,
@@ -109,7 +120,25 @@ def verify(
         liveness=_liveness_status(liveness),
         attempts_left=attempts_left,
         fallback_required=result.decision == "rejected" and attempts_left == 0,
+        access_token=access_token,
     )
+
+
+def _record_sign_in(users: Collection, user_id: str) -> None:
+    """Note this voice-verified sign-in, keeping the one before it so the
+    account page can show it. One atomic update, so two approvals at once
+    can't leave an older time behind. Best effort: the user has passed every
+    check, so a failed write is logged rather than costing them the sign-in."""
+    if not ObjectId.is_valid(user_id):
+        return
+    try:
+        users.update_one(
+            {"_id": ObjectId(user_id)},
+            # A pipeline update reads the old last_verified_at in the same step.
+            [{"$set": {"previous_verified_at": "$last_verified_at", "last_verified_at": datetime.now(UTC)}}],
+        )
+    except PyMongoError as exc:
+        logger.warning("sign_in_history_not_saved user=%s reason=%s", user_id, type(exc).__name__)
 
 
 def _identity_status(identity: IdentityResult | None) -> str:
