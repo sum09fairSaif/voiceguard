@@ -12,6 +12,7 @@ import { RecordButton } from "../components/RecordButton";
 import { StepProgress } from "../components/StepProgress";
 import { useChallenge } from "../hooks/useChallenge";
 import { useRecorder } from "../hooks/useRecorder";
+import posthog, { isPostHogConfigured } from "../posthog";
 import { formatCountdown } from "../utils/countdown";
 import { displayPassage } from "../utils/passage";
 import styles from "./PassagePage.module.css";
@@ -50,8 +51,23 @@ export function PassagePage() {
     if (!challenge || !recorder.recording) return;
     setSubmitting(true);
     setSubmitError("");
+    if (isPostHogConfigured) posthog.capture("voice_verification_submitted");
     try {
       const result = await submitAttempt(recorder.recording, challenge.attempt_id);
+      if (isPostHogConfigured) {
+        posthog.capture("voice_verification_completed", {
+          decision: result.decision,
+          identity: result.identity,
+          liveness: result.liveness,
+          content_passed: result.content.passed,
+        });
+        posthog.logger.info("voice verification completed", {
+          decision: result.decision,
+          identity: result.identity,
+          liveness: result.liveness,
+          content_passed: result.content.passed,
+        });
+      }
       navigate("/result", { state: { result } });
     } catch (err) {
       if (isAxiosError(err) && err.response?.status === 401) {
