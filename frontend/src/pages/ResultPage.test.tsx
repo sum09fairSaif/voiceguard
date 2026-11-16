@@ -13,6 +13,8 @@ function result(overrides: Partial<VerifyResult> = {}): VerifyResult {
     content: { passed: true, score: 1, matched: 6, total: 6 },
     identity: "not_enrolled",
     liveness: "not_checked",
+    attempts_left: 3,
+    fallback_required: false,
     ...overrides,
   };
 }
@@ -87,6 +89,27 @@ describe("Result page", () => {
 
     await userEvent.setup().click(screen.getByRole("button", { name: /done/i }));
 
+    expect(screen.getByText("sign-in screen")).toBeInTheDocument();
+    expect(getToken()).toBeNull();
+  });
+
+  it("shows the attempts left after a rejection", () => {
+    renderResult({ result: result({ decision: "rejected", identity: "failed", attempts_left: 1 }) });
+
+    expect(screen.getByText(/1 attempt left/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /try again/i })).toBeInTheDocument();
+  });
+
+  it("offers no retry once voice checks are paused", async () => {
+    saveToken("token");
+    renderResult({
+      result: result({ decision: "rejected", identity: "failed", attempts_left: 0, fallback_required: true }),
+    });
+
+    expect(screen.getByRole("heading", { name: "Voice checks are paused." })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /try again/i })).not.toBeInTheDocument();
+
+    await userEvent.setup().click(screen.getByRole("button", { name: /done/i }));
     expect(screen.getByText("sign-in screen")).toBeInTheDocument();
     expect(getToken()).toBeNull();
   });
