@@ -1,0 +1,23 @@
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* Matches the gold text links on the voice screens. */
+.signOut {
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-family: var(--font-heading);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-gold);
+  cursor: pointer;
+}
+
+.signOut:disabled {
+  color: var(--color-muted);
+  cursor: default;
+}

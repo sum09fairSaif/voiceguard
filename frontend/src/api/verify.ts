@@ -16,6 +16,9 @@ export type VerifyResult = {
   attempts_left?: number;
   // True when this rejection used the last attempt, so checks are paused now.
   fallback_required?: boolean;
+  // Only when approved: the voice-verified token that opens the account.
+  // It replaces the password's limited token.
+  access_token?: string | null;
 };
 
 // What the voice check's error statuses mean for the person on screen. Used as
