@@ -6,12 +6,14 @@ from pymongo.collection import Collection
 import config
 from embedding import Embedding
 from identity_check import cosine_similarity
+from liveness_check import check_liveness
 from voiceprints import build_voiceprint, decrypt_embedding, encrypt_embedding
 
 # Why a sample was turned away. The router turns each into a message.
 TOO_SHORT = "too_short"
 TOO_LOUD = "too_loud"
 INCONSISTENT = "inconsistent"
+NOT_LIVE = "not_live"
 
 
 def _current(user_id: str, now: datetime) -> dict:
@@ -40,6 +42,11 @@ def sample_problem(sample: Embedding, earlier: list[list[float]]) -> tuple[str |
         return TOO_SHORT, None
     if sample.clipped_share > config.ENROLL_MAX_CLIPPED_SHARE:
         return TOO_LOUD, None
+    # A voiceprint made from a recording or AI clone of someone would let
+    # whoever made it pass as them from then on, so every sample has to
+    # pass the same liveness check as a voice check.
+    if not check_liveness(sample.liveness).passed:
+        return NOT_LIVE, None
     if not earlier:
         return None, None
     similarity = cosine_similarity(build_voiceprint(earlier), sample.vector)

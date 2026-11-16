@@ -75,6 +75,28 @@ class VerifyResponse(BaseModel):
     # Pass or fail only, for the same reason. "not_checked" when the account
     # has no voiceprint: liveness runs in the same model-service call.
     liveness: Literal["passed", "failed", "not_checked"]
+    # Rejected checks the user has left before voice checks lock. Back to
+    # the maximum after an approval; not lowered by an "incomplete".
+    attempts_left: int
+    # True when this rejection used up the last attempt: voice checks are
+    # now locked, and the user should be offered the email code (#20).
+    fallback_required: bool
+    # Only when approved: a short-lived voice-verified token, the only kind
+    # that opens the account (GET /api/me). None otherwise.
+    access_token: str | None = None
+
+
+class MeResponse(BaseModel):
+    """The account summary, for a voice-verified session only."""
+
+    full_name: str
+    email: EmailStr
+    created_at: datetime
+    # When the voiceprint was recorded; None if the account hasn't enrolled.
+    enrolled_at: datetime | None
+    # The voice-verified sign-in before this one, so the user can spot one
+    # that wasn't them; None on the first.
+    previous_sign_in_at: datetime | None
 
 
 class EnrollmentStatus(BaseModel):

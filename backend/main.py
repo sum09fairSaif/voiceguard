@@ -8,10 +8,12 @@ from fastapi.responses import JSONResponse
 from pymongo.errors import PyMongoError
 
 import config
+from email_sender import EmailUnavailable
 from identity_check import IdentityUnavailable
 from rate_limit import RateLimited
-from routers import auth, challenge, enroll, verify
+from routers import account, auth, challenge, enroll, verify
 from transcription import AudioNotUnderstood, TranscriptionUnavailable
+from voice_attempts import VoiceLockedOut
 
 # uvicorn only sets up its own loggers, so without this our info lines
 # (one per transcription) would never reach the console or Render's logs.
@@ -38,6 +40,7 @@ app.include_router(auth.router)
 app.include_router(challenge.router)
 app.include_router(enroll.router)
 app.include_router(verify.router)
+app.include_router(account.router)
 
 
 @app.exception_handler(RequestValidationError)
@@ -68,6 +71,17 @@ def voice_check_unavailable(request: Request, exc: Exception) -> JSONResponse:
     )
 
 
+@app.exception_handler(EmailUnavailable)
+def email_unavailable(request: Request, exc: EmailUnavailable) -> JSONResponse:
+    # The log says what failed (never the key, address or message); the
+    # user just hears the email couldn't go.
+    logger.warning("email_unavailable path=%s reason=%s", request.url.path, exc)
+    return JSONResponse(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        content={"detail": "We couldn't send the email right now. Please try again shortly."},
+    )
+
+
 @app.exception_handler(AudioNotUnderstood)
 def audio_not_understood(request: Request, exc: AudioNotUnderstood) -> JSONResponse:
     # The passage was already used up, so the user needs a fresh one.
@@ -84,6 +98,17 @@ def not_configured(request: Request, exc: config.NotConfigured) -> JSONResponse:
     return JSONResponse(
         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
         content={"detail": "The service is temporarily unavailable. Please try again shortly."},
+    )
+
+
+@app.exception_handler(VoiceLockedOut)
+def voice_locked_out(request: Request, exc: VoiceLockedOut) -> JSONResponse:
+    minutes = math.ceil(exc.retry_after / 60)
+    wait = "1 minute" if minutes == 1 else f"{minutes} minutes"
+    return JSONResponse(
+        status_code=status.HTTP_423_LOCKED,
+        content={"detail": f"Too many failed voice checks, so they're paused for now. Please try again in {wait}."},
+        headers={"Retry-After": str(exc.retry_after)},
     )
 
 

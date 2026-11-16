@@ -1,6 +1,7 @@
 import logging
 from datetime import UTC, datetime, timedelta
 
+import jwt
 import pytest
 from bson import ObjectId
 from pymongo.errors import ServerSelectionTimeoutError
@@ -8,7 +9,7 @@ from pymongo.errors import ServerSelectionTimeoutError
 import config
 from audio_upload import MAX_AUDIO_BYTES
 from challenges import create_challenge
-from db import get_challenges_collection
+from db import get_challenges_collection, get_users_collection
 from embedding import Embedding, get_embedder
 from identity_check import IdentityUnavailable
 from main import app
@@ -126,6 +127,10 @@ def test_reading_the_passage_without_a_voiceprint_is_not_approved(client, challe
         "content": {"passed": True, "score": 1.0, "matched": 6, "total": 6},
         "identity": "not_enrolled",
         "liveness": "not_checked",
+        "attempts_left": config.VOICE_MAX_FAILURES,
+        "fallback_required": False,
+        # Not approved, so no voice-verified token.
+        "access_token": None,
     }
     assert not is_unused(challenges, attempt["id"])
 
@@ -382,12 +387,17 @@ def test_enrolled_user_reading_live_in_their_own_voice_is_approved(client, trans
     response = submit(client, attempt["id"])
 
     assert response.status_code == 200
-    assert response.json() == {
+    body = response.json()
+    # Approved: a voice-verified token comes back (checked in detail below).
+    assert body.pop("access_token")
+    assert body == {
         "decision": "approved",
         "reason": "The passage, the voice and liveness all checked out.",
         "content": {"passed": True, "score": 1.0, "matched": 6, "total": 6},
         "identity": "passed",
         "liveness": "passed",
+        "attempts_left": config.VOICE_MAX_FAILURES,
+        "fallback_required": False,
     }
     assert embedder.calls == [(RECORDING, "attempt.webm")]
 
@@ -411,7 +421,10 @@ def test_identity_and_liveness_scores_are_not_sent_back(client, transcriber, emb
 
     assert body["identity"] == "passed"
     assert body["liveness"] == "passed"
-    assert set(body) == {"decision", "reason", "content", "identity", "liveness"}
+    assert set(body) == {
+        "decision", "reason", "content", "identity", "liveness", "attempts_left", "fallback_required",
+        "access_token",
+    }
 
 
 def test_identity_score_is_logged_for_tuning(client, transcriber, embedder, enrolled, attempt, caplog):
@@ -557,3 +570,196 @@ def test_missing_liveness_score_is_logged_as_a_dash(client, transcriber, embedde
 
     [line] = [r.getMessage() for r in caplog.records if r.message.startswith("liveness ")]
     assert "score=- passed=False" in line
+
+
+# --- Failed checks and the lockout (voice_attempts.py) -----------------------
+
+MAX = config.VOICE_MAX_FAILURES
+
+
+def check(client, challenges, transcriber, embedder, *, words_right=True, voice=USERS_VOICE, user_id=USER_ID):
+    """One voice check from a fresh passage."""
+    challenge = create_challenge(challenges, user_id)
+    transcriber.heard = challenge["passage"] if words_right else "the quick brown fox jumps over"
+    embedder.voice = voice
+    return submit(client, str(challenge["_id"]), headers=signed_in(user_id))
+
+
+def test_each_rejection_uses_up_an_attempt(client, challenges, transcriber, embedder, enrolled):
+    for left in range(MAX - 1, 0, -1):
+        body = check(client, challenges, transcriber, embedder, voice=OTHER_VOICE).json()
+        assert body["decision"] == "rejected"
+        assert body["attempts_left"] == left
+        assert body["fallback_required"] is False
+
+
+def test_the_last_rejection_asks_for_the_fallback(client, challenges, transcriber, embedder, enrolled):
+    for _ in range(MAX - 1):
+        check(client, challenges, transcriber, embedder, voice=OTHER_VOICE)
+
+    response = check(client, challenges, transcriber, embedder, voice=OTHER_VOICE)
+
+    # The answer still says why it was rejected; the lockout starts after it.
+    assert response.status_code == 200
+    assert response.json()["decision"] == "rejected"
+    assert response.json()["attempts_left"] == 0
+    assert response.json()["fallback_required"] is True
+
+
+def test_wrong_words_count_as_a_rejection_too(client, challenges, transcriber, embedder, enrolled):
+    body = check(client, challenges, transcriber, embedder, words_right=False).json()
+
+    assert body["decision"] == "rejected"
+    assert body["attempts_left"] == MAX - 1
+
+
+def lock(client, challenges, transcriber, embedder):
+    for _ in range(MAX):
+        check(client, challenges, transcriber, embedder, voice=OTHER_VOICE)
+
+
+def test_no_new_passage_once_locked(client, challenges, transcriber, embedder, enrolled):
+    lock(client, challenges, transcriber, embedder)
+
+    response = client.post("/api/challenge", headers=signed_in())
+
+    assert response.status_code == 423
+    assert int(response.headers["Retry-After"]) == config.VOICE_LOCKOUT_SECONDS
+    assert "Too many failed voice checks" in response.json()["detail"]
+
+
+def test_no_check_once_locked_and_the_passage_is_kept(client, challenges, transcriber, embedder, enrolled):
+    # A passage made directly, as if fetched before the lockout started.
+    lock(client, challenges, transcriber, embedder)
+    attempt_id = str(create_challenge(challenges, USER_ID)["_id"])
+    calls = len(transcriber.calls)
+
+    response = submit(client, attempt_id)
+
+    assert response.status_code == 423
+    assert len(transcriber.calls) == calls  # no paid speech-to-text call
+    assert is_unused(challenges, attempt_id)
+
+
+def test_the_lockout_ends(client, challenges, transcriber, embedder, enrolled, voice_failures):
+    lock(client, challenges, transcriber, embedder)
+    # As if the lockout and the window had both run out.
+    voice_failures.delete_many({})
+
+    assert client.post("/api/challenge", headers=signed_in()).status_code == 201
+
+
+def test_an_approval_resets_the_count(client, challenges, transcriber, embedder, enrolled):
+    for _ in range(MAX - 1):
+        check(client, challenges, transcriber, embedder, voice=OTHER_VOICE)
+
+    approved = check(client, challenges, transcriber, embedder).json()
+    after = check(client, challenges, transcriber, embedder, voice=OTHER_VOICE).json()
+
+    assert approved["decision"] == "approved"
+    assert approved["attempts_left"] == MAX
+    assert after["attempts_left"] == MAX - 1
+
+
+def test_not_being_enrolled_doesnt_count(client, challenges, transcriber, embedder):
+    for _ in range(MAX + 1):
+        body = check(client, challenges, transcriber, embedder).json()
+        assert body["decision"] == "incomplete"
+        assert body["attempts_left"] == MAX
+
+    assert client.post("/api/challenge", headers=signed_in()).status_code == 201
+
+
+def test_an_outage_doesnt_count(client, challenges, transcriber, embedder, enrolled):
+    transcriber.error = TranscriptionUnavailable("Speech-to-text request failed.")
+    for _ in range(MAX):
+        challenge = create_challenge(challenges, USER_ID)
+        assert submit(client, str(challenge["_id"])).status_code == 503
+    transcriber.error = None
+
+    assert check(client, challenges, transcriber, embedder, voice=OTHER_VOICE).json()["attempts_left"] == MAX - 1
+
+
+def test_one_users_failures_dont_lock_another(client, challenges, transcriber, embedder, enrolled, voiceprints):
+    other = str(ObjectId())
+    save_voiceprint(voiceprints, other, USERS_VOICE)
+    lock(client, challenges, transcriber, embedder)
+
+    assert client.post("/api/challenge", headers=signed_in(other)).status_code == 201
+    body = check(client, challenges, transcriber, embedder, user_id=other).json()
+    assert body["decision"] == "approved"
+
+
+def test_rejections_are_logged_with_what_is_left(client, challenges, transcriber, embedder, enrolled, caplog):
+    with caplog.at_level("INFO", logger="voiceguard.verify"):
+        check(client, challenges, transcriber, embedder, voice=OTHER_VOICE)
+
+    assert any(f"attempts_left={MAX - 1}" in r.getMessage() for r in caplog.records)
+
+
+# --- The voice-verified token -------------------------------------------------
+
+
+def token_claims(token):
+    return jwt.decode(token, config.JWT_SECRET, algorithms=[config.JWT_ALGORITHM])
+
+
+def test_an_approved_check_returns_a_voice_verified_token(client, transcriber, embedder, enrolled, attempt):
+    transcriber.heard = attempt["passage"]
+
+    token = submit(client, attempt["id"]).json()["access_token"]
+
+    claims = token_claims(token)
+    assert claims["sub"] == USER_ID
+    assert claims["scope"] == "verified"
+    assert claims["amr"] == ["pwd", "voice"]
+
+
+@pytest.mark.parametrize(
+    "setup",
+    ["wrong_words", "other_voice", "not_live", "not_enrolled"],
+)
+def test_anything_but_approval_returns_no_token(client, transcriber, embedder, voiceprints, attempt, setup):
+    transcriber.heard = "the quick brown fox jumps over" if setup == "wrong_words" else attempt["passage"]
+    if setup != "not_enrolled":
+        save_voiceprint(voiceprints, USER_ID, USERS_VOICE)
+    if setup == "other_voice":
+        embedder.voice = OTHER_VOICE
+    if setup == "not_live":
+        embedder.liveness = config.LIVENESS_THRESHOLD - 1.0
+
+    body = submit(client, attempt["id"]).json()
+
+    assert body["decision"] != "approved"
+    assert body["access_token"] is None
+
+
+def test_a_failed_sign_in_history_write_still_signs_the_user_in(
+    client, transcriber, embedder, enrolled, attempt, caplog
+):
+    class BrokenUsers:
+        def update_one(self, *args, **kwargs):
+            raise ServerSelectionTimeoutError("database unreachable")
+
+    app.dependency_overrides[get_users_collection] = lambda: BrokenUsers()
+    transcriber.heard = attempt["passage"]
+
+    with caplog.at_level(logging.WARNING, logger="voiceguard.verify"):
+        response = submit(client, attempt["id"])
+
+    assert response.status_code == 200
+    assert response.json()["decision"] == "approved"
+    assert response.json()["access_token"]
+    assert any("sign_in_history_not_saved" in r.getMessage() for r in caplog.records)
+
+
+def test_an_approval_moves_the_last_sign_in_to_previous(client, users, transcriber, embedder, enrolled, attempt):
+    earlier = datetime(2026, 11, 13, 18, 30)
+    users.insert_one({"_id": ObjectId(USER_ID), "full_name": "Sam", "email": "s@example.com", "last_verified_at": earlier})
+    transcriber.heard = attempt["passage"]
+
+    submit(client, attempt["id"])
+
+    record = users.find_one({"_id": ObjectId(USER_ID)})
+    assert record["previous_verified_at"] == earlier
+    assert record["last_verified_at"] > earlier
