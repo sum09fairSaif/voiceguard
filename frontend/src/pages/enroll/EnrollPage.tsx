@@ -3,14 +3,15 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { describeEnrollError, getEnrollment, type Enrollment } from "../../api/enroll";
 import { clearToken } from "../../api/session";
-import { Logo } from "../../components/Logo";
+import { SignedInHeader } from "../../components/SignedInHeader";
 import { Page } from "../../components/Page";
+import { EnrollClosed } from "./EnrollClosed";
 import { EnrollDone } from "./EnrollDone";
 import { EnrollIntro } from "./EnrollIntro";
 import { EnrollRecord } from "./EnrollRecord";
 import styles from "../PassagePage.module.css";
 
-type Step = "loading" | "intro" | "record" | "done";
+type Step = "loading" | "intro" | "record" | "done" | "closed";
 
 // /enroll: the three enrollment steps on one route. Where it starts depends on
 // the account: new → intro, part-way → straight back to recording,
@@ -28,7 +29,10 @@ export function EnrollPage() {
       .then((status) => {
         if (!current) return;
         setEnrollment(status);
-        setStep(status.status === "enrolled" ? "done" : status.status === "in_progress" ? "record" : "intro");
+        if (status.status === "enrolled") setStep("done");
+        // Only the signup session may record; explain before anyone records.
+        else if (status.can_enroll === false) setStep("closed");
+        else setStep(status.status === "in_progress" ? "record" : "intro");
       })
       .catch((err) => {
         if (!current) return;
@@ -44,7 +48,8 @@ export function EnrollPage() {
     };
   }, [attempt, navigate]);
 
-  function signOut() {
+  // The session ended on its own (401): just forget the token.
+  function sessionEnded() {
     clearToken();
     navigate("/signin", { replace: true });
   }
@@ -56,7 +61,7 @@ export function EnrollPage() {
 
   return (
     <Page>
-      <Logo />
+      <SignedInHeader />
       {step === "loading" &&
         (error ? (
           <div className={styles.problem}>
@@ -76,10 +81,12 @@ export function EnrollPage() {
           enrollment={enrollment}
           onChange={setEnrollment}
           onEnrolled={() => setStep("done")}
-          onSignedOut={signOut}
+          onSignedOut={sessionEnded}
+          onClosed={() => setStep("closed")}
         />
       )}
       {step === "done" && <EnrollDone onContinue={() => navigate("/verify")} />}
+      {step === "closed" && <EnrollClosed />}
     </Page>
   );
 }

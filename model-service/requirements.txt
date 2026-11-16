@@ -1,9 +1,17 @@
 # Installed by the Hugging Face Space on top of Gradio, which already
 # brings FastAPI, uvicorn, python-multipart and numpy.
 # The Space runs on ZeroGPU (the free hardware for Gradio Spaces), which
-# only accepts certain PyTorch versions; 2.8.0 is one. The model runs on
-# ZeroGPU's GPU when one is free and falls back to the CPU otherwise
-# (see encode() in app.py); it's small enough for either.
-torch==2.8.0
-torchaudio==2.8.0
+# only accepts certain PyTorch versions. The model runs on ZeroGPU's GPU
+# when one is free and falls back to the CPU otherwise (see encode() in
+# app.py); it's small enough for either.
+#
+# torch and torchaudio are upgraded by hand (Dependabot skips them, see
+# .github/dependabot.yml). 2.11.0 is as far as they go together: torchaudio
+# has no release after 2.11, and speechbrain 1.1.2 (the newest) imports it.
+# It fixes 3 of PyTorch's 4 open security alerts (#107); the 4th, in
+# torch.jit.script (fixed in 2.13.0), isn't reached: nothing here turns on
+# SpeechBrain's jit option or calls it. On the same recordings it gives the
+# same embeddings and liveness scores as 2.8.0, so voiceprints still match.
+torch==2.11.0
+torchaudio==2.11.0
 speechbrain==1.1.2
