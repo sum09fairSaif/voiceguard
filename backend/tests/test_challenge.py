@@ -55,7 +55,7 @@ def test_each_request_gets_a_new_passage(client, challenges):
 def test_token_from_signup_works(client, challenges):
     signup = client.post(
         "/api/auth/signup",
-        json={"full_name": "Sam Lee", "email": "sam@example.com", "password": "correct-horse"},
+        json={"full_name": "Sam Lee", "email": "sam@example.com", "password": "correct-horse-battery"},
     ).json()
     headers = {"Authorization": f"Bearer {signup['access_token']}"}
     response = client.post(CHALLENGE_URL, headers=headers)

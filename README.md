@@ -57,6 +57,9 @@ as soon as the voiceprint is built or the checks have run.
   encrypted at rest. Recordings are never saved.
 - **Scores stay on the server:** the identity check answers only pass or
   fail, never its score, so nobody can tune a voice clone against it.
+- **Passwords (NIST SP 800-63B-4):** at least 15 characters, no rules about
+  which kinds of character, and never a common or breached password, the
+  person's own email name, or a simple repeat or sequence.
 - **Abuse limits:** sign-in locks for 30 minutes after 5 wrong passwords
   within 15 minutes, and per-user limits cap the paid speech-to-text calls.
 - **Fallback:** after 3 rejected voice checks within 30 minutes, voice
