@@ -1,5 +1,6 @@
 import logging
 
+from bson import ObjectId
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from pymongo.collection import Collection
 
@@ -10,6 +11,7 @@ from db import (
     get_enroll_prompts_collection,
     get_enrollments_collection,
     get_rate_limits_collection,
+    get_users_collection,
     get_voiceprints_collection,
 )
 from embedding import Embedder, Embedding, get_embedder
@@ -29,10 +31,11 @@ from enrollment import (
     take_samples,
     use_prompt,
 )
+from enrollment_window import may_enroll
 from identity_check import IdentityUnavailable
 from rate_limit import count_request
 from schemas import EnrollmentStatus
-from security import get_current_user_id
+from security import get_current_user_id, get_token_claims
 from transcription import AudioNotUnderstood, Transcriber, get_transcriber, transcribe_and_log
 from voiceprints import build_voiceprint, has_voiceprint, save_voiceprint
 
@@ -54,22 +57,30 @@ RETRY_MESSAGES = {
     "quiet place. If this keeps happening, start over.",
 }
 UNREADABLE_MESSAGE = "We couldn't read that recording. Please record it again."
+NOT_NOW = (
+    "Voice ID can only be set up right after creating your account. "
+    "Please contact the VoiceGuard team to set it up."
+)
 
 
 @router.get("", response_model=EnrollmentStatus)
 def enrollment_status(
     user_id: str = Depends(get_current_user_id),
+    claims: dict = Depends(get_token_claims),
+    users: Collection = Depends(get_users_collection),
     voiceprints: Collection = Depends(get_voiceprints_collection),
     enrollments: Collection = Depends(get_enrollments_collection),
     prompts: Collection = Depends(get_enroll_prompts_collection),
 ) -> EnrollmentStatus:
-    return _status(voiceprints, enrollments, prompts, user_id)
+    return _status(voiceprints, enrollments, prompts, user_id, _may_enroll(users, claims, user_id))
 
 
 @router.post("/samples", response_model=EnrollmentStatus)
 def add_enrollment_sample(
     audio: UploadFile = File(...),
     user_id: str = Depends(get_current_user_id),
+    claims: dict = Depends(get_token_claims),
+    users: Collection = Depends(get_users_collection),
     rate_limits: Collection = Depends(get_rate_limits_collection),
     voiceprints: Collection = Depends(get_voiceprints_collection),
     enrollments: Collection = Depends(get_enrollments_collection),
@@ -77,13 +88,17 @@ def add_enrollment_sample(
     embed: Embedder | None = Depends(get_embedder),
     transcribe: Transcriber = Depends(get_transcriber),
 ) -> EnrollmentStatus:
-    count_request(rate_limits, "enroll", user_id, config.ENROLL_RATE_LIMIT, config.RATE_LIMIT_WINDOW_SECONDS)
-
     # Replacing a voiceprint needs more than a password: otherwise anyone
     # who learned the password could swap in their own voice and pass the
     # voice check from then on.
     if has_voiceprint(voiceprints, user_id):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Your voice is already enrolled.")
+    # Setting the voice needs more than a password, too: only the signup
+    # session (or the one-off grace period) may do it. Checked before the
+    # count, so refused requests can't use up the owner's allowance.
+    if not _may_enroll(users, claims, user_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=NOT_NOW)
+    count_request(rate_limits, "enroll", user_id, config.ENROLL_RATE_LIMIT, config.RATE_LIMIT_WINDOW_SECONDS)
 
     recording, extension = read_recording(audio)
     # Checked before the model-service call, so a misconfigured server
@@ -136,31 +151,44 @@ def add_enrollment_sample(
             save_voiceprint(voiceprints, user_id, build_voiceprint(samples))
             discard_prompts(prompts, user_id)
             logger.info("enrolled user=%s samples=%d", user_id, len(samples))
-    return _status(voiceprints, enrollments, prompts, user_id)
+    return _status(voiceprints, enrollments, prompts, user_id, True)  # already checked above
 
 
 @router.delete("/samples", response_model=EnrollmentStatus)
 def start_over(
     user_id: str = Depends(get_current_user_id),
+    claims: dict = Depends(get_token_claims),
+    users: Collection = Depends(get_users_collection),
     voiceprints: Collection = Depends(get_voiceprints_collection),
     enrollments: Collection = Depends(get_enrollments_collection),
     prompts: Collection = Depends(get_enroll_prompts_collection),
 ) -> EnrollmentStatus:
     """Throw away the samples given so far. Leaves a finished voiceprint alone."""
     discard_samples(enrollments, user_id)
-    return _status(voiceprints, enrollments, prompts, user_id)
+    return _status(voiceprints, enrollments, prompts, user_id, _may_enroll(users, claims, user_id))
 
 
-def _status(voiceprints: Collection, enrollments: Collection, prompts: Collection, user_id: str) -> EnrollmentStatus:
+def _may_enroll(users: Collection, claims: dict, user_id: str) -> bool:
+    fields = {"created_at": 1, "signup_session_enrollment": 1}
+    user = users.find_one({"_id": ObjectId(user_id)}, fields) if ObjectId.is_valid(user_id) else None
+    return may_enroll(claims, user)
+
+
+def _status(
+    voiceprints: Collection, enrollments: Collection, prompts: Collection, user_id: str, can_enroll: bool
+) -> EnrollmentStatus:
     required = config.ENROLL_SAMPLES_REQUIRED
     if has_voiceprint(voiceprints, user_id):
-        return EnrollmentStatus(status="enrolled", samples_accepted=required, samples_required=required, prompt=None)
+        return EnrollmentStatus(
+            status="enrolled", samples_accepted=required, samples_required=required, prompt=None, can_enroll=False
+        )
     accepted = count_samples(enrollments, user_id)
     return EnrollmentStatus(
         status="in_progress" if accepted else "not_started",
         samples_accepted=accepted,
         samples_required=required,
-        prompt=issue_prompt(prompts, user_id),
+        prompt=issue_prompt(prompts, user_id) if can_enroll else None,
+        can_enroll=can_enroll,
     )
 
 

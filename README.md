@@ -46,10 +46,10 @@ as soon as the voiceprint is built or the checks have run.
 
 ## Key features
 
-- **Password, then voice:** the intended flow makes voice a second factor on
-  top of a password, not a replacement for it. This isn't enforced yet:
-  sign-in issues a token after the password alone, and nothing requires a
-  passed voice check until a voice check can be approved (#17 and #18).
+- **Password, then voice:** voice is a second factor on top of a password,
+  not a replacement for it. A password alone gives a limited token that can
+  only start the voice check; only an approved check (words, voice and
+  liveness) gives the short-lived token that opens the account (#153).
 - **Single-use passages:** each passage is a random sentence (about 508
   million combinations of the six words that are checked), can be used once,
   and expires after two minutes, so an old recording can't be replayed.
@@ -59,7 +59,9 @@ as soon as the voiceprint is built or the checks have run.
   fail, never its score, so nobody can tune a voice clone against it.
 - **Abuse limits:** sign-in locks for 30 minutes after 5 wrong passwords
   within 15 minutes, and per-user limits cap the paid speech-to-text calls.
-- **Fallback:** after 3 failed voice attempts, an email code (planned, #20).
+- **Fallback:** after 3 rejected voice checks within 30 minutes, voice
+  checks pause for 30 minutes and the app is told to offer an email code
+  (the code itself is planned, #20).
 
 ## Project status
 
@@ -77,7 +79,7 @@ Each row is a user story (see the
 | #16 Identity check | ✅ Done (SpeechBrain ECAPA) | — |
 | #17 Liveness / anti-spoof check | 🟡 First model live (AASIST, fine-tuned); about 1 fake in 4 still passes | — |
 | #18 Combine the three checks | ✅ All three must pass; liveness can veto | — |
-| #19 Result screen with retry | — | ✅ Done |
+| #19 Result screen with retry | ✅ Counts failed checks; pauses them after 3 | ✅ Done (shows attempts left and the pause) |
 | #20 Account recovery (email code) | ⏳ Not started | ⏳ Not started |
 
 An enrolled user who reads the passage live in their own voice is approved.
@@ -138,13 +140,21 @@ curl -X POST $API/api/verify -H "Authorization: Bearer <access_token>" \
 | Method | Path | What it does | Sign-in needed |
 |---|---|---|---|
 | GET | `/health` | Is the server up? | No |
-| POST | `/api/auth/signup` | Create an account; returns an access token | No |
-| POST | `/api/auth/login` | Sign in with email and password; locks for 30 min after 5 wrong tries within 15 min | No |
-| POST | `/api/challenge` | Get a fresh, single-use passage to read (expires in 2 min) | Yes |
-| POST | `/api/verify` | Send a recording of the passage; runs the checks and returns the decision | Yes |
-| GET | `/api/enroll` | Enrollment progress, and a sentence to read for the next sample | Yes |
-| POST | `/api/enroll/samples` | Add one voice sample (it must hold every word of the sentence, in order, sound live, and match the earlier samples); the voiceprint is built after 3 good ones | Yes |
-| DELETE | `/api/enroll/samples` | Start enrollment over | Yes |
+| POST | `/api/auth/signup` | Create an account; returns a limited token (password only) | No |
+| POST | `/api/auth/login` | Sign in with email and password; returns a limited token; locks for 30 min after 5 wrong tries within 15 min | No |
+| POST | `/api/auth/logout` | Sign out: ends this sign-in on the server, so its limited and voice-verified tokens both stop working (204) | Any token |
+| POST | `/api/challenge` | Get a fresh, single-use passage to read (expires in 2 min); 423 while voice checks are paused | Limited token |
+| POST | `/api/verify` | Send a recording of the passage; runs the checks and returns the decision, `attempts_left` and `fallback_required`, plus a voice-verified `access_token` (15 min) when approved; 423 while voice checks are paused | Limited token |
+| GET | `/api/enroll` | Enrollment progress, a sentence to read for the next sample, and whether this session may enroll (`can_enroll`) | Limited token |
+| POST | `/api/enroll/samples` | Add one voice sample (it must hold every word of the sentence, in order, sound live, and match the earlier samples); the voiceprint is built after 3 good ones. Only the signup session, within 30 min of creating the account; until 2026-11-16 00:00 ET, accounts made before this rule may also enroll after signing in (403 otherwise) | Signup token (or sign-in token during the grace period) |
+| DELETE | `/api/enroll/samples` | Start enrollment over | Limited token |
+| GET | `/api/me` | The account summary (name, email, dates, previous sign-in); 403 with a limited token | Voice-verified token |
+
+A password alone gives a **limited token**: it can only start the voice check.
+Only an approved voice check (words, voice and liveness) gives a
+**voice-verified token**, the only kind that opens the account. Both belong
+to one sign-in session; signing out ends the session on the server, so a
+copied token stops working too.
 
 Full request and response details are in the interactive docs at `/docs`.
 

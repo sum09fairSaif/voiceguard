@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { requestChallenge, type Challenge } from "../api/challenge";
+import { logOut } from "../api/auth";
 import { getToken, saveToken } from "../api/session";
 import { submitAttempt, type VerifyResult } from "../api/verify";
 import { RECORDER_MESSAGES } from "../hooks/useRecorder";
@@ -16,6 +17,10 @@ vi.mock("../api/challenge", () => ({ requestChallenge: vi.fn() }));
 vi.mock("../api/verify", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../api/verify")>()),
   submitAttempt: vi.fn(),
+}));
+vi.mock("../api/auth", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../api/auth")>()),
+  logOut: vi.fn(),
 }));
 const mockChallenge = vi.mocked(requestChallenge);
 const mockSubmit = vi.mocked(submitAttempt);
@@ -34,6 +39,8 @@ const INCOMPLETE: VerifyResult = {
   content: { passed: true, score: 1, matched: 6, total: 6 },
   identity: "not_enrolled",
   liveness: "not_checked",
+  attempts_left: 3,
+  fallback_required: false,
 };
 
 let microphone: ReturnType<typeof installFakeMicrophone>;
@@ -91,6 +98,58 @@ describe("Recording and submitting", () => {
     reply.resolve(INCOMPLETE);
     expect(await screen.findByText("Almost there.")).toBeInTheDocument();
     expect(screen.getByText("Not set up yet")).toBeInTheDocument();
+  });
+
+  it("swaps in the voice-verified token from an approved check", async () => {
+    saveToken("password-only");
+    mockSubmit.mockResolvedValue({
+      ...INCOMPLETE,
+      decision: "approved",
+      identity: "passed",
+      liveness: "passed",
+      access_token: "voice-verified",
+    });
+    const user = userEvent.setup();
+    renderFlow();
+    await recordClip(user);
+
+    await user.click(screen.getByRole("button", { name: /submit/i }));
+
+    expect(await screen.findByText("You’re in. Securely.")).toBeInTheDocument();
+    expect(getToken()).toBe("voice-verified");
+  });
+
+  it("keeps the password's token when the check isn't approved", async () => {
+    saveToken("password-only");
+    mockSubmit.mockResolvedValue({ ...INCOMPLETE, access_token: null });
+    const user = userEvent.setup();
+    renderFlow();
+    await recordClip(user);
+
+    await user.click(screen.getByRole("button", { name: /submit/i }));
+
+    expect(await screen.findByText("Almost there.")).toBeInTheDocument();
+    expect(getToken()).toBe("password-only");
+  });
+
+  it("ignores a voice-check answer that arrives after the screen was left", async () => {
+    saveToken("password-only");
+    const reply = deferred<VerifyResult>();
+    mockSubmit.mockReturnValue(reply.promise);
+    const user = userEvent.setup();
+    renderFlow();
+    await recordClip(user);
+    await user.click(screen.getByRole("button", { name: /submit/i }));
+
+    // Signing out (or anything else) takes the user off the screen meanwhile.
+    vi.mocked(logOut).mockResolvedValue();
+    await user.click(screen.getByRole("button", { name: "Sign out" }));
+    await screen.findByText("sign-in screen");
+    reply.resolve({ ...INCOMPLETE, decision: "approved", access_token: "late-token" });
+    await Promise.resolve();
+
+    expect(screen.getByText("sign-in screen")).toBeInTheDocument();
+    expect(getToken()).toBeNull();
   });
 
   it("lets you record again before submitting", async () => {
@@ -153,6 +212,48 @@ describe("Recording and submitting", () => {
     await user.click(screen.getByRole("button", { name: /try again/i }));
     expect(screen.getByText("“Passage a1”")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Start recording" })).toBeEnabled();
+  });
+
+  it("stops at the pause when the submit is refused because checks are paused", async () => {
+    mockSubmit.mockRejectedValue(apiError(423, {}, { "retry-after": "900" }));
+    const user = userEvent.setup();
+    renderFlow();
+    await recordClip(user);
+
+    await user.click(screen.getByRole("button", { name: /submit/i }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Voice checks are paused after too many failed attempts. Please try again in 15 minutes.",
+    );
+    expect(screen.queryByRole("button", { name: /try again|new phrase|submit|record again/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Start recording" })).toBeDisabled();
+    expect(screen.queryByText(/expires in/i)).not.toBeInTheDocument();
+    expect(mockChallenge).toHaveBeenCalledTimes(1);
+  });
+
+  it("offers a new phrase again once a pause from a submit is over", async () => {
+    mockSubmit.mockRejectedValue(apiError(423, {}, { "retry-after": "1" }));
+    const user = userEvent.setup();
+    renderFlow();
+    await recordClip(user);
+    await user.click(screen.getByRole("button", { name: /submit/i }));
+    await screen.findByText(/Voice checks are paused after/);
+
+    expect(await screen.findByText(/available again/, {}, { timeout: 3000 })).toBeInTheDocument();
+    await user.click(screen.getAllByRole("button", { name: /get a new phrase|new phrase/i })[0]);
+    expect(await screen.findByText("“Passage a2”")).toBeInTheDocument();
+  });
+
+  it("hides the recorded clip's actions when a new phrase is refused by a pause", async () => {
+    mockChallenge.mockReset().mockResolvedValueOnce(challenge("a1")).mockRejectedValueOnce(apiError(423, {}, { "retry-after": "900" }));
+    const user = userEvent.setup();
+    renderFlow();
+    await recordClip(user);
+
+    await user.click(screen.getByRole("button", { name: /new phrase/i }));
+
+    expect(await screen.findByText("Voice checks are paused")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /record again|submit/i })).not.toBeInTheDocument();
   });
 
   it("sends a signed-out user back to sign in", async () => {

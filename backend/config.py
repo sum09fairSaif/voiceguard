@@ -1,5 +1,6 @@
 import math
 import os
+from datetime import UTC, datetime
 
 from dotenv import load_dotenv
 
@@ -30,9 +31,18 @@ ALLOWED_ORIGIN_REGEX = os.getenv("ALLOWED_ORIGIN_REGEX", r"https://voiceguard-[a
 
 JWT_SECRET = os.getenv("JWT_SECRET", "")
 JWT_ALGORITHM = "HS256"
+# Who issues our tokens and who they're for: a token minted for anything
+# else (or before these were added) is refused.
+JWT_ISSUER = "voiceguard-api"
+JWT_AUDIENCE = "voiceguard-app"
 JWT_EXPIRE_MINUTES = int(os.getenv("JWT_EXPIRE_MINUTES", "60"))
 if JWT_EXPIRE_MINUTES <= 0:
     raise RuntimeError("JWT_EXPIRE_MINUTES must be more than 0.")
+# A voice-verified token (password and an approved voice check) is the only
+# one that opens the account, so it's kept short.
+VERIFIED_TOKEN_MINUTES = int(os.getenv("VERIFIED_TOKEN_MINUTES", "15"))
+if VERIFIED_TOKEN_MINUTES <= 0:
+    raise RuntimeError("VERIFIED_TOKEN_MINUTES must be more than 0.")
 
 # Sign-in lockout: this many wrong passwords for one email within the
 # window locks that email out for the lockout time.
@@ -71,6 +81,14 @@ EMBEDDING_SERVICE_TOKEN = os.getenv("EMBEDDING_SERVICE_TOKEN", "")
 # count against that account instead of as anonymous use. Without it (or
 # once the quota is used up) the service falls back to its CPU.
 EMBEDDING_SERVICE_HF_TOKEN = os.getenv("EMBEDDING_SERVICE_HF_TOKEN", "")
+# Email (email_sender.py), through Resend's HTTP API: Render's free plan
+# blocks SMTP. EMAIL_FROM is e.g. "VoiceGuard <noreply@send.example.com>" on
+# a domain verified in Resend; until there is one, only
+# "onboarding@resend.dev", which Resend delivers only to the Resend
+# account's own address. Left blank, sending answers 503; nothing else is
+# affected.
+EMAIL_API_KEY = os.getenv("EMAIL_API_KEY", "")
+EMAIL_FROM = os.getenv("EMAIL_FROM", "")
 # Which model made the voiceprints. Changing models means re-enrolling.
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "speechbrain/spkrec-ecapa-voxceleb")
 # Encrypts voiceprints at rest. A Fernet key: generate one with
@@ -92,6 +110,15 @@ if not -1.0 <= IDENTITY_THRESHOLD <= 1.0:
 LIVENESS_THRESHOLD = float(os.getenv("LIVENESS_THRESHOLD", "0.0"))
 if not math.isfinite(LIVENESS_THRESHOLD):
     raise RuntimeError("LIVENESS_THRESHOLD must be a number.")
+
+# Failed voice checks. After this many rejections within the window, voice
+# checks are locked for the lockout time, and the user falls back to an
+# email code (#20). Only rejections count, not outages or unenrolled users.
+VOICE_MAX_FAILURES = int(os.getenv("VOICE_MAX_FAILURES", "3"))
+VOICE_FAILURE_WINDOW_SECONDS = int(os.getenv("VOICE_FAILURE_WINDOW_SECONDS", "1800"))
+VOICE_LOCKOUT_SECONDS = int(os.getenv("VOICE_LOCKOUT_SECONDS", "1800"))
+if VOICE_MAX_FAILURES <= 0 or VOICE_FAILURE_WINDOW_SECONDS <= 0 or VOICE_LOCKOUT_SECONDS <= 0:
+    raise RuntimeError("VOICE_MAX_FAILURES, VOICE_FAILURE_WINDOW_SECONDS and VOICE_LOCKOUT_SECONDS must be more than 0.")
 
 # Per-user limits. Each voice check is a paid speech-to-text call, so these
 # cap what one account can spend. After 3 failed voice attempts the user
@@ -140,6 +167,27 @@ ENROLL_SESSION_TTL_SECONDS = int(os.getenv("ENROLL_SESSION_TTL_SECONDS", "1800")
 # Each sample is a model-service call. A user who has to redo every take
 # still stays well under this.
 ENROLL_RATE_LIMIT = int(os.getenv("ENROLL_RATE_LIMIT", "20"))
+# Enrollment only in the signup session: with the signup token, this long
+# after the account was created (see enrollment_window.py).
+ENROLL_WINDOW_MINUTES = int(os.getenv("ENROLL_WINDOW_MINUTES", "30"))
+if ENROLL_WINDOW_MINUTES <= 0:
+    raise RuntimeError("ENROLL_WINDOW_MINUTES must be more than 0.")
+
+
+def grace_until(value: str):
+    """The one-off grace period's end (ISO 8601, UTC if no zone given), or
+    None when empty (no grace period)."""
+    value = value.strip()
+    if not value:
+        return None
+    moment = datetime.fromisoformat(value)
+    return moment if moment.tzinfo else moment.replace(tzinfo=UTC)
+
+
+# Accounts created before this moment that never enrolled may enroll after
+# signing in, until it. Default: the start of the security test week
+# (Monday 2026-11-16 00:00 US Eastern).
+ENROLL_GRACE_UNTIL = grace_until(os.getenv("ENROLL_GRACE_UNTIL", "2026-11-16T05:00:00Z"))
 if ENROLL_SAMPLES_REQUIRED <= 0 or ENROLL_SESSION_TTL_SECONDS <= 0 or ENROLL_RATE_LIMIT <= 0:
     raise RuntimeError("ENROLL_SAMPLES_REQUIRED, ENROLL_SESSION_TTL_SECONDS and ENROLL_RATE_LIMIT must be more than 0.")
 if ENROLL_MIN_SPEECH_SECONDS < 0 or not 0.0 <= ENROLL_MAX_CLIPPED_SHARE <= 1.0:

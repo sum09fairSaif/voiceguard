@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { apiError, networkError } from "../test/apiError";
-import { WRONG_CREDENTIALS, describeLoginError, lockedOutMessage, logIn, signup } from "./auth";
+import { WRONG_CREDENTIALS, describeLoginError, lockedOutMessage, logIn, logOut, signup } from "./auth";
 import { api } from "./client";
 import { MESSAGES } from "./errors";
 
@@ -66,5 +66,16 @@ describe("lockedOutMessage", () => {
   it("still makes sense without a usable Retry-After", () => {
     expect(lockedOutMessage(undefined)).toContain("try again later");
     expect(lockedOutMessage(Number("abc"))).toContain("try again later");
+  });
+});
+
+
+describe("logOut", () => {
+  it("ends the session on the server", async () => {
+    const post = vi.spyOn(api, "post").mockResolvedValue({ data: undefined });
+
+    await logOut();
+
+    expect(post).toHaveBeenCalledWith("/api/auth/logout");
   });
 });

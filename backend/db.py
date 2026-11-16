@@ -7,6 +7,16 @@ import config
 
 
 @lru_cache
+def get_revoked_sessions_collection() -> Collection:
+    # Signed-out sessions (sessions.py). MongoDB deletes each once all the
+    # session's tokens would have expired. Checked on every signed-in
+    # request, so the index is made once per process, not every time.
+    revoked = get_client()[config.MONGO_DB_NAME]["revoked_sessions"]
+    revoked.create_index("expires_at", expireAfterSeconds=0)
+    return revoked
+
+
+@lru_cache
 def get_client() -> MongoClient:
     if not config.MONGO_URI:
         raise config.NotConfigured("MONGO_URI is not set. Add it to your .env file.")
@@ -58,6 +68,15 @@ def get_login_failures_collection() -> Collection:
     login_failures = get_client()[config.MONGO_DB_NAME]["login_failures"]
     login_failures.create_index("expires_at", expireAfterSeconds=0)
     return login_failures
+
+
+@lru_cache
+def get_voice_failures_collection() -> Collection:
+    # Rejected voice checks and lockouts, one per user. MongoDB deletes
+    # each once its window and any lockout have ended.
+    voice_failures = get_client()[config.MONGO_DB_NAME]["voice_failures"]
+    voice_failures.create_index("expires_at", expireAfterSeconds=0)
+    return voice_failures
 
 
 @lru_cache

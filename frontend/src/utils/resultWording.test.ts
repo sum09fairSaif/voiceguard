@@ -9,16 +9,26 @@ function result(overrides: Partial<VerifyResult> = {}): VerifyResult {
     content: { passed: true, score: 1, matched: 6, total: 6 },
     identity: "not_enrolled",
     liveness: "not_checked",
+    attempts_left: 3,
+    fallback_required: false,
     ...overrides,
   };
 }
 
 describe("describeResult", () => {
   it("confirms access for an approved check", () => {
+    const view = describeResult(
+      result({ decision: "approved", identity: "passed", liveness: "passed", access_token: "voice-verified" }),
+    );
+
+    expect(view).toMatchObject({ tone: "success", title: "You’re in. Securely.", action: "home", actionLabel: "Continue to home" });
+    expect(view.checks.map((check) => check.state)).toEqual(["passed", "passed", "passed"]);
+  });
+
+  it("finishes as before when an approval comes without a token (older backend)", () => {
     const view = describeResult(result({ decision: "approved", identity: "passed", liveness: "passed" }));
 
-    expect(view).toMatchObject({ tone: "success", title: "You’re in. Securely.", action: "done", actionLabel: "Done" });
-    expect(view.checks.map((check) => check.state)).toEqual(["passed", "passed", "passed"]);
+    expect(view).toMatchObject({ title: "You’re in. Securely.", action: "done", actionLabel: "Done" });
   });
 
   it("says the words were wrong when the phrase didn't match", () => {
@@ -43,6 +53,42 @@ describe("describeResult", () => {
 
     expect(view.subtitle).toMatch(/live speaker/);
     expect(view.checks[2]).toEqual({ label: "Live speaker", state: "failed", detail: "Not confirmed" });
+  });
+
+  it.each([
+    [2, "2 attempts left."],
+    [1, "1 attempt left. If the next one doesn’t match, voice checks will pause for a while."],
+  ])("says how many attempts are left after a rejection (%i)", (attemptsLeft, note) => {
+    const view = describeResult(result({ decision: "rejected", identity: "failed", attempts_left: attemptsLeft }));
+
+    expect(view.note).toBe(note);
+    expect(view.action).toBe("retry");
+  });
+
+  it("says checks are paused when that rejection used the last attempt", () => {
+    const view = describeResult(
+      result({ decision: "rejected", identity: "failed", attempts_left: 0, fallback_required: true }),
+    );
+
+    expect(view).toMatchObject({ tone: "failure", title: "Voice checks are paused.", action: "done" });
+    expect(view.subtitle).toMatch(/last attempt/);
+    expect(view.note).toBeUndefined();
+  });
+
+  it("leaves the attempts note out when the server didn't send it", () => {
+    const fromOlderBackend = result({ decision: "rejected", identity: "failed" });
+    delete fromOlderBackend.attempts_left;
+    delete fromOlderBackend.fallback_required;
+
+    const view = describeResult(fromOlderBackend);
+
+    expect(view.note).toBeUndefined();
+    expect(view).toMatchObject({ title: "That didn’t match.", action: "retry" });
+  });
+
+  it("gives no attempts note unless the check was rejected", () => {
+    expect(describeResult(result()).note).toBeUndefined();
+    expect(describeResult(result({ decision: "approved", identity: "passed", liveness: "passed" })).note).toBeUndefined();
   });
 
   it("explains a partly verified result without a voiceprint", () => {
