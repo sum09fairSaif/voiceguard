@@ -35,7 +35,8 @@ function getStoredUser(): AuthenticatedUser | null {
 
 function identify(user: AuthenticatedUser): void {
   if (!isPostHogConfigured) return;
-  posthog.identify(user.id, { email: user.email, name: user.full_name });
+  // The opaque account id only: no email or name goes to analytics.
+  posthog.identify(user.id);
 }
 
 export function saveToken(token: string, user?: AuthenticatedUser): void {
@@ -43,8 +44,10 @@ export function saveToken(token: string, user?: AuthenticatedUser): void {
   memoryToken = token;
   if (user) memoryUser = user;
   try {
-    sessionStorage.setItem(TOKEN_KEY, token);
+    // User first: if the token write then fails, nothing restores a session
+    // for the wrong account.
     if (user) sessionStorage.setItem(USER_KEY, JSON.stringify(user));
+    sessionStorage.setItem(TOKEN_KEY, token);
   } catch {
     // The in-memory copies still work for this page load.
   }

@@ -76,6 +76,9 @@ export function PassagePage() {
     if (isPostHogConfigured) posthog.capture("voice_verification_submitted");
     try {
       const result = await submitAttempt(recorder.recording, challenge.attempt_id);
+      // Left the screen meanwhile (e.g. signed out): don't bring a token back.
+      if (!shown.current) return;
+      if (result.access_token) saveToken(result.access_token);
       if (isPostHogConfigured) {
         posthog.capture("voice_verification_completed", {
           decision: result.decision,
@@ -90,9 +93,6 @@ export function PassagePage() {
           content_passed: result.content.passed,
         });
       }
-      // Left the screen meanwhile (e.g. signed out): don't bring a token back.
-      if (!shown.current) return;
-      if (result.access_token) saveToken(result.access_token);
       navigate("/result", { state: { result } });
     } catch (err) {
       if (!shown.current) return;

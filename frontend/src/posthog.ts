@@ -9,6 +9,11 @@ if (posthogKey && posthogHost) {
   posthog.init(posthogKey, {
     api_host: posthogHost,
     defaults: '2026-08-30',
+    // Match the app's session, which lives in one tab and ends when it closes,
+    // so an identity never outlives sign-out or leaks into another tab.
+    persistence: 'sessionStorage',
+    // Recordings would capture the enrollment and verification screens.
+    disable_session_recording: true,
     capture_exceptions: {
       capture_unhandled_errors: true,
       capture_unhandled_rejections: true,
