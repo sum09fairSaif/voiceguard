@@ -8,14 +8,21 @@ import config
 from audio_upload import read_recording
 from challenges import use_challenge
 from content_check import check_content
-from db import get_challenges_collection, get_rate_limits_collection, get_voiceprints_collection
+from db import (
+    get_challenges_collection,
+    get_rate_limits_collection,
+    get_voice_failures_collection,
+    get_voiceprints_collection,
+)
 from decision import decide
 from embedding import Embedder, get_embedder
 from identity_check import IdentityResult, IdentityUnavailable, check_identity
+from liveness_check import LivenessResult, check_liveness
 from rate_limit import count_request
 from schemas import ContentScore, VerifyResponse
 from security import get_current_user_id
 from transcription import AudioNotUnderstood, Transcriber, TranscriptionUnavailable, get_transcriber
+from voice_attempts import ensure_not_locked, record_outcome
 from voiceprints import load_voiceprint
 
 router = APIRouter(prefix="/api", tags=["verify"])
@@ -31,11 +38,13 @@ def verify(
     challenges: Collection = Depends(get_challenges_collection),
     rate_limits: Collection = Depends(get_rate_limits_collection),
     voiceprints: Collection = Depends(get_voiceprints_collection),
+    voice_failures: Collection = Depends(get_voice_failures_collection),
     transcribe: Transcriber = Depends(get_transcriber),
     embed: Embedder | None = Depends(get_embedder),
 ) -> VerifyResponse:
     # Checked before the passage is used up, so a refused request doesn't
     # cost the user their passage.
+    ensure_not_locked(voice_failures, user_id)
     count_request(rate_limits, "verify", user_id, config.VERIFY_RATE_LIMIT, config.RATE_LIMIT_WINDOW_SECONDS)
 
     recording, extension = read_recording(audio)
@@ -57,19 +66,36 @@ def verify(
 
     transcript = _transcribe_and_log(transcribe, recording, extension, user_id, attempt_id)
     content = check_content(passage, transcript)
-    identity = None
+    identity = liveness = None
     if voiceprint is not None:
+        # One model-service call gives both the voice embedding and the
+        # liveness score.
+        embedding = embed(recording, f"attempt.{extension}")
+        if embedding.liveness_model is None:
+            raise IdentityUnavailable("The model service is too old to check liveness.")
         try:
-            identity = check_identity(voiceprint, embed(recording, f"attempt.{extension}").vector)
+            identity = check_identity(voiceprint, embedding.vector)
         except ValueError as exc:
             # Sizes differ: the service is running a different model.
             raise IdentityUnavailable("The embedding doesn't match the voiceprint's model.") from exc
-        # The score stays on the server (see VerifyResponse); log it so the
-        # threshold can be tuned from real attempts.
+        liveness = check_liveness(embedding.liveness)
+        # The scores stay on the server (see VerifyResponse); log them so
+        # the thresholds can be tuned from real attempts.
         logger.info(
             "identity user=%s attempt=%s score=%.3f passed=%s", user_id, attempt_id, identity.score, identity.passed
         )
-    result = decide(content, identity)
+        logger.info(
+            "liveness user=%s attempt=%s model=%s score=%s passed=%s",
+            user_id,
+            attempt_id,
+            embedding.liveness_model,
+            "-" if liveness.score is None else f"{liveness.score:.3f}",
+            liveness.passed,
+        )
+    result = decide(content, identity, liveness)
+    attempts_left = record_outcome(voice_failures, user_id, result.decision)
+    if result.decision == "rejected":
+        logger.info("voice_check_rejected user=%s attempt=%s attempts_left=%d", user_id, attempt_id, attempts_left)
     return VerifyResponse(
         decision=result.decision,
         reason=result.reason,
@@ -80,6 +106,9 @@ def verify(
             total=content.total,
         ),
         identity=_identity_status(identity),
+        liveness=_liveness_status(liveness),
+        attempts_left=attempts_left,
+        fallback_required=result.decision == "rejected" and attempts_left == 0,
     )
 
 
@@ -87,6 +116,12 @@ def _identity_status(identity: IdentityResult | None) -> str:
     if identity is None:
         return "not_enrolled"
     return "passed" if identity.passed else "failed"
+
+
+def _liveness_status(liveness: LivenessResult | None) -> str:
+    if liveness is None:
+        return "not_checked"
+    return "passed" if liveness.passed else "failed"
 
 
 def _transcribe_and_log(

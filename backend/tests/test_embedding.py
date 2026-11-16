@@ -67,6 +67,28 @@ def test_older_service_without_quality_measures_is_fine(service):
 
     assert result.speech_seconds is None
     assert result.clipped_share is None
+    assert result.liveness_model is None
+    assert result.liveness is None
+
+
+def test_returns_the_liveness_score_and_model(service):
+    service.result = finished(
+        {"embedding": [0.1], "liveness": -1.25, "liveness_model": "aasist-first-try"}
+    )
+
+    result = embed(URL, TOKEN, RECORDING, "attempt.webm")
+
+    assert result.liveness == -1.25
+    assert result.liveness_model == "aasist-first-try"
+
+
+def test_recording_with_nothing_to_judge_has_no_liveness_score(service):
+    service.result = finished({"embedding": [0.1], "liveness": None, "liveness_model": "aasist-first-try"})
+
+    result = embed(URL, TOKEN, RECORDING, "attempt.webm")
+
+    assert result.liveness is None
+    assert result.liveness_model == "aasist-first-try"
 
 
 def test_sends_the_token_recording_and_extension(service):
@@ -157,6 +179,8 @@ def test_unexpected_start_answer_is_reported_as_unavailable(service, start):
         finished(["not", "a", "dict"]),
         finished({"embedding": [0.1], "speech_seconds": "long"}),
         finished({"embedding": [0.1], "clipped_share": True}),
+        finished({"embedding": [0.1], "liveness": "live", "liveness_model": "aasist"}),
+        finished({"embedding": [0.1], "liveness": 1.0, "liveness_model": 7}),
         httpx.Response(200, text="event: complete\ndata: not json\n\n"),
         httpx.Response(200, text="event: complete\ndata: [1, 2]\n\n"),
         httpx.Response(200, text=""),
@@ -168,6 +192,8 @@ def test_unexpected_start_answer_is_reported_as_unavailable(service, start):
         "not-an-object",
         "bad-speech-seconds",
         "bad-clipped-share",
+        "bad-liveness",
+        "bad-liveness-model",
         "data-not-json",
         "two-items",
         "empty-stream",

@@ -59,7 +59,9 @@ as soon as the voiceprint is built or the checks have run.
   fail, never its score, so nobody can tune a voice clone against it.
 - **Abuse limits:** sign-in locks for 30 minutes after 5 wrong passwords
   within 15 minutes, and per-user limits cap the paid speech-to-text calls.
-- **Fallback:** after 3 failed voice attempts, an email code (planned, #20).
+- **Fallback:** after 3 rejected voice checks within 30 minutes, voice
+  checks pause for 30 minutes and the app is told to offer an email code
+  (the code itself is planned, #20).
 
 ## Project status
 
@@ -75,19 +77,20 @@ Each row is a user story (see the
 | #15 Content check | ✅ Done (OpenAI Whisper) | — |
 | #10 Enroll voice profile | ✅ Done | ✅ Enrollment screens (after signup, or after sign-in until enrolled) |
 | #16 Identity check | ✅ Done (SpeechBrain ECAPA) | — |
-| #17 Liveness / anti-spoof check | 🟡 First model trained ([`ml/liveness/`](ml/liveness/README.md)); not used by the app yet | — |
-| #18 Combine the three checks | 🟡 Content + identity combined; answers "incomplete" until liveness exists | — |
-| #19 Result screen with retry | — | ✅ Done |
+| #17 Liveness / anti-spoof check | 🟡 First model live (AASIST, fine-tuned); about 1 fake in 4 still passes | — |
+| #18 Combine the three checks | ✅ All three must pass; liveness can veto | — |
+| #19 Result screen with retry | ✅ Counts failed checks; pauses them after 3 | ✅ Done (shows attempts left and the pause) |
 | #20 Account recovery (email code) | ⏳ Not started | ⏳ Not started |
 
-Until the liveness check is part of the app, a correct reading ends as
-**"Almost there" (incomplete)** rather than approved. That is deliberate:
-without liveness, a recording of the user could pass the other two checks.
+An enrolled user who reads the passage live in their own voice is approved.
+A recording that doesn't sound like a live voice is rejected even when the
+voice matches. Without a voiceprint, a correct reading ends as
+**"Almost there" (incomplete)**: only the words could be checked.
 
-The first liveness model is trained but not yet good enough to rely on: on
-held-out test data, about 1 fake in 4 still gets through (In-the-Wild error
-rate 22.4%, against 32.2% for the best public checkpoint). Training tools
-and results are in [ml/liveness/README.md](ml/liveness/README.md).
+The liveness model is a first version, so treat it as a speed bump for now,
+not a guarantee: on held-out test data, about 1 fake in 4 still gets through
+(In-the-Wild error rate 22.4%, against 32.2% for the best public checkpoint).
+Training tools and results are in [ml/liveness/README.md](ml/liveness/README.md).
 
 ## Demo
 
@@ -139,8 +142,8 @@ curl -X POST $API/api/verify -H "Authorization: Bearer <access_token>" \
 | GET | `/health` | Is the server up? | No |
 | POST | `/api/auth/signup` | Create an account; returns an access token | No |
 | POST | `/api/auth/login` | Sign in with email and password; locks for 30 min after 5 wrong tries within 15 min | No |
-| POST | `/api/challenge` | Get a fresh, single-use passage to read (expires in 2 min) | Yes |
-| POST | `/api/verify` | Send a recording of the passage; runs the checks and returns the decision | Yes |
+| POST | `/api/challenge` | Get a fresh, single-use passage to read (expires in 2 min); 423 while voice checks are paused | Yes |
+| POST | `/api/verify` | Send a recording of the passage; runs the checks and returns the decision, `attempts_left` and `fallback_required`; 423 while voice checks are paused | Yes |
 | GET | `/api/enroll` | Enrollment progress, and a sentence to read for the next sample | Yes |
 | POST | `/api/enroll/samples` | Add one voice sample; the voiceprint is built after 3 good ones | Yes |
 | DELETE | `/api/enroll/samples` | Start enrollment over | Yes |
@@ -157,7 +160,7 @@ Full request and response details are in the interactive docs at `/docs`.
 | Voiceprints | MongoDB, encrypted with Fernet, one per user |
 | Content check | OpenAI Whisper (hosted API, `whisper-1`) |
 | Identity check | SpeechBrain ECAPA, in a separate model service on Hugging Face Spaces |
-| Liveness check | AASIST, fine-tuned on public spoofing datasets (training in `ml/liveness/`, on Kaggle's free GPUs); not in the app yet |
+| Liveness check | AASIST, fine-tuned on public spoofing datasets (training in `ml/liveness/`, on Kaggle's free GPUs); runs in the same model service |
 | Hosting | Vercel (frontend), Render (backend), Hugging Face Spaces (model service) |
 | CI/CD | GitHub Actions (lint, tests and build on every PR); Vercel and Render deploy `main` automatically |
 

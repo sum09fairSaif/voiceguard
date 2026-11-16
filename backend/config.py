@@ -1,3 +1,4 @@
+import math
 import os
 
 from dotenv import load_dotenv
@@ -70,6 +71,14 @@ EMBEDDING_SERVICE_TOKEN = os.getenv("EMBEDDING_SERVICE_TOKEN", "")
 # count against that account instead of as anonymous use. Without it (or
 # once the quota is used up) the service falls back to its CPU.
 EMBEDDING_SERVICE_HF_TOKEN = os.getenv("EMBEDDING_SERVICE_HF_TOKEN", "")
+# Email (email_sender.py), through Resend's HTTP API: Render's free plan
+# blocks SMTP. EMAIL_FROM is e.g. "VoiceGuard <noreply@send.example.com>" on
+# a domain verified in Resend; until there is one, only
+# "onboarding@resend.dev", which Resend delivers only to the Resend
+# account's own address. Left blank, sending answers 503; nothing else is
+# affected.
+EMAIL_API_KEY = os.getenv("EMAIL_API_KEY", "")
+EMAIL_FROM = os.getenv("EMAIL_FROM", "")
 # Which model made the voiceprints. Changing models means re-enrolling.
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "speechbrain/spkrec-ecapa-voxceleb")
 # Encrypts voiceprints at rest. A Fernet key: generate one with
@@ -83,6 +92,23 @@ VOICEPRINT_KEY = os.getenv("VOICEPRINT_KEY", "")
 IDENTITY_THRESHOLD = float(os.getenv("IDENTITY_THRESHOLD", "0.5"))
 if not -1.0 <= IDENTITY_THRESHOLD <= 1.0:
     raise RuntimeError("IDENTITY_THRESHOLD must be between -1 and 1.")
+# Liveness check, run by the same model service. Lowest liveness score that
+# counts as a live person; recordings below it are rejected even when the
+# voice matches. The score is the model's raw "real" output, not a
+# probability, and belongs to one model (the service reports which):
+# retraining means choosing it again. LIVENESS_THRESHOLD_PLACEHOLDER
+LIVENESS_THRESHOLD = float(os.getenv("LIVENESS_THRESHOLD", "0.0"))
+if not math.isfinite(LIVENESS_THRESHOLD):
+    raise RuntimeError("LIVENESS_THRESHOLD must be a number.")
+
+# Failed voice checks. After this many rejections within the window, voice
+# checks are locked for the lockout time, and the user falls back to an
+# email code (#20). Only rejections count, not outages or unenrolled users.
+VOICE_MAX_FAILURES = int(os.getenv("VOICE_MAX_FAILURES", "3"))
+VOICE_FAILURE_WINDOW_SECONDS = int(os.getenv("VOICE_FAILURE_WINDOW_SECONDS", "1800"))
+VOICE_LOCKOUT_SECONDS = int(os.getenv("VOICE_LOCKOUT_SECONDS", "1800"))
+if VOICE_MAX_FAILURES <= 0 or VOICE_FAILURE_WINDOW_SECONDS <= 0 or VOICE_LOCKOUT_SECONDS <= 0:
+    raise RuntimeError("VOICE_MAX_FAILURES, VOICE_FAILURE_WINDOW_SECONDS and VOICE_LOCKOUT_SECONDS must be more than 0.")
 
 # Per-user limits. Each voice check is a paid speech-to-text call, so these
 # cap what one account can spend. After 3 failed voice attempts the user
@@ -105,8 +131,11 @@ if RATE_LIMIT_WINDOW_SECONDS <= 0 or CHALLENGE_RATE_LIMIT <= 0 or VERIFY_RATE_LI
 # the per-sample log lines once there are real recordings.
 # How many good samples make a voiceprint.
 ENROLL_SAMPLES_REQUIRED = int(os.getenv("ENROLL_SAMPLES_REQUIRED", "3"))
-# Least voice (not silence) a sample must hold. Even the six-word passages
-# that came before the current sentences gave about 2 seconds.
+# Least voice (not silence) a sample must hold. Only 30 ms slices above
+# about -40 dBFS count, so pauses and quiet sounds don't: 300 Common Voice
+# read sentences (about 4 s each) gave a median of 2.1 s, and a quarter
+# under 1.4 s. Raising this would turn away many genuine reads; the words
+# are what show the whole sentence was read.
 ENROLL_MIN_SPEECH_SECONDS = float(os.getenv("ENROLL_MIN_SPEECH_SECONDS", "1.5"))
 # Most of a sample that may be cut off at full volume (0.01 = 1%).
 ENROLL_MAX_CLIPPED_SHARE = float(os.getenv("ENROLL_MAX_CLIPPED_SHARE", "0.01"))
