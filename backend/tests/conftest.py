@@ -11,6 +11,7 @@ from db import (
     get_enroll_prompts_collection,
     get_enrollments_collection,
     get_login_failures_collection,
+    get_password_resets_collection,
     get_rate_limits_collection,
     get_users_collection,
     get_voice_failures_collection,
@@ -71,6 +72,13 @@ def login_failures():
 
 
 @pytest.fixture
+def password_resets():
+    collection = mongomock.MongoClient()["voiceguard_test"]["password_resets"]
+    collection.create_index("expires_at", expireAfterSeconds=0)
+    return collection
+
+
+@pytest.fixture
 def voice_failures():
     collection = mongomock.MongoClient()["voiceguard_test"]["voice_failures"]
     collection.create_index("expires_at", expireAfterSeconds=0)
@@ -95,7 +103,7 @@ def no_real_revocation_store(revoked):
 @pytest.fixture
 def client(
     users, challenges, rate_limits, voiceprints, enrollments, enroll_prompts, login_failures, voice_failures,
-    monkeypatch,
+    password_resets, monkeypatch,
 ):
     # A fresh random key each run, so the code can't pass by hard-coding one.
     monkeypatch.setattr(config, "JWT_SECRET", secrets.token_urlsafe(32))
@@ -109,5 +117,6 @@ def client(
     app.dependency_overrides[get_enroll_prompts_collection] = lambda: enroll_prompts
     app.dependency_overrides[get_login_failures_collection] = lambda: login_failures
     app.dependency_overrides[get_voice_failures_collection] = lambda: voice_failures
+    app.dependency_overrides[get_password_resets_collection] = lambda: password_resets
     yield TestClient(app)
     app.dependency_overrides.clear()
