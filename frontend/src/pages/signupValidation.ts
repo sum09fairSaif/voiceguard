@@ -27,12 +27,18 @@ export function validateSignup(form: SignupForm): SignupErrors {
   if (!EMAIL_PATTERN.test(form.email.trim())) {
     errors.email = "Enter a valid email address.";
   }
-  if (form.password.length < MIN_PASSWORD_LENGTH) {
-    errors.password = `Use at least ${MIN_PASSWORD_LENGTH} characters.`;
-  } else if (new TextEncoder().encode(form.password).length > MAX_PASSWORD_BYTES) {
-    errors.password = "That password is too long. Try a shorter one.";
-  }
+  const passwordError = validatePassword(form.password);
+  if (passwordError) errors.password = passwordError;
   return errors;
+}
+
+// The length rules for a new password, at signup or after a reset.
+export function validatePassword(password: string): string | undefined {
+  if (password.length < MIN_PASSWORD_LENGTH) return `Use at least ${MIN_PASSWORD_LENGTH} characters.`;
+  if (new TextEncoder().encode(password).length > MAX_PASSWORD_BYTES) {
+    return "That password is too long. Try a shorter one.";
+  }
+  return undefined;
 }
 
 // Why the server refused a password (backend/schemas.py PASSWORD_PROBLEMS),
