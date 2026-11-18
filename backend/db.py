@@ -97,3 +97,13 @@ def get_enroll_prompts_collection() -> Collection:
     prompts.create_index("expires_at", expireAfterSeconds=0)
     prompts.create_index("user_id")
     return prompts
+
+
+@lru_cache
+def get_password_resets_collection() -> Collection:
+    # Password-reset links, by the hash of their token (#109). MongoDB
+    # deletes each once it has expired.
+    resets = get_client()[config.MONGO_DB_NAME]["password_resets"]
+    resets.create_index("expires_at", expireAfterSeconds=0)
+    resets.create_index("user_id")
+    return resets
