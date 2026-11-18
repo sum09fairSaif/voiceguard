@@ -15,7 +15,10 @@ export type SignupResponse = {
     email: string;
     created_at: string;
   };
-  access_token: string;
+  // Not used: the token is set as a cookie the page can't read (#102).
+  // Sent in the body too only while the backend's TOKEN_IN_RESPONSE_BODY is
+  // on, for the change-over; null after that.
+  access_token?: string | null;
   token_type: string;
 };
 

@@ -19,8 +19,8 @@ export function ResultPage() {
 
   function handleAction() {
     if (view.action === "home") {
-      // The approved check saved a voice-verified token; the account page
-      // asks the server, which decides.
+      // The approved check swapped in the voice-verified cookie; the account
+      // page asks the server, which decides.
       navigate("/account", { replace: true });
       return;
     }

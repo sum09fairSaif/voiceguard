@@ -80,10 +80,10 @@ export function describeResult(result: VerifyResult): ResultView {
         title: "You’re in. Securely.",
         subtitle: "A more personal way to protect what matters to you.",
         checks,
-        // Figma 19:371's button. Without a voice-verified token (a backend
-        // from before #153) there's no account to open, so finish as before.
-        action: result.access_token ? "home" : "done",
-        actionLabel: result.access_token ? "Continue to home" : "Done",
+        // Figma 19:371's button. The API has swapped in the voice-verified
+        // cookie that opens the account (#102); the page never sees it.
+        action: "home",
+        actionLabel: "Continue to home",
       };
     case "rejected":
       if (result.fallback_required) {

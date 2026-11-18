@@ -1,6 +1,6 @@
 import { isAxiosError } from "axios";
 import { useNavigate } from "react-router-dom";
-import { clearToken, saveToken } from "../api/session";
+import { endSession } from "../api/session";
 import { useEffect, useState } from "react";
 import {
   AVAILABLE_AGAIN,
@@ -76,9 +76,8 @@ export function PassagePage() {
     if (isPostHogConfigured) posthog.capture("voice_verification_submitted");
     try {
       const result = await submitAttempt(recorder.recording, challenge.attempt_id);
-      // Left the screen meanwhile (e.g. signed out): don't bring a token back.
+      // Left the screen meanwhile (e.g. signed out): don't move them on.
       if (!shown.current) return;
-      if (result.access_token) saveToken(result.access_token);
       if (isPostHogConfigured) {
         posthog.capture("voice_verification_completed", {
           decision: result.decision,
@@ -97,7 +96,7 @@ export function PassagePage() {
     } catch (err) {
       if (!shown.current) return;
       if (isAxiosError(err) && err.response?.status === 401) {
-        clearToken();
+        endSession();
         navigate("/signin", { replace: true });
         return;
       }

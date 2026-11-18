@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { describeApiError } from "../api/errors";
 import { getMe, type Me } from "../api/me";
-import { clearToken } from "../api/session";
+import { endSession } from "../api/session";
 import { Button } from "../components/Button";
 import { Logo } from "../components/Logo";
 import { useSignOut } from "../hooks/useSignOut";
@@ -36,7 +36,7 @@ export function AccountPage() {
       .catch((err) => {
         const status = isAxiosError(err) ? err.response?.status : undefined;
         if (status === 401) {
-          clearToken();
+          endSession();
           navigate("/signin", { replace: true });
         } else if (status === 403) {
           // Signed in with a password, but the voice check isn't done.
