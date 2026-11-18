@@ -115,8 +115,8 @@ def get_token_claims(
     except jwt.InvalidTokenError:
         raise _not_signed_in("Your login token is not valid. Please sign in again.")
     # Only now the database: a database error here is a 503, never access.
-    if is_revoked(revoked(), claims["sid"]):
-        raise _not_signed_in("You've signed out. Please sign in again.")
+    if is_revoked(revoked(), claims["sid"], claims["sub"], claims.get("iat")):
+        raise _not_signed_in("This sign-in has ended. Please sign in again.")
     return claims
 
 
