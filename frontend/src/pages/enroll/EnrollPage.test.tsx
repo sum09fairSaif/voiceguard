@@ -4,7 +4,8 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ENROLL_MESSAGES, addSample, getEnrollment, startOver, type Enrollment } from "../../api/enroll";
 import { MESSAGES } from "../../api/errors";
-import { getToken, saveToken } from "../../api/session";
+import { isSignedIn } from "../../api/session";
+import { signInForTest } from "../../test/session";
 import { apiError } from "../../test/apiError";
 import { installFakeMicrophone, removeFakeMicrophone } from "../../test/fakeMicrophone";
 import { EnrollPage } from "./EnrollPage";
@@ -54,7 +55,7 @@ async function startFromIntro(user: ReturnType<typeof userEvent.setup>) {
 
 beforeEach(() => {
   installFakeMicrophone();
-  saveToken("token");
+  signInForTest();
   mockGet.mockReset();
   mockAdd.mockReset();
   mockStartOver.mockReset();
@@ -111,7 +112,7 @@ describe("EnrollPage: where it starts", () => {
     renderPage();
 
     expect(await screen.findByText("sign-in screen")).toBeInTheDocument();
-    expect(getToken()).toBeNull();
+    expect(isSignedIn()).toBe(false);
   });
 
   it("explains when it can't load, and tries again", async () => {
@@ -184,14 +185,14 @@ describe("EnrollPage: recording samples", () => {
   });
 
   it("signs out from that explanation", async () => {
-    saveToken("password-only");
+    signInForTest();
     mockGet.mockResolvedValue({ ...status(1), can_enroll: false });
     renderPage();
 
     await userEvent.setup().click(await screen.findByRole("button", { name: "Sign out" }));
 
     expect(await screen.findByText("sign-in screen")).toBeInTheDocument();
-    expect(getToken()).toBeNull();
+    expect(isSignedIn()).toBe(false);
   });
 
   it("explains a sample refused because the signup session has ended", async () => {
@@ -295,6 +296,6 @@ describe("EnrollPage: recording samples", () => {
     await user.click(screen.getByRole("button", { name: /save sample/i }));
 
     expect(await screen.findByText("sign-in screen")).toBeInTheDocument();
-    expect(getToken()).toBeNull();
+    expect(isSignedIn()).toBe(false);
   });
 });

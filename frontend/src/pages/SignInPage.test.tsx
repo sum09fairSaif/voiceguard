@@ -2,10 +2,10 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { WRONG_CREDENTIALS, logIn } from "../api/auth";
+import { WRONG_CREDENTIALS, logIn, logOut } from "../api/auth";
 import { getEnrollment, type Enrollment } from "../api/enroll";
 import { MESSAGES } from "../api/errors";
-import { getToken } from "../api/session";
+import { isSignedIn } from "../api/session";
 import { RequireSession } from "../components/RequireSession";
 import { apiError, networkError } from "../test/apiError";
 import { SignInPage } from "./SignInPage";
@@ -14,6 +14,7 @@ import { SignInPage } from "./SignInPage";
 vi.mock("../api/auth", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../api/auth")>()),
   logIn: vi.fn(),
+  logOut: vi.fn(),
 }));
 const mockLogIn = vi.mocked(logIn);
 vi.mock("../api/enroll", () => ({ getEnrollment: vi.fn() }));
@@ -78,7 +79,7 @@ describe("SignInPage", () => {
     await fillAndSubmit();
 
     expect(await screen.findByText("enroll screen")).toBeInTheDocument();
-    expect(getToken()).toBe("token-1");
+    expect(isSignedIn()).toBe(true);
   });
 
   it("sends people to the enrollment page if their Voice ID status can't be read", async () => {
@@ -97,7 +98,7 @@ describe("SignInPage", () => {
 
     expect(mockLogIn).toHaveBeenCalledWith({ email: "sam@example.com", password: "Correct-horse-9" });
     expect(await screen.findByText("verify screen")).toBeInTheDocument();
-    expect(getToken()).toBe("token-1");
+    expect(isSignedIn()).toBe(true);
   });
 
   it("checks the fields before sending anything", async () => {
@@ -118,7 +119,7 @@ describe("SignInPage", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(WRONG_CREDENTIALS);
     expect(screen.getByLabelText("Email address")).not.toHaveAttribute("aria-invalid");
     expect(screen.getByLabelText("Password")).not.toHaveAttribute("aria-invalid");
-    expect(getToken()).toBeNull();
+    expect(isSignedIn()).toBe(false);
   });
 
   it("explains a lockout with the minutes left", async () => {
@@ -194,7 +195,7 @@ describe("SignInPage", () => {
       await new Promise((r) => setTimeout(r, 0));
 
       expect(screen.getByText("signup screen")).toBeInTheDocument();
-      expect(getToken()).toBeNull();
+      expect(isSignedIn()).toBe(false);
       expect(mockGetEnrollment).not.toHaveBeenCalled();
     });
 
@@ -212,14 +213,38 @@ describe("SignInPage", () => {
       await new Promise((r) => setTimeout(r, 0));
 
       expect(screen.getByText("signup screen")).toBeInTheDocument();
-      expect(getToken()).toBeNull();
+      expect(isSignedIn()).toBe(false);
     });
   });
 
-  it("says when a sign-out couldn't end the session on the server", () => {
+  it("says when a sign-out couldn't reach the server, and can try again", async () => {
+    vi.mocked(logOut).mockResolvedValueOnce(undefined);
     renderApp({ serverSignOutFailed: true });
 
-    expect(screen.getByRole("status")).toHaveTextContent("couldn't reach VoiceGuard to end your session everywhere");
+    expect(screen.getByRole("status")).toHaveTextContent("couldn't reach VoiceGuard to finish signing you out");
+    await userEvent.setup().click(screen.getByRole("button", { name: "Try signing out again" }));
+
+    expect(vi.mocked(logOut)).toHaveBeenCalled();
+    expect(await screen.findByText("You're signed out.")).toBeInTheDocument();
+  });
+
+  it("keeps offering to sign out again while the server can't be reached", async () => {
+    vi.mocked(logOut).mockRejectedValueOnce(networkError());
+    renderApp({ serverSignOutFailed: true });
+
+    await userEvent.setup().click(screen.getByRole("button", { name: "Try signing out again" }));
+
+    expect(await screen.findByRole("button", { name: "Try signing out again" })).toBeEnabled();
+    expect(screen.queryByText("You're signed out.")).not.toBeInTheDocument();
+  });
+
+  it("counts a session that had already ended as signed out", async () => {
+    vi.mocked(logOut).mockRejectedValueOnce(apiError(401));
+    renderApp({ serverSignOutFailed: true });
+
+    await userEvent.setup().click(screen.getByRole("button", { name: "Try signing out again" }));
+
+    expect(await screen.findByText("You're signed out.")).toBeInTheDocument();
   });
 
   it("says nothing extra after a normal visit or sign-out", () => {

@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { signup } from "../api/auth";
-import { getToken } from "../api/session";
+import { isSignedIn } from "../api/session";
 import { RequireSession } from "../components/RequireSession";
 import { apiError, networkError } from "../test/apiError";
 import { SignupPage } from "./SignupPage";
@@ -72,7 +72,7 @@ describe("Create account screen", () => {
       email: "alex@example.com",
       password: "correct-horse-battery",
     });
-    expect(getToken()).toBe("token-abc");
+    expect(isSignedIn()).toBe(true);
   });
 
   it("shows a taken email under the email field", async () => {
@@ -82,7 +82,7 @@ describe("Create account screen", () => {
 
     expect(await screen.findByText("An account with this email already exists.")).toBeInTheDocument();
     expect(screen.getByLabelText("Email address")).toHaveAttribute("aria-invalid", "true");
-    expect(getToken()).toBeNull();
+    expect(isSignedIn()).toBe(false);
   });
 
   it.each([
@@ -196,6 +196,6 @@ describe("Leaving while the account is being created", () => {
     await new Promise((r) => setTimeout(r, 0));
 
     expect(screen.getByText("sign-in screen")).toBeInTheDocument();
-    expect(getToken()).toBeNull();
+    expect(isSignedIn()).toBe(false);
   });
 });
