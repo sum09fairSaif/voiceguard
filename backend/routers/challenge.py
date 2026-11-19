@@ -5,6 +5,7 @@ import config
 import switches
 from challenges import create_challenge
 from db import get_challenges_collection, get_rate_limits_collection, get_voice_failures_collection
+from email_verification import require_verified_email
 from rate_limit import count_client_request, count_request
 from schemas import ChallengeResponse
 from security import get_current_user_id
@@ -17,7 +18,9 @@ router = APIRouter(prefix="/api", tags=["challenge"])
     "/challenge",
     response_model=ChallengeResponse,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(switches.require("voice_checks"))],
+    # Paused first; then no voice checks until the email address is
+    # confirmed (#110).
+    dependencies=[Depends(switches.require("voice_checks")), Depends(require_verified_email)],
 )
 def new_challenge(
     request: Request,

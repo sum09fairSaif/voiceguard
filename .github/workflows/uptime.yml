@@ -1,0 +1,33 @@
+name: Uptime
+
+# Checks the live API every 5 minutes (GitHub's shortest schedule; runs can be
+# late or skipped when GitHub is busy). Opens an "API is down" issue after two
+# failed tries, so everyone watching the repo is notified, and closes it when
+# the API answers again. Keeping the API busy also stops Render's free plan
+# from sleeping most of the time, but that's a side effect, not a promise.
+# Scheduled runs only start once this file is on the default branch (main).
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+# One check at a time: a slow one never overlaps the next.
+concurrency:
+  group: uptime
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check the API
+        env:
+          API_URL: https://voiceguard-83cj.onrender.com
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 .github/scripts/check_uptime.py

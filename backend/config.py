@@ -20,13 +20,16 @@ MONGO_DB_NAME = os.getenv("MONGO_DB_NAME", "voiceguard")
 # The default covers local development and the live frontend.
 ALLOWED_ORIGINS = [
     origin.strip().rstrip("/")
-    for origin in os.getenv("ALLOWED_ORIGINS", "http://localhost:5173,https://voiceguard-nu.vercel.app").split(",")
+    # Production only by default; local development adds http://localhost:5173
+    # in its .env (see .env.example). An allowed origin can send requests
+    # that carry the sign-in cookie, so the list is kept to our own pages.
+    for origin in os.getenv("ALLOWED_ORIGINS", "https://voiceguard-nu.vercel.app").split(",")
     if origin.strip()
 ]
 # Also allowed: Vercel's preview deployments of the frontend (one per
 # branch and commit), whose addresses all end in our Vercel team's name.
-# Set to empty to turn off. Sign-in tokens travel in a header, not a
-# cookie, so CORS is a second line of defence here, not the only one.
+# Set to empty to turn off. Preview addresses aren't on our own domain, so
+# the sign-in cookie never reaches the API from them (#102).
 ALLOWED_ORIGIN_REGEX = os.getenv("ALLOWED_ORIGIN_REGEX", r"https://voiceguard-[a-z0-9-]+-voice-guard2\.vercel\.app") or None
 
 # Backups for the pause switches (switches.py): "false" forces one off,
@@ -34,6 +37,14 @@ ALLOWED_ORIGIN_REGEX = os.getenv("ALLOWED_ORIGIN_REGEX", r"https://voiceguard-[a
 SIGNUPS_ENABLED = os.getenv("SIGNUPS_ENABLED", "true").strip().lower() != "false"
 VOICE_CHECKS_ENABLED = os.getenv("VOICE_CHECKS_ENABLED", "true").strip().lower() != "false"
 ENROLLMENT_ENABLED = os.getenv("ENROLLMENT_ENABLED", "true").strip().lower() != "false"
+
+# Security events (audit.py): kept this many days in our database, and also
+# sent to PostHog when a project key is set (nothing is sent without one).
+AUDIT_RETENTION_DAYS = int(os.getenv("AUDIT_RETENTION_DAYS", "30"))
+if AUDIT_RETENTION_DAYS <= 0:
+    raise RuntimeError("AUDIT_RETENTION_DAYS must be more than 0.")
+POSTHOG_API_KEY = os.getenv("POSTHOG_API_KEY", "").strip()
+POSTHOG_HOST = os.getenv("POSTHOG_HOST", "https://us.i.posthog.com").strip()
 
 
 # Where the client's address comes from, for per-client limits (see
@@ -62,6 +73,15 @@ def is_true(value: str) -> bool:
 DOCS_ENABLED = is_true(os.getenv("DOCS_ENABLED", ""))
 
 JWT_SECRET = os.getenv("JWT_SECRET", "")
+# The sign-in cookie (session_cookie.py). Secure (HTTPS only) unless set to
+# false, which local development in Safari needs: Chrome and Firefox accept
+# Secure cookies from http://localhost.
+SESSION_COOKIE_NAME = "voiceguard_session"
+SESSION_COOKIE_SECURE = os.getenv("SESSION_COOKIE_SECURE", "true").strip().lower() != "false"
+# While the frontend still stores the token itself, it's returned in the
+# response body as well as the cookie. Set to false once the frontend uses the
+# cookie only: then no page script ever sees the token (#102).
+TOKEN_IN_RESPONSE_BODY = os.getenv("TOKEN_IN_RESPONSE_BODY", "true").strip().lower() != "false"
 JWT_ALGORITHM = "HS256"
 # Who issues our tokens and who they're for: a token minted for anything
 # else (or before these were added) is refused.
@@ -128,6 +148,26 @@ EMBEDDING_SERVICE_HF_TOKEN = os.getenv("EMBEDDING_SERVICE_HF_TOKEN", "")
 # affected.
 EMAIL_API_KEY = os.getenv("EMAIL_API_KEY", "")
 EMAIL_FROM = os.getenv("EMAIL_FROM", "")
+
+# Email verification at signup (email_verification.py, #110). Off by default:
+# turn it on only once the frontend has its "check your email" screen and
+# EMAIL_FROM is on a domain verified in Resend (otherwise real users never
+# get the code). While off, new accounts are made as before. Turning it off
+# again doesn't unlock accounts already waiting for a code.
+EMAIL_VERIFICATION_REQUIRED = os.getenv("EMAIL_VERIFICATION_REQUIRED", "false").strip().lower() in ("1", "true", "yes")
+# How long a code works, and how many wrong tries use it up.
+EMAIL_CODE_MINUTES = int(os.getenv("EMAIL_CODE_MINUTES", "15"))
+EMAIL_CODE_MAX_TRIES = int(os.getenv("EMAIL_CODE_MAX_TRIES", "5"))
+# Codes emailed per account per RATE_LIMIT_WINDOW_SECONDS, the one sent at
+# signup included. Each is an email from our Resend allowance.
+EMAIL_CODE_SEND_LIMIT = int(os.getenv("EMAIL_CODE_SEND_LIMIT", "5"))
+# An account never confirmed is deleted this long after signup, so it can't
+# hold on to someone else's address.
+UNVERIFIED_ACCOUNT_HOURS = int(os.getenv("UNVERIFIED_ACCOUNT_HOURS", "24"))
+if EMAIL_CODE_MINUTES <= 0 or EMAIL_CODE_MAX_TRIES <= 0 or EMAIL_CODE_SEND_LIMIT <= 0 or UNVERIFIED_ACCOUNT_HOURS <= 0:
+    raise RuntimeError(
+        "EMAIL_CODE_MINUTES, EMAIL_CODE_MAX_TRIES, EMAIL_CODE_SEND_LIMIT and UNVERIFIED_ACCOUNT_HOURS must be more than 0."
+    )
 # Which model made the voiceprints. Changing models means re-enrolling.
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "speechbrain/spkrec-ecapa-voxceleb")
 # Encrypts voiceprints at rest. A Fernet key: generate one with
@@ -184,9 +224,10 @@ if VERIFY_DAILY_LIMIT <= 0:
 # gets its own voice-check allowance above, so without a cap one person could
 # open many accounts to multiply the paid calls.
 SIGNUP_RATE_LIMIT = int(os.getenv("SIGNUP_RATE_LIMIT", "100"))
-# Paid speech-to-text calls per day (UTC) from everyone together. Once spent,
-# voice checks answer 503 "try later" until midnight UTC, so a flood of
-# requests can't drain the prepaid credit.
+# Paid speech-to-text calls per day (UTC) from everyone together, voice
+# checks and enrollment samples alike. Once spent, both answer 503 "try
+# later" until midnight UTC, so a flood of requests can't drain the prepaid
+# credit.
 TRANSCRIPTION_DAILY_BUDGET = int(os.getenv("TRANSCRIPTION_DAILY_BUDGET", "300"))
 if TRANSCRIPTION_DAILY_BUDGET <= 0:
     raise RuntimeError("TRANSCRIPTION_DAILY_BUDGET must be more than 0.")

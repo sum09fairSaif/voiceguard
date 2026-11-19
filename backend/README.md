@@ -61,4 +61,5 @@ ruff check .
   reads Cloudflare's `CF-Connecting-IP`
 - `transcription.py` (OpenAI Whisper) and `embedding.py` (model service):
   calls to outside services
+- `audit.py`: the security event record (and the optional PostHog feed)
 - `scripts/save_voiceprint.py`: dev tool to give a test account a voiceprint
