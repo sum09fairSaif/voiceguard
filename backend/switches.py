@@ -1,4 +1,4 @@
-"""Switches for pausing parts of the app quickly, e.g. during the security test week.
+"""Switches for pausing parts of the app quickly, e.g. during an incident or abuse.
 
 Three switches, each on unless turned off:
 - "signups": creating accounts

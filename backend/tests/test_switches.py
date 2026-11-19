@@ -1,4 +1,4 @@
-"""Pause switches for the security test week (#163)."""
+"""Pause switches (#163)."""
 
 import pytest
 from bson import ObjectId
