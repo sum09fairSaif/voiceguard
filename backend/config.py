@@ -119,6 +119,13 @@ LIVENESS_THRESHOLD = float(os.getenv("LIVENESS_THRESHOLD", "0.0"))
 if not math.isfinite(LIVENESS_THRESHOLD):
     raise RuntimeError("LIVENESS_THRESHOLD must be a number.")
 
+# Whether a voice check's answer says which check (words, voice, liveness)
+# passed or failed (#112). On while the team tests and trains the checks;
+# turn off before outside testing: knowing which check failed helps someone
+# tune a replay or voice clone. Off, the answer has only the outcome, a
+# general reason and the attempts left; the server log keeps the details.
+VERIFY_CHECK_DETAILS = os.getenv("VERIFY_CHECK_DETAILS", "true").strip().lower() in ("1", "true", "yes")
+
 # Failed voice checks. After this many rejections within the window, voice
 # checks are locked for the lockout time, and the user falls back to an
 # email code (#20). Only rejections count, not outages or unenrolled users.

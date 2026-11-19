@@ -56,7 +56,9 @@ as soon as the voiceprint is built or the checks have run.
 - **Encrypted voiceprints:** only a numeric summary of the voice is kept,
   encrypted at rest. Recordings are never saved.
 - **Scores stay on the server:** the identity check answers only pass or
-  fail, never its score, so nobody can tune a voice clone against it.
+  fail, never its score, so nobody can tune a voice clone against it. With
+  `VERIFY_CHECK_DETAILS=false` (for outside testing and the final product), a
+  voice check's answer doesn't even say which check failed (#112).
 - **Passwords (NIST SP 800-63B-4):** at least 15 characters, no rules about
   which kinds of character, and never a common or breached password, the
   person's own email name, or a simple repeat or sequence.
@@ -144,7 +146,7 @@ curl -X POST $API/api/verify -H "Authorization: Bearer <access_token>" \
 | POST | `/api/auth/login` | Sign in with email and password; returns a limited token; locks for 30 min after 5 wrong tries within 15 min | No |
 | POST | `/api/auth/logout` | Sign out: ends this sign-in on the server, so its limited and voice-verified tokens both stop working (204) | Any token |
 | POST | `/api/challenge` | Get a fresh, single-use passage to read (expires in 2 min); 423 while voice checks are paused | Limited token |
-| POST | `/api/verify` | Send a recording of the passage; runs the checks and returns the decision, `attempts_left` and `fallback_required`, plus a voice-verified `access_token` (15 min) when approved; 423 while voice checks are paused | Limited token |
+| POST | `/api/verify` | Send a recording of the passage; runs the checks and returns the decision, `attempts_left` and `fallback_required`, plus a voice-verified `access_token` (15 min) when approved; 423 while voice checks are paused. Each check's outcome (`content`, `identity`, `liveness`) and a reason naming the failed check only while `VERIFY_CHECK_DETAILS` is on; off, those are `null` and the reason is general | Limited token |
 | GET | `/api/enroll` | Enrollment progress, a sentence to read for the next sample, and whether this session may enroll (`can_enroll`) | Limited token |
 | POST | `/api/enroll/samples` | Add one voice sample (it must hold every word of the sentence, in order, sound live, and match the earlier samples); the voiceprint is built after 3 good ones. Only the signup session, within 30 min of creating the account; until 2026-11-16 00:00 ET, accounts made before this rule may also enroll after signing in (403 otherwise) | Signup token (or sign-in token during the grace period) |
 | DELETE | `/api/enroll/samples` | Start enrollment over | Limited token |
