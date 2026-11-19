@@ -779,3 +779,91 @@ def test_the_voice_verified_token_belongs_to_the_same_sign_in(client, transcribe
 
     assert token_claims(verified)["sid"] == token_claims(limited)["sid"]
     assert token_claims(verified)["jti"] != token_claims(limited)["jti"]
+
+
+# --- Hiding which check failed (#112) ----------------------------------------
+
+
+@pytest.fixture
+def details_hidden(monkeypatch):
+    monkeypatch.setattr(config, "VERIFY_CHECK_DETAILS", False)
+
+
+HIDDEN_FIELDS = ("content", "identity", "liveness")
+
+
+def rejected_by(client, challenges, transcriber, embedder, failing):
+    """A rejection caused by one check only: "words", "voice" or "liveness"."""
+    challenge = create_challenge(challenges, USER_ID)
+    transcriber.heard = "nothing like the passage" if failing == "words" else challenge["passage"]
+    embedder.voice = OTHER_VOICE if failing == "voice" else USERS_VOICE
+    embedder.liveness = SPOOFED if failing == "liveness" else LIVE
+    return submit(client, str(challenge["_id"])).json()
+
+
+def test_with_details_on_the_answer_says_which_check_failed(client, challenges, transcriber, embedder, enrolled):
+    body = rejected_by(client, challenges, transcriber, embedder, "liveness")
+
+    assert body["liveness"] == "failed"
+    assert body["identity"] == "passed"
+    assert body["content"]["passed"] is True
+
+
+def test_with_details_off_a_rejection_never_says_which_check_failed(
+    client, challenges, transcriber, embedder, enrolled, details_hidden
+):
+    answers = [rejected_by(client, challenges, transcriber, embedder, f) for f in ("words", "voice", "liveness")]
+
+    for body in answers:
+        assert body["decision"] == "rejected"
+        assert all(body[field] is None for field in HIDDEN_FIELDS)
+    # Apart from the attempts left, the three answers are the same.
+    same = [{k: v for k, v in body.items() if k not in ("attempts_left", "fallback_required")} for body in answers]
+    assert same[0] == same[1] == same[2]
+    for word in ("words", "passage", "voice", "live", "recording"):
+        assert word not in answers[0]["reason"].replace("new passage", "")
+
+
+def test_with_details_off_an_approval_still_signs_in(client, transcriber, embedder, enrolled, attempt, details_hidden):
+    transcriber.heard = attempt["passage"]
+
+    body = submit(client, attempt["id"]).json()
+
+    assert body["decision"] == "approved"
+    assert body["access_token"]
+    assert all(body[field] is None for field in HIDDEN_FIELDS)
+
+
+def test_with_details_off_an_unenrolled_account_is_told_to_set_up_voice_id(
+    client, transcriber, attempt, details_hidden
+):
+    transcriber.heard = attempt["passage"]
+
+    body = submit(client, attempt["id"]).json()
+
+    assert body["decision"] == "incomplete"
+    assert "Voice ID" in body["reason"]
+    assert all(body[field] is None for field in HIDDEN_FIELDS)
+
+
+def test_with_details_off_the_retry_and_pause_still_work(
+    client, challenges, transcriber, embedder, enrolled, details_hidden
+):
+    answers = [
+        rejected_by(client, challenges, transcriber, embedder, "voice") for _ in range(config.VOICE_MAX_FAILURES)
+    ]
+
+    assert [body["attempts_left"] for body in answers] == list(range(config.VOICE_MAX_FAILURES - 1, -1, -1))
+    assert answers[-1]["fallback_required"] is True
+
+
+def test_the_log_still_says_which_check_failed(
+    client, challenges, transcriber, embedder, enrolled, details_hidden, caplog
+):
+    with caplog.at_level(logging.INFO, logger="voiceguard.verify"):
+        rejected_by(client, challenges, transcriber, embedder, "words")
+
+    rejected = [r.getMessage() for r in caplog.records if r.getMessage().startswith("voice_check_rejected")]
+    assert len(rejected) == 1
+    assert "words_passed=False" in rejected[0]
+    assert "nothing like the passage" not in caplog.text
