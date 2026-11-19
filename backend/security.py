@@ -6,10 +6,13 @@ from functools import lru_cache
 
 import bcrypt
 import jwt
+from bson import ObjectId
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from pymongo.collection import Collection
 
 import config
+from db import get_users_collection
 from session_cookie import token_from_cookie
 from sessions import is_revoked, revoked_sessions
 
@@ -98,17 +101,34 @@ def request_token(request: Request, credentials: HTTPAuthorizationCredentials | 
     return credentials.credentials if credentials is not None else token_from_cookie(request)
 
 
+def user_accounts() -> Callable[[], Collection]:
+    """The accounts, fetched only when needed, like the revocation list: a
+    request without a valid token gets its 401 without touching the
+    database. Tests replace it."""
+    return get_users_collection
+
+
 def get_token_claims(
     request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
     revoked: Callable = Depends(revoked_sessions),
+    accounts: Callable = Depends(user_accounts),
 ) -> dict:
     """The claims of any valid sign-in token, limited or voice-verified, whose
-    session hasn't been signed out."""
+    session hasn't been signed out and whose account still exists."""
     token = request_token(request, credentials)
     if token is None:
         raise _not_signed_in("Please sign in first.")
-    return claims_for(token, revoked)
+    claims = claims_for(token, revoked)
+    # A token never outlives its account (#194): an unconfirmed account can
+    # be deleted, or replaced by a new signup with the same email.
+    if not account_exists(accounts(), claims["sub"]):
+        raise _not_signed_in("This account no longer exists. Please sign up or sign in again.")
+    return claims
+
+
+def account_exists(users: Collection, user_id: str) -> bool:
+    return ObjectId.is_valid(user_id) and users.count_documents({"_id": ObjectId(user_id)}, limit=1) > 0
 
 
 def claims_for(token: str, revoked: Callable) -> dict:
