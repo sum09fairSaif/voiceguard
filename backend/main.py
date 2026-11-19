@@ -8,10 +8,12 @@ from fastapi.responses import JSONResponse
 from pymongo.errors import PyMongoError
 
 import config
+from body_limit import BodyLimitMiddleware
 from email_sender import EmailUnavailable
 from identity_check import IdentityUnavailable
 from rate_limit import RateLimited
 from routers import account, auth, challenge, enroll, verify
+from security_headers import SecurityHeadersMiddleware
 from transcription import AudioNotUnderstood, TranscriptionUnavailable
 from voice_attempts import VoiceLockedOut
 
@@ -21,7 +23,26 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 
 logger = logging.getLogger("voiceguard")
 
-app = FastAPI(title="VoiceGuard API", version="0.1.0")
+
+def docs_settings(enabled: bool) -> dict:
+    """Where FastAPI serves its docs; None turns each one off (404)."""
+    if enabled:
+        return {"docs_url": "/docs", "redoc_url": "/redoc", "openapi_url": "/openapi.json"}
+    return {"docs_url": None, "redoc_url": None, "openapi_url": None}
+
+
+class VoiceGuardAPI(FastAPI):
+    def build_middleware_stack(self):
+        # Security headers go outside everything, Starlette's own error
+        # handler included, so even an unexpected 500 carries them.
+        return SecurityHeadersMiddleware(super().build_middleware_stack())
+
+
+app = VoiceGuardAPI(title="VoiceGuard API", version="0.1.0", **docs_settings(config.DOCS_ENABLED))
+
+# Refuses oversized request bodies before anything reads them. Added before
+# CORS so CORS wraps it: the frontend can read the 413 like any other error.
+app.add_middleware(BodyLimitMiddleware)
 
 # CORS lets the frontend (a different address) call this API from the
 # browser. Only our own frontends are allowed (see config.ALLOWED_ORIGINS).
@@ -123,6 +144,7 @@ def rate_limited(request: Request, exc: RateLimited) -> JSONResponse:
     )
 
 
-@app.get("/health")
+# HEAD too: uptime monitors often check with HEAD.
+@app.api_route("/health", methods=["GET", "HEAD"])
 def health():
     return {"status": "ok", "service": "voiceguard-api"}
