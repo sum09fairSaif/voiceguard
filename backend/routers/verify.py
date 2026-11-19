@@ -33,6 +33,15 @@ router = APIRouter(prefix="/api", tags=["verify"])
 
 logger = logging.getLogger("voiceguard.verify")
 
+# What the user is told while VERIFY_CHECK_DETAILS is off (#112). None of
+# them says which check decided it. "incomplete" only ever means the account
+# has no voiceprint yet, which the user needs to know to set one up.
+GENERAL_REASONS = {
+    "approved": "You're verified.",
+    "rejected": "We couldn't verify you. Please try again with a new passage.",
+    "incomplete": "This account hasn't set up Voice ID yet, so we couldn't finish the check.",
+}
+
 
 @router.post("/verify", response_model=VerifyResponse, dependencies=[Depends(switches.require("voice_checks"))])
 def verify(
@@ -101,7 +110,18 @@ def verify(
     result = decide(content, identity, liveness)
     attempts_left = record_outcome(voice_failures, user_id, result.decision)
     if result.decision == "rejected":
-        logger.info("voice_check_rejected user=%s attempt=%s attempts_left=%d", user_id, attempt_id, attempts_left)
+        # The words' outcome too: with VERIFY_CHECK_DETAILS off, the log is
+        # the only place that says which check failed. Counts only, never
+        # the transcript.
+        logger.info(
+            "voice_check_rejected user=%s attempt=%s attempts_left=%d words_passed=%s words_matched=%d/%d",
+            user_id,
+            attempt_id,
+            attempts_left,
+            content.passed,
+            content.matched,
+            content.total,
+        )
     access_token = None
     if result.decision == "approved":
         # Only an approval opens the account: password, voice and liveness.
@@ -109,6 +129,20 @@ def verify(
         access_token = create_verified_token(user_id, claims["sid"])
         _record_sign_in(users, user_id)
         logger.info("voice_check_approved user=%s attempt=%s", user_id, attempt_id)
+    fallback_required = result.decision == "rejected" and attempts_left == 0
+    if not config.VERIFY_CHECK_DETAILS:
+        # Only the outcome and what to do next (#112): nothing that says
+        # which check failed.
+        return VerifyResponse(
+            decision=result.decision,
+            reason=GENERAL_REASONS[result.decision],
+            content=None,
+            identity=None,
+            liveness=None,
+            attempts_left=attempts_left,
+            fallback_required=fallback_required,
+            access_token=access_token,
+        )
     return VerifyResponse(
         decision=result.decision,
         reason=result.reason,
@@ -121,7 +155,7 @@ def verify(
         identity=_identity_status(identity),
         liveness=_liveness_status(liveness),
         attempts_left=attempts_left,
-        fallback_required=result.decision == "rejected" and attempts_left == 0,
+        fallback_required=fallback_required,
         access_token=access_token,
     )
 

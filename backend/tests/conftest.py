@@ -116,6 +116,8 @@ def client(
 ):
     # A fresh random key each run, so the code can't pass by hard-coding one.
     monkeypatch.setattr(config, "JWT_SECRET", secrets.token_urlsafe(32))
+    # The default, whatever a local .env says; tests that hide them say so.
+    monkeypatch.setattr(config, "VERIFY_CHECK_DETAILS", True)
     app.dependency_overrides[get_users_collection] = lambda: users
     app.dependency_overrides[get_challenges_collection] = lambda: challenges
     app.dependency_overrides[get_rate_limits_collection] = lambda: rate_limits
