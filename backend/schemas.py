@@ -54,11 +54,17 @@ class UserPublic(BaseModel):
     full_name: str
     email: EmailStr
     created_at: datetime
+    # False until the code we emailed is entered (#110). Until then the
+    # account can't set up Voice ID or run voice checks. Accounts made
+    # before verification existed, or while it's switched off, are true.
+    email_verified: bool = True
 
 
 class SignupResponse(BaseModel):
     user: UserPublic
-    access_token: str
+    # The token is set as an HttpOnly cookie. It's also here only while
+    # TOKEN_IN_RESPONSE_BODY is on (until the frontend uses the cookie).
+    access_token: str | None = None
     token_type: str = "bearer"
 
 
@@ -71,6 +77,25 @@ class LoginRequest(BaseModel):
 
 class LoginResponse(SignupResponse):
     """Same shape as signup: the account and a fresh token."""
+
+
+class EmailCodeRequest(BaseModel):
+    # Six digits; spaces the user may type between them are dropped.
+    code: str = Field(min_length=1, max_length=20)
+
+    @field_validator("code")
+    @classmethod
+    def six_digits(cls, value: str) -> str:
+        value = "".join(value.split())
+        if len(value) != 6 or not value.isascii() or not value.isdigit():
+            raise ValueError("The code is 6 digits.")
+        return value
+
+
+class EmailVerifiedResponse(BaseModel):
+    """The account, now confirmed."""
+
+    user: UserPublic
 
 
 class ChallengeResponse(BaseModel):

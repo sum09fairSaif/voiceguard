@@ -137,6 +137,14 @@ describe("Create account screen", () => {
     expect(screen.getByText("Password strength: Strong")).toBeInTheDocument();
   });
 
+  it("says when creating accounts is paused", async () => {
+    mockSignup.mockRejectedValue(apiError(503, { detail: "server text", paused: "signups" }));
+    renderApp();
+    await fillAndSubmit();
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Creating new accounts is paused for now.");
+  });
+
   it("can't be sent twice while waiting", async () => {
     mockSignup.mockReturnValue(new Promise(() => {}));
     renderApp();
