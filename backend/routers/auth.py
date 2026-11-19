@@ -13,7 +13,7 @@ import config
 from audit import track
 from client_address import client_key
 from db import get_login_failures_collection, get_rate_limits_collection, get_users_collection
-from login_lockout import clear_failures, record_failure, seconds_locked
+from login_lockout import clear_failures, login_subjects, record_failure, seconds_locked
 from rate_limit import count_client_request, count_request
 from schemas import LoginRequest, LoginResponse, SignupRequest, SignupResponse, UserPublic
 from security import _bearer, check_password, claims_for, create_access_token, hash_password, request_token
@@ -84,8 +84,7 @@ def login(
     # spread across many addresses still stops.
     # An unknown client (no trusted address) falls back to one shared count
     # for the email: the stricter old rule, safe against guessing.
-    this_client = f"client:{client_key(request) or 'unknown'}:{email}"
-    everyone = f"account:{email}"
+    this_client, everyone = login_subjects(client_key(request), email)
     # A locked email isn't even checked, so guessing can't go on while
     # it's locked.
     locked = max(seconds_locked(login_failures, this_client), seconds_locked(login_failures, everyone))

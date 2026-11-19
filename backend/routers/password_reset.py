@@ -5,11 +5,12 @@ import hashlib
 import logging
 
 from bson import ObjectId
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
 from pymongo.collection import Collection
 
 import config
+from client_address import client_key
 from db import (
     get_login_failures_collection,
     get_password_resets_collection,
@@ -17,7 +18,7 @@ from db import (
     get_users_collection,
 )
 from email_sender import EmailSender, EmailUnavailable, get_email_sender
-from login_lockout import clear_failures
+from login_lockout import clear_failures, login_subjects
 from password_policy import password_problem
 from password_reset import find_token, issue_token, reset_email, use_token
 from rate_limit import count_request
@@ -81,6 +82,7 @@ def _send_reset_email(send: EmailSender, email: str, subject: str, text: str, us
 @router.post("/confirm", status_code=status.HTTP_204_NO_CONTENT)
 def confirm_reset(
     body: PasswordResetConfirm,
+    request: Request,
     users: Collection = Depends(get_users_collection),
     resets: Collection = Depends(get_password_resets_collection),
     login_failures: Collection = Depends(get_login_failures_collection),
@@ -103,10 +105,17 @@ def confirm_reset(
         )
 
     password_hash = hash_password(body.password)
+    # Sessions end first, then the link is used up, then the password
+    # changes. If the database fails partway, it fails safe: never a new
+    # password with old sessions still working, and if only the sessions
+    # were ended, the link still works for another try.
+    revoke_all(revoked(), user_id)
     if use_token(resets, body.token) != user_id:
         # Another request used the link in the meantime.
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=LINK_NOT_USABLE)
     users.update_one({"_id": user["_id"]}, {"$set": {"password_hash": password_hash}})
-    clear_failures(login_failures, user["email"])
-    revoke_all(revoked(), user_id)
+    # The account-wide count, and this client's (the one that proved it
+    # owns the email). Other clients' counts stay: they may be a guesser's.
+    for subject in login_subjects(client_key(request), user["email"]):
+        clear_failures(login_failures, subject)
     logger.info("password_reset user=%s", user_id)

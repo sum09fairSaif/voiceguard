@@ -266,6 +266,19 @@ def test_a_reset_clears_the_sign_in_lockout(client, account, outbox):
     assert login(client, NEW).status_code == 200
 
 
+def test_a_reset_clears_the_account_wide_lockout_too(client, account, outbox, login_failures, monkeypatch):
+    monkeypatch.setattr(config, "LOGIN_ACCOUNT_MAX_FAILURES", config.LOGIN_MAX_FAILURES)
+    for _ in range(config.LOGIN_MAX_FAILURES):
+        login(client, "wrong-password-again")
+    assert login(client, OLD).status_code == 423
+
+    ask(client)
+    confirm(client, outbox.token())
+
+    assert login_failures.count_documents({"locked_until": {"$exists": True}}) == 0
+    assert login(client, NEW).status_code == 200
+
+
 def test_a_reset_ends_every_session_the_account_had(client, account, outbox):
     sessions = [login(client, OLD).json()["access_token"] for _ in range(2)]
     for token in sessions:
@@ -278,6 +291,33 @@ def test_a_reset_ends_every_session_the_account_had(client, account, outbox):
         refused = client.post("/api/challenge", headers={"Authorization": f"Bearer {token}"})
         assert refused.status_code == 401
         assert refused.json()["detail"] == "This sign-in has ended. Please sign in again."
+
+
+def test_if_sessions_cant_be_ended_the_password_and_link_stay_as_they_were(client, account, outbox):
+    from pymongo.errors import ServerSelectionTimeoutError
+
+    from sessions import revoked_sessions
+
+    class Unreachable:
+        def __getattr__(self, name):
+            def unreachable(*args, **kwargs):
+                raise ServerSelectionTimeoutError("database unreachable")
+
+            return unreachable
+
+    ask(client)
+    token = outbox.token()
+    real = app.dependency_overrides[revoked_sessions]
+    app.dependency_overrides[revoked_sessions] = lambda: lambda: Unreachable()
+
+    assert confirm(client, token).status_code == 503
+
+    app.dependency_overrides[revoked_sessions] = real
+    # Never a new password with the old sessions still working.
+    assert login(client, OLD).status_code == 200
+    # The link wasn't used up, so the user can just try again.
+    assert confirm(client, token).status_code == 204
+    assert login(client, NEW).status_code == 200
 
 
 # --- Ending every session of an account -----------------------------------------------
