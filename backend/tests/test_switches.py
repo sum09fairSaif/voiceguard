@@ -68,7 +68,9 @@ def test_voice_checks_pause_covers_the_check_itself(client, switch_store):
     assert response.json()["paused"] == "voice_checks"
 
 
-def test_one_switch_leaves_the_others_alone(client, switch_store):
+def test_one_switch_leaves_the_others_alone(client, switch_store, new_account):
+    # A token is refused once its account is gone (#194).
+    new_account(USER_ID)
     turn_off(switch_store, "signups")
 
     assert client.post("/api/challenge", headers=signed_in()).status_code == 201
