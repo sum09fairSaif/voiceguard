@@ -2,12 +2,13 @@ import logging
 from datetime import UTC, datetime
 
 from bson import ObjectId
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Response, UploadFile, status
 from pymongo.collection import Collection
 from pymongo.errors import PyMongoError
 
 import config
 from audio_upload import read_recording
+from audit import track
 from challenges import use_challenge
 from content_check import check_content
 from db import (
@@ -21,10 +22,12 @@ from decision import decide
 from embedding import Embedder, get_embedder
 from identity_check import IdentityResult, IdentityUnavailable, check_identity
 from liveness_check import LivenessResult, check_liveness
-from rate_limit import count_request
+from rate_limit import count_client_request, count_request
 from schemas import ContentScore, VerifyResponse
 from security import create_verified_token, get_current_user_id, get_token_claims
+from session_cookie import set_session_cookie
 from transcription import Transcriber, get_transcriber, transcribe_and_log
+from transcription_budget import release_transcription, reserve_transcription
 from voice_attempts import ensure_not_locked, record_outcome
 from voiceprints import load_voiceprint
 
@@ -32,9 +35,20 @@ router = APIRouter(prefix="/api", tags=["verify"])
 
 logger = logging.getLogger("voiceguard.verify")
 
+# What the user is told while VERIFY_CHECK_DETAILS is off (#112). None of
+# them says which check decided it. "incomplete" only ever means the account
+# has no voiceprint yet, which the user needs to know to set one up.
+GENERAL_REASONS = {
+    "approved": "You're verified.",
+    "rejected": "We couldn't verify you. Please try again with a new passage.",
+    "incomplete": "This account hasn't set up Voice ID yet, so we couldn't finish the check.",
+}
+
 
 @router.post("/verify", response_model=VerifyResponse)
 def verify(
+    response: Response,
+    request: Request,
     audio: UploadFile = File(...),
     attempt_id: str = Form(...),
     user_id: str = Depends(get_current_user_id),
@@ -50,7 +64,9 @@ def verify(
     # Checked before the passage is used up, so a refused request doesn't
     # cost the user their passage.
     ensure_not_locked(voice_failures, user_id)
+    count_client_request(rate_limits, "verify", request, config.VERIFY_CLIENT_LIMIT)
     count_request(rate_limits, "verify", user_id, config.VERIFY_RATE_LIMIT, config.RATE_LIMIT_WINDOW_SECONDS)
+    count_request(rate_limits, "verify-day", user_id, config.VERIFY_DAILY_LIMIT, 24 * 3600)
 
     recording, extension = read_recording(audio)
 
@@ -60,10 +76,19 @@ def verify(
     if voiceprint is not None and embed is None:
         raise IdentityUnavailable("EMBEDDING_SERVICE_URL or EMBEDDING_SERVICE_TOKEN is not set.")
 
+    # Before the passage is used up, so a spent budget doesn't cost the
+    # user their passage. Given back below if no paid call follows.
+    reserve_transcription(rate_limits)
+
     # Use up the attempt before transcribing, so a passage can never be
     # checked twice, even if transcription fails part-way.
-    passage = use_challenge(challenges, attempt_id, user_id)
+    try:
+        passage = use_challenge(challenges, attempt_id, user_id)
+    except Exception:
+        release_transcription(rate_limits)
+        raise
     if passage is None:
+        release_transcription(rate_limits)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="This passage has expired or was already used. Please get a new one.",
@@ -100,14 +125,47 @@ def verify(
     result = decide(content, identity, liveness)
     attempts_left = record_outcome(voice_failures, user_id, result.decision)
     if result.decision == "rejected":
-        logger.info("voice_check_rejected user=%s attempt=%s attempts_left=%d", user_id, attempt_id, attempts_left)
+        # The words' outcome too: with VERIFY_CHECK_DETAILS off, the log is
+        # the only place that says which check failed. Counts only, never
+        # the transcript.
+        logger.info(
+            "voice_check_rejected user=%s attempt=%s attempts_left=%d words_passed=%s words_matched=%d/%d",
+            user_id,
+            attempt_id,
+            attempts_left,
+            content.passed,
+            content.matched,
+            content.total,
+        )
+    # Which check decided it, as a word: never a score.
+    track(f"voice_check_{result.decision}", user_id, reason=result.check)
+    if result.decision == "rejected" and attempts_left == 0:
+        track("voice_checks_paused", user_id)
     access_token = None
     if result.decision == "approved":
         # Only an approval opens the account: password, voice and liveness.
         # Same session as the token that ran the check: signing out ends both.
         access_token = create_verified_token(user_id, claims["sid"])
+        # The voice-verified token replaces the limited one in the cookie.
+        set_session_cookie(response, access_token, config.VERIFIED_TOKEN_MINUTES)
+        if not config.TOKEN_IN_RESPONSE_BODY:
+            access_token = None
         _record_sign_in(users, user_id)
         logger.info("voice_check_approved user=%s attempt=%s", user_id, attempt_id)
+    fallback_required = result.decision == "rejected" and attempts_left == 0
+    if not config.VERIFY_CHECK_DETAILS:
+        # Only the outcome and what to do next (#112): nothing that says
+        # which check failed.
+        return VerifyResponse(
+            decision=result.decision,
+            reason=GENERAL_REASONS[result.decision],
+            content=None,
+            identity=None,
+            liveness=None,
+            attempts_left=attempts_left,
+            fallback_required=fallback_required,
+            access_token=access_token,
+        )
     return VerifyResponse(
         decision=result.decision,
         reason=result.reason,
@@ -120,7 +178,7 @@ def verify(
         identity=_identity_status(identity),
         liveness=_liveness_status(liveness),
         attempts_left=attempts_left,
-        fallback_required=result.decision == "rejected" and attempts_left == 0,
+        fallback_required=fallback_required,
         access_token=access_token,
     )
 
@@ -152,4 +210,3 @@ def _liveness_status(liveness: LivenessResult | None) -> str:
     if liveness is None:
         return "not_checked"
     return "passed" if liveness.passed else "failed"
-
