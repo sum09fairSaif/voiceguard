@@ -6,6 +6,7 @@ from pymongo.collection import Collection
 
 import config
 from audio_upload import read_recording
+from audit import track
 from content_check import ContentResult
 from db import (
     get_enroll_prompts_collection,
@@ -102,6 +103,7 @@ def add_enrollment_sample(
     # session (or the one-off grace period) may do it. Checked before the
     # count, so refused requests can't use up the owner's allowance.
     if not _may_enroll(users, claims, user_id):
+        track("enroll_sample_refused", user_id, reason="not_signup_session")
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=NOT_NOW)
     count_request(rate_limits, "enroll", user_id, config.ENROLL_RATE_LIMIT, config.RATE_LIMIT_WINDOW_SECONDS)
 
@@ -118,6 +120,7 @@ def add_enrollment_sample(
         sample = embed(recording, f"sample.{extension}")
     except AudioNotUnderstood:
         _log(user_id, "unreadable", None, None, None)
+        track("enroll_sample_refused", user_id, reason="unreadable")
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=UNREADABLE_MESSAGE)
 
     if sample.speech_seconds is None or sample.clipped_share is None:
@@ -142,6 +145,7 @@ def add_enrollment_sample(
             )
         except AudioNotUnderstood:
             _log(user_id, "unreadable", sample, similarity, None)
+            track("enroll_sample_refused", user_id, reason="unreadable")
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=UNREADABLE_MESSAGE)
         content = use_prompt(prompts, user_id, transcript)
         if not content.passed:
@@ -151,7 +155,9 @@ def add_enrollment_sample(
 
     _log(user_id, problem or "accepted", sample, similarity, content)
     if problem is not None:
+        track("enroll_sample_refused", user_id, reason=problem)
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=RETRY_MESSAGES[problem])
+    track("enroll_sample_accepted", user_id)
 
     if add_sample(enrollments, user_id, sample.vector) >= config.ENROLL_SAMPLES_REQUIRED:
         samples = take_samples(enrollments, user_id)
@@ -160,6 +166,7 @@ def add_enrollment_sample(
             save_voiceprint(voiceprints, user_id, build_voiceprint(samples))
             discard_prompts(prompts, user_id)
             logger.info("enrolled user=%s samples=%d", user_id, len(samples))
+            track("enrolled", user_id)
     return _status(voiceprints, enrollments, prompts, user_id, True)  # already checked above
 
 

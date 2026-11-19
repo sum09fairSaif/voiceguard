@@ -818,6 +818,62 @@ def test_the_voice_verified_token_belongs_to_the_same_sign_in(client, transcribe
     assert token_claims(verified)["jti"] != token_claims(limited)["jti"]
 
 
+# --- Security events (#167) ----------------------------------------------------
+
+
+def recorded(audit_events):
+    return [(e["event"], e["reason"]) for e in audit_events.find({}, {"_id": 0})]
+
+
+def test_an_approval_is_recorded_without_scores(client, transcriber, embedder, enrolled, attempt, audit_events):
+    transcriber.heard = attempt["passage"]
+    submit(client, attempt["id"])
+
+    assert recorded(audit_events) == [("voice_check_approved", None)]
+    assert "score" not in str(list(audit_events.find()))
+
+
+def test_a_rejection_records_which_check_failed(client, transcriber, embedder, enrolled, attempt, audit_events):
+    transcriber.heard = attempt["passage"]
+    embedder.voice = OTHER_VOICE
+    submit(client, attempt["id"])
+
+    assert recorded(audit_events) == [("voice_check_rejected", "voice")]
+
+
+def test_a_clone_that_fails_both_checks_is_recorded_as_liveness(
+    client, transcriber, embedder, enrolled, attempt, audit_events
+):
+    # Sumehra's review on #168: liveness is the veto, so it's what the user is
+    # told and what the record says.
+    transcriber.heard = attempt["passage"]
+    embedder.voice = OTHER_VOICE
+    embedder.liveness = SPOOFED
+
+    body = submit(client, attempt["id"]).json()
+
+    assert body["reason"] == "The recording didn't sound like a live voice."
+    assert recorded(audit_events) == [("voice_check_rejected", "liveness")]
+
+
+def test_an_unenrolled_check_is_recorded_as_incomplete(client, transcriber, attempt, audit_events):
+    transcriber.heard = attempt["passage"]
+    submit(client, attempt["id"])
+
+    assert recorded(audit_events) == [("voice_check_incomplete", "not_enrolled")]
+
+
+def test_the_pause_after_too_many_rejections_is_recorded(client, challenges, transcriber, audit_events):
+    transcriber.heard = "the quick brown fox jumps over"
+    for _ in range(config.VOICE_MAX_FAILURES):
+        challenge = create_challenge(challenges, USER_ID)
+        submit(client, str(challenge["_id"]))
+
+    names = [event for event, _ in recorded(audit_events)]
+    assert names.count("voice_check_rejected") == config.VOICE_MAX_FAILURES
+    assert names[-1] == "voice_checks_paused"
+
+
 # --- Daily cap per account (Sumehra's review on #152) --------------------------
 
 

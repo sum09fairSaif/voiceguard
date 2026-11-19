@@ -881,3 +881,33 @@ def test_a_spent_budget_refuses_before_the_paid_call_and_keeps_the_sentence(
     again = client.post(SAMPLES_URL, headers=signed_in(), files={"audio": ("s.webm", RECORDING, "audio/webm")})
     assert again.status_code == 200
     assert stored(enrollments) == 2
+
+# --- Security events (#167) ----------------------------------------------------
+
+
+def recorded(audit_events):
+    return [(e["event"], e["reason"]) for e in audit_events.find({}, {"_id": 0})]
+
+
+def test_enrollment_is_recorded(client, embedder, audit_events):
+    for _ in range(config.ENROLL_SAMPLES_REQUIRED):
+        send(client)
+
+    assert recorded(audit_events) == [("enroll_sample_accepted", None)] * config.ENROLL_SAMPLES_REQUIRED + [
+        ("enrolled", None)
+    ]
+
+
+def test_a_refused_sample_records_why(client, embedder, audit_events):
+    embedder.speech_seconds = 0.1
+    send(client)
+
+    ((event, reason),) = recorded(audit_events)
+    assert event == "enroll_sample_refused"
+    assert reason
+
+
+def test_enrolling_outside_the_signup_session_is_recorded(client, embedder, audit_events, no_grace):
+    send(client, headers=from_login())
+
+    assert recorded(audit_events) == [("enroll_sample_refused", "not_signup_session")]
