@@ -834,3 +834,34 @@ def test_a_session_that_may_not_enroll_gets_no_sentence(client, enroll_prompts, 
     assert body["can_enroll"] is False
     assert body["prompt"] is None
     assert enroll_prompts.count_documents({}) == 0
+
+
+# --- Security events (#167) ----------------------------------------------------
+
+
+def recorded(audit_events):
+    return [(e["event"], e["reason"]) for e in audit_events.find({}, {"_id": 0})]
+
+
+def test_enrollment_is_recorded(client, embedder, audit_events):
+    for _ in range(config.ENROLL_SAMPLES_REQUIRED):
+        send(client)
+
+    assert recorded(audit_events) == [("enroll_sample_accepted", None)] * config.ENROLL_SAMPLES_REQUIRED + [
+        ("enrolled", None)
+    ]
+
+
+def test_a_refused_sample_records_why(client, embedder, audit_events):
+    embedder.speech_seconds = 0.1
+    send(client)
+
+    ((event, reason),) = recorded(audit_events)
+    assert event == "enroll_sample_refused"
+    assert reason
+
+
+def test_enrolling_outside_the_signup_session_is_recorded(client, embedder, audit_events, no_grace):
+    send(client, headers=from_login())
+
+    assert recorded(audit_events) == [("enroll_sample_refused", "not_signup_session")]

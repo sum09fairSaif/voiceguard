@@ -697,6 +697,47 @@ def test_rejections_are_logged_with_what_is_left(client, challenges, transcriber
     assert any(f"attempts_left={MAX - 1}" in r.getMessage() for r in caplog.records)
 
 
+# --- Daily speech-to-text budget ---------------------------------------------
+
+
+def test_a_spent_budget_refuses_before_the_paid_call(client, transcriber, attempt, challenges, monkeypatch):
+    monkeypatch.setattr(config, "TRANSCRIPTION_DAILY_BUDGET", 1)
+    transcriber.heard = attempt["passage"]
+    assert submit(client, attempt["id"]).status_code == 200
+    second = create_challenge(challenges, USER_ID)
+
+    response = submit(client, str(second["_id"]))
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "Voice checks are busy right now. Please try again later."
+    assert 0 < int(response.headers["Retry-After"]) <= 24 * 3600
+    assert len(transcriber.calls) == 1
+    # The user keeps their passage for when the budget is back.
+    assert is_unused(challenges, str(second["_id"]))
+
+
+def test_a_failed_passage_lookup_gives_the_budget_slot_back(client, transcriber, attempt, rate_limits, monkeypatch):
+    class Broken:
+        def find_one_and_update(self, *args, **kwargs):
+            raise ServerSelectionTimeoutError("database unreachable")
+
+    monkeypatch.setattr(config, "TRANSCRIPTION_DAILY_BUDGET", 1)
+    app.dependency_overrides[get_challenges_collection] = lambda: Broken()
+
+    assert submit(client, attempt["id"]).status_code == 503
+    budget = rate_limits.find_one({"_id": {"$regex": "^transcription-budget:"}})
+    assert budget["count"] == 0
+
+
+def test_requests_that_fail_before_the_paid_call_dont_use_the_budget(client, transcriber, attempt, monkeypatch):
+    monkeypatch.setattr(config, "TRANSCRIPTION_DAILY_BUDGET", 1)
+    # An unknown passage is refused before any paid call.
+    assert submit(client, str(ObjectId())).status_code == 400
+
+    transcriber.heard = attempt["passage"]
+    assert submit(client, attempt["id"]).status_code == 200
+
+
 # --- The voice-verified token -------------------------------------------------
 
 
@@ -775,6 +816,114 @@ def test_the_voice_verified_token_belongs_to_the_same_sign_in(client, transcribe
 
     assert token_claims(verified)["sid"] == token_claims(limited)["sid"]
     assert token_claims(verified)["jti"] != token_claims(limited)["jti"]
+
+
+# --- Security events (#167) ----------------------------------------------------
+
+
+def recorded(audit_events):
+    return [(e["event"], e["reason"]) for e in audit_events.find({}, {"_id": 0})]
+
+
+def test_an_approval_is_recorded_without_scores(client, transcriber, embedder, enrolled, attempt, audit_events):
+    transcriber.heard = attempt["passage"]
+    submit(client, attempt["id"])
+
+    assert recorded(audit_events) == [("voice_check_approved", None)]
+    assert "score" not in str(list(audit_events.find()))
+
+
+def test_a_rejection_records_which_check_failed(client, transcriber, embedder, enrolled, attempt, audit_events):
+    transcriber.heard = attempt["passage"]
+    embedder.voice = OTHER_VOICE
+    submit(client, attempt["id"])
+
+    assert recorded(audit_events) == [("voice_check_rejected", "voice")]
+
+
+def test_a_clone_that_fails_both_checks_is_recorded_as_liveness(
+    client, transcriber, embedder, enrolled, attempt, audit_events
+):
+    # Sumehra's review on #168: liveness is the veto, so it's what the user is
+    # told and what the record says.
+    transcriber.heard = attempt["passage"]
+    embedder.voice = OTHER_VOICE
+    embedder.liveness = SPOOFED
+
+    body = submit(client, attempt["id"]).json()
+
+    assert body["reason"] == "The recording didn't sound like a live voice."
+    assert recorded(audit_events) == [("voice_check_rejected", "liveness")]
+
+
+def test_an_unenrolled_check_is_recorded_as_incomplete(client, transcriber, attempt, audit_events):
+    transcriber.heard = attempt["passage"]
+    submit(client, attempt["id"])
+
+    assert recorded(audit_events) == [("voice_check_incomplete", "not_enrolled")]
+
+
+def test_the_pause_after_too_many_rejections_is_recorded(client, challenges, transcriber, audit_events):
+    transcriber.heard = "the quick brown fox jumps over"
+    for _ in range(config.VOICE_MAX_FAILURES):
+        challenge = create_challenge(challenges, USER_ID)
+        submit(client, str(challenge["_id"]))
+
+    names = [event for event, _ in recorded(audit_events)]
+    assert names.count("voice_check_rejected") == config.VOICE_MAX_FAILURES
+    assert names[-1] == "voice_checks_paused"
+
+
+# --- Daily cap per account (Sumehra's review on #152) --------------------------
+
+
+def test_one_account_hits_its_daily_cap_while_the_shared_budget_has_room(
+    client, challenges, transcriber, rate_limits, monkeypatch
+):
+    monkeypatch.setattr(config, "VERIFY_RATE_LIMIT", 100)  # past the hourly limit
+    monkeypatch.setattr(config, "VERIFY_DAILY_LIMIT", 2)
+    monkeypatch.setattr(config, "TRANSCRIPTION_DAILY_BUDGET", 300)
+    transcriber.heard = "the quick brown fox jumps over"
+
+    statuses = []
+    for _ in range(3):
+        challenge = create_challenge(challenges, USER_ID)
+        statuses.append(submit(client, str(challenge["_id"])).status_code)
+
+    assert statuses[:2] == [200, 200]
+    assert statuses[2] == 429
+    # The refused check never reserved a slot of the shared budget.
+    budget = rate_limits.find_one({"_id": {"$regex": "^transcription-budget:"}})
+    assert budget["count"] == 2
+    assert len(transcriber.calls) == 2
+
+
+def test_the_daily_cap_is_per_account(client, challenges, transcriber, monkeypatch):
+    monkeypatch.setattr(config, "VERIFY_DAILY_LIMIT", 1)
+    transcriber.heard = "the quick brown fox jumps over"
+    other = str(ObjectId())
+
+    first = create_challenge(challenges, USER_ID)
+    assert submit(client, str(first["_id"])).status_code == 200
+    second = create_challenge(challenges, other)
+
+    response = submit(client, str(second["_id"]), headers=signed_in(other))
+
+    assert response.status_code == 200
+
+
+def test_the_daily_cap_resets_each_day(rate_limits):
+    from datetime import UTC, datetime, timedelta
+
+    from rate_limit import RateLimited, count_request
+
+    # Noon today: a fixed past date would have expired under the TTL index.
+    day = datetime.now(UTC).replace(hour=12, minute=0, second=0, microsecond=0)
+    count_request(rate_limits, "verify-day", "u1", 1, 24 * 3600, now=day)
+    with pytest.raises(RateLimited):
+        count_request(rate_limits, "verify-day", "u1", 1, 24 * 3600, now=day)
+
+    count_request(rate_limits, "verify-day", "u1", 1, 24 * 3600, now=day + timedelta(hours=12, seconds=1))
 
 
 # --- Hiding which check failed (#112) ----------------------------------------

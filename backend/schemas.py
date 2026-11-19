@@ -62,7 +62,9 @@ class UserPublic(BaseModel):
 
 class SignupResponse(BaseModel):
     user: UserPublic
-    access_token: str
+    # The token is set as an HttpOnly cookie. It's also here only while
+    # TOKEN_IN_RESPONSE_BODY is on (until the frontend uses the cookie).
+    access_token: str | None = None
     token_type: str = "bearer"
 
 

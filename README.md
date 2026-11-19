@@ -5,7 +5,7 @@
 Voice-biometric multi-factor authentication with anti-spoofing and deepfake detection.
 
 - **Live app:** https://voiceguard-nu.vercel.app/
-- **Live API:** https://voiceguard-83cj.onrender.com/ (health check at [`/health`](https://voiceguard-83cj.onrender.com/health), interactive docs at [`/docs`](https://voiceguard-83cj.onrender.com/docs))
+- **Live API:** https://voiceguard-83cj.onrender.com/ (health check at [`/health`](https://voiceguard-83cj.onrender.com/health); the interactive docs are only on a local server, see [Backend](#2-backend))
 
 > The free hosting tiers sleep when idle, so the first request after a
 > while can take up to a minute.
@@ -62,8 +62,16 @@ as soon as the voiceprint is built or the checks have run.
 - **Passwords (NIST SP 800-63B-4):** at least 15 characters, no rules about
   which kinds of character, and never a common or breached password, the
   person's own email name, or a simple repeat or sequence.
-- **Abuse limits:** sign-in locks for 30 minutes after 5 wrong passwords
-  within 15 minutes, and per-user limits cap the paid speech-to-text calls.
+- **Security events and uptime:** sign-ups, sign-ins, lockouts, enrollment,
+  voice-check decisions and sign-outs are recorded for 30 days without personal
+  data (user ids hashed with a server key, no emails, addresses or scores), and also sent to
+  PostHog when `POSTHOG_API_KEY` is set. A scheduled check opens an
+  "API is down" issue when `/health` stops answering.
+- **Abuse limits:** limits per client and per account on every route, so one
+  sender is stopped without affecting anyone else. 5 wrong passwords within
+  15 minutes lock that client out of the account for 30 minutes (20 from
+  everyone together lock it for everyone), and a daily budget caps the paid
+  speech-to-text calls.
 - **Fallback:** after 3 rejected voice checks within 30 minutes, voice
   checks pause for 30 minutes and the app is told to offer an email code
   (the code itself is planned, #20).
@@ -156,7 +164,19 @@ to one sign-in session; signing out ends the session on the server, so a
 copied token stops working too. A password reset ends every session
 of the account the same way.
 
-Full request and response details are in the interactive docs at `/docs`.
+The token travels in a cookie marked **HttpOnly** (no script on the page can
+read it, so a cross-site scripting bug can't steal it), **Secure** and
+**SameSite=Strict**, set by the API at sign-up, sign-in and an approved voice
+check, and cleared at sign-out. Requests that change something must come from
+one of our own pages (their `Origin` is checked against `ALLOWED_ORIGINS`), so
+another site can't act with a signed-in user's cookie. The frontend and API
+must share a site for the browser to send the cookie (our own domain:
+`app.` and `api.` addresses). Until the frontend relies on the cookie alone,
+the token is also returned in the response (`TOKEN_IN_RESPONSE_BODY=true`) and
+an `Authorization: Bearer` header still works.
+
+Full request and response details are in the interactive docs at `/docs` on a
+local server with `DOCS_ENABLED=true` (they're off on the live API).
 
 ## Tech stack
 
@@ -249,8 +269,8 @@ uvicorn main:app --reload --port 8000
 ```
 
 Open http://localhost:8000/health. You should see
-`{"status":"ok","service":"voiceguard-api"}`, and the interactive API docs
-are at http://localhost:8000/docs. More detail: [backend/README.md](backend/README.md).
+`{"status":"ok","service":"voiceguard-api"}`. For the interactive API docs at
+http://localhost:8000/docs, set `DOCS_ENABLED=true` in `.env` first. More detail: [backend/README.md](backend/README.md).
 
 ### 3. Model service (optional: only for enrollment and the identity check)
 
@@ -297,6 +317,7 @@ runs the tests, lint and the frontend build on every pull request.
 | `/health` works but other calls answer 503 "The service is temporarily unavailable" | `MONGO_URI` or `JWT_SECRET` is missing from `.env` (the server log names the missing setting), or the database can't be reached (check `MONGO_URI`, and that your IP is allowed under **Network Access** in Atlas). An unreachable database gives the same message, and the log doesn't name a setting for it. |
 | Voice checks answer "Voice checks are temporarily unavailable" | `OPENAI_API_KEY` (content check, enrollment), `VOICEPRINT_KEY` (enrollment, identity check) or the model service settings (identity check, enrollment) are missing, or the model service is asleep: try again in a minute. |
 | The browser shows a CORS error | Add the frontend's address (e.g. `http://localhost:5173`) to `ALLOWED_ORIGINS` in `.env`, then restart the backend. |
+| A change answers 403 "This request didn't come from VoiceGuard" | The page's address isn't in `ALLOWED_ORIGINS`: add it (local development: `http://localhost:5173`) and restart the backend. |
 | The frontend talks to the wrong backend | Set `VITE_API_BASE_URL` in `frontend/.env.local` (not the root `.env`) and restart `npm run dev`. |
 | Model service tests fail with "ffmpeg not found" | Install ffmpeg, or set `FFMPEG_BINARY` to the full path of an ffmpeg file. `pip install imageio-ffmpeg` provides one; print its path with `python -c "import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())"`. |
 | The microphone doesn't start | Allow microphone access for the site in the browser. Browsers only allow it on `https://` or `localhost`. |
@@ -343,8 +364,9 @@ runs the tests, lint and the frontend build on every pull request.
    approves on its own.
 2. Voice data is sensitive. Mitigation: store only encrypted voiceprints,
    never raw audio, and keep secrets out of the repo via environment variables.
-3. Paid speech-to-text calls could be abused. Mitigation: per-user limits on
-   passages and checks, a cap on new accounts, and one log line per call.
+3. Paid speech-to-text calls could be abused. Mitigation: per-client and
+   per-user limits on passages and checks, per-client and overall caps on new
+   accounts, a daily budget, and one log line per call.
 4. The three-month timeline is tight for a small team. Mitigation: ship the
    skeleton in Sprint 0, then build one user story per feature branch behind
    passing CI.
