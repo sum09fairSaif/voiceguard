@@ -145,4 +145,15 @@ describe("Result page", () => {
 
     expect(screen.getByRole("button", { name: "Sign out" })).toBeInTheDocument();
   });
+  it("shows only the outcome when the server hides the check details (#112)", () => {
+    renderResult({
+      result: result({ decision: "rejected", content: null, identity: null, liveness: null, attempts_left: 2 }),
+    });
+
+    expect(screen.getByRole("heading", { name: "That didn’t match." })).toBeInTheDocument();
+    expect(screen.getByText("We couldn’t verify you this time. Please try again.")).toBeInTheDocument();
+    expect(screen.getByText("2 attempts left.")).toBeInTheDocument();
+    expect(screen.queryByRole("list", { name: "Checks" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /try again/i })).toBeInTheDocument();
+  });
 });
