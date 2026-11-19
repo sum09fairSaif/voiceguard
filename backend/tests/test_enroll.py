@@ -836,6 +836,52 @@ def test_a_session_that_may_not_enroll_gets_no_sentence(client, enroll_prompts, 
     assert enroll_prompts.count_documents({}) == 0
 
 
+# --- Daily speech-to-text budget (shared with voice checks, #151) ----------------------
+
+
+def budget_used(rate_limits):
+    record = rate_limits.find_one({"_id": {"$regex": "^transcription-budget:"}})
+    return record["count"] if record else 0
+
+
+def test_each_paid_call_uses_one_slot_of_the_shared_budget(client, embedder, transcriber, rate_limits):
+    send(client)
+    send(client)
+
+    assert len(transcriber.calls) == 2
+    assert budget_used(rate_limits) == 2
+
+
+def test_a_sample_turned_away_for_its_sound_uses_no_slot(client, embedder, transcriber, rate_limits):
+    embedder.speech_seconds = 0.2
+
+    assert send(client).status_code == 422
+    assert transcriber.calls == []
+    assert budget_used(rate_limits) == 0
+
+
+def test_a_spent_budget_refuses_before_the_paid_call_and_keeps_the_sentence(
+    client, embedder, transcriber, enroll_prompts, enrollments, rate_limits, monkeypatch
+):
+    monkeypatch.setattr(config, "TRANSCRIPTION_DAILY_BUDGET", 1)
+    assert send(client).status_code == 200
+    client.get(STATUS_URL, headers=signed_in())
+    sentence = newest_prompt(enroll_prompts)
+
+    response = client.post(SAMPLES_URL, headers=signed_in(), files={"audio": ("s.webm", RECORDING, "audio/webm")})
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "Voice ID setup is busy right now. Please try again later."
+    assert 0 < int(response.headers["Retry-After"]) <= 24 * 3600
+    assert len(transcriber.calls) == 1
+    assert stored(enrollments) == 1
+    # The sentence wasn't used up: it still counts once the budget is back.
+    monkeypatch.setattr(config, "TRANSCRIPTION_DAILY_BUDGET", 2)
+    transcriber.heard = sentence
+    again = client.post(SAMPLES_URL, headers=signed_in(), files={"audio": ("s.webm", RECORDING, "audio/webm")})
+    assert again.status_code == 200
+    assert stored(enrollments) == 2
+
 # --- Security events (#167) ----------------------------------------------------
 
 

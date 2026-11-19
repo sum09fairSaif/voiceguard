@@ -147,9 +147,11 @@ def voice_locked_out(request: Request, exc: VoiceLockedOut) -> JSONResponse:
 def budget_used_up(request: Request, exc: BudgetUsedUp) -> JSONResponse:
     # Logged so someone can raise the budget if real users hit it.
     logger.warning("transcription_budget_used_up path=%s", request.url.path)
+    # Enrollment shares the budget (#151), so name what the person was doing.
+    what = "Voice ID setup is" if request.url.path.startswith("/api/enroll") else "Voice checks are"
     return JSONResponse(
         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-        content={"detail": "Voice checks are busy right now. Please try again later."},
+        content={"detail": f"{what} busy right now. Please try again later."},
         headers={"Retry-After": str(exc.retry_after)},
     )
 
