@@ -15,6 +15,7 @@ from rate_limit import RateLimited
 from routers import account, auth, challenge, enroll, verify
 from security_headers import SecurityHeadersMiddleware
 from transcription import AudioNotUnderstood, TranscriptionUnavailable
+from transcription_budget import BudgetUsedUp
 from voice_attempts import VoiceLockedOut
 
 # uvicorn only sets up its own loggers, so without this our info lines
@@ -129,6 +130,17 @@ def voice_locked_out(request: Request, exc: VoiceLockedOut) -> JSONResponse:
     return JSONResponse(
         status_code=status.HTTP_423_LOCKED,
         content={"detail": f"Too many failed voice checks, so they're paused for now. Please try again in {wait}."},
+        headers={"Retry-After": str(exc.retry_after)},
+    )
+
+
+@app.exception_handler(BudgetUsedUp)
+def budget_used_up(request: Request, exc: BudgetUsedUp) -> JSONResponse:
+    # Logged so someone can raise the budget if real users hit it.
+    logger.warning("transcription_budget_used_up path=%s", request.url.path)
+    return JSONResponse(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        content={"detail": "Voice checks are busy right now. Please try again later."},
         headers={"Retry-After": str(exc.retry_after)},
     )
 

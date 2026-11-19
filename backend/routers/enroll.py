@@ -1,7 +1,7 @@
 import logging
 
 from bson import ObjectId
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 from pymongo.collection import Collection
 
 import config
@@ -33,7 +33,7 @@ from enrollment import (
 )
 from enrollment_window import may_enroll
 from identity_check import IdentityUnavailable
-from rate_limit import count_request
+from rate_limit import count_client_request, count_request
 from schemas import EnrollmentStatus
 from security import get_current_user_id, get_token_claims
 from transcription import AudioNotUnderstood, Transcriber, get_transcriber, transcribe_and_log
@@ -77,6 +77,7 @@ def enrollment_status(
 
 @router.post("/samples", response_model=EnrollmentStatus)
 def add_enrollment_sample(
+    request: Request,
     audio: UploadFile = File(...),
     user_id: str = Depends(get_current_user_id),
     claims: dict = Depends(get_token_claims),
@@ -91,6 +92,9 @@ def add_enrollment_sample(
     # Replacing a voiceprint needs more than a password: otherwise anyone
     # who learned the password could swap in their own voice and pass the
     # voice check from then on.
+    # Per client first, refused or not: one address flooding uploads runs out
+    # of its own allowance (the owner, elsewhere, is unaffected).
+    count_client_request(rate_limits, "enroll", request, config.ENROLL_CLIENT_LIMIT)
     if has_voiceprint(voiceprints, user_id):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Your voice is already enrolled.")
     # Setting the voice needs more than a password, too: only the signup
