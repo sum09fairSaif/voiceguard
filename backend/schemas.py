@@ -54,11 +54,17 @@ class UserPublic(BaseModel):
     full_name: str
     email: EmailStr
     created_at: datetime
+    # False until the code we emailed is entered (#110). Until then the
+    # account can't set up Voice ID or run voice checks. Accounts made
+    # before verification existed, or while it's switched off, are true.
+    email_verified: bool = True
 
 
 class SignupResponse(BaseModel):
     user: UserPublic
-    access_token: str
+    # The token is set as an HttpOnly cookie. It's also here only while
+    # TOKEN_IN_RESPONSE_BODY is on (until the frontend uses the cookie).
+    access_token: str | None = None
     token_type: str = "bearer"
 
 
@@ -71,6 +77,25 @@ class LoginRequest(BaseModel):
 
 class LoginResponse(SignupResponse):
     """Same shape as signup: the account and a fresh token."""
+
+
+class EmailCodeRequest(BaseModel):
+    # Six digits; spaces the user may type between them are dropped.
+    code: str = Field(min_length=1, max_length=20)
+
+    @field_validator("code")
+    @classmethod
+    def six_digits(cls, value: str) -> str:
+        value = "".join(value.split())
+        if len(value) != 6 or not value.isascii() or not value.isdigit():
+            raise ValueError("The code is 6 digits.")
+        return value
+
+
+class EmailVerifiedResponse(BaseModel):
+    """The account, now confirmed."""
+
+    user: UserPublic
 
 
 class ChallengeResponse(BaseModel):
@@ -90,14 +115,19 @@ class VerifyResponse(BaseModel):
     # "approved" only when all three checks pass; "incomplete" when the
     # account has no voiceprint, so only the words could be checked.
     decision: Literal["approved", "rejected", "incomplete"]
+    # Says which check failed while VERIFY_CHECK_DETAILS is on; a general
+    # message that names no check while it's off (#112).
     reason: str
-    content: ContentScore
+    # content, identity and liveness are None while VERIFY_CHECK_DETAILS is
+    # off (#112): telling an attacker which check failed helps them tune a
+    # replay or voice clone. The server log still has them.
+    content: ContentScore | None
     # Pass or fail only. The similarity score stays on the server: handing
     # it back would let someone tune a voice clone until it scores high.
-    identity: Literal["passed", "failed", "not_enrolled"]
+    identity: Literal["passed", "failed", "not_enrolled"] | None
     # Pass or fail only, for the same reason. "not_checked" when the account
     # has no voiceprint: liveness runs in the same model-service call.
-    liveness: Literal["passed", "failed", "not_checked"]
+    liveness: Literal["passed", "failed", "not_checked"] | None
     # Rejected checks the user has left before voice checks lock. Back to
     # the maximum after an approval; not lowered by an "incomplete".
     attempts_left: int

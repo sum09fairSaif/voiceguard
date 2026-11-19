@@ -5,9 +5,11 @@ import pytest
 from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
 
+import audit
 import config
 from db import (
     get_challenges_collection,
+    get_email_codes_collection,
     get_enroll_prompts_collection,
     get_enrollments_collection,
     get_login_failures_collection,
@@ -16,6 +18,7 @@ from db import (
     get_voice_failures_collection,
     get_voiceprints_collection,
 )
+from email_sender import get_optional_email_sender
 from main import app
 from sessions import revoked_sessions
 
@@ -78,6 +81,13 @@ def voice_failures():
 
 
 @pytest.fixture
+def email_codes():
+    collection = mongomock.MongoClient()["voiceguard_test"]["email_codes"]
+    collection.create_index("expires_at", expireAfterSeconds=0)
+    return collection
+
+
+@pytest.fixture
 def revoked():
     collection = mongomock.MongoClient()["voiceguard_test"]["revoked_sessions"]
     collection.create_index("expires_at", expireAfterSeconds=0)
@@ -93,12 +103,29 @@ def no_real_revocation_store(revoked):
 
 
 @pytest.fixture
+def audit_events(monkeypatch):
+    # Security events go to an in-memory collection; PostHog is never called.
+    collection = mongomock.MongoClient()["voiceguard_test"]["audit_events"]
+    collection.create_index("expires_at", expireAfterSeconds=0)
+    monkeypatch.setattr(audit, "_collection", lambda: collection)
+    monkeypatch.setattr(config, "POSTHOG_API_KEY", "")
+    return collection
+
+
+@pytest.fixture(autouse=True)
+def _audit_in_memory(audit_events):
+    yield
+
+
+@pytest.fixture
 def client(
     users, challenges, rate_limits, voiceprints, enrollments, enroll_prompts, login_failures, voice_failures,
-    monkeypatch,
+    email_codes, monkeypatch,
 ):
     # A fresh random key each run, so the code can't pass by hard-coding one.
     monkeypatch.setattr(config, "JWT_SECRET", secrets.token_urlsafe(32))
+    # The default, whatever a local .env says; tests that hide them say so.
+    monkeypatch.setattr(config, "VERIFY_CHECK_DETAILS", True)
     app.dependency_overrides[get_users_collection] = lambda: users
     app.dependency_overrides[get_challenges_collection] = lambda: challenges
     app.dependency_overrides[get_rate_limits_collection] = lambda: rate_limits
@@ -107,5 +134,10 @@ def client(
     app.dependency_overrides[get_enroll_prompts_collection] = lambda: enroll_prompts
     app.dependency_overrides[get_login_failures_collection] = lambda: login_failures
     app.dependency_overrides[get_voice_failures_collection] = lambda: voice_failures
+    app.dependency_overrides[get_email_codes_collection] = lambda: email_codes
+    # Tests never send real email; test_email_verification.py records it.
+    app.dependency_overrides[get_optional_email_sender] = lambda: None
+    # Verification stays off unless a test turns it on, as in production.
+    monkeypatch.setattr(config, "EMAIL_VERIFICATION_REQUIRED", False)
     yield TestClient(app)
     app.dependency_overrides.clear()
