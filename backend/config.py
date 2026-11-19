@@ -177,9 +177,10 @@ if VERIFY_DAILY_LIMIT <= 0:
 # gets its own voice-check allowance above, so without a cap one person could
 # open many accounts to multiply the paid calls.
 SIGNUP_RATE_LIMIT = int(os.getenv("SIGNUP_RATE_LIMIT", "100"))
-# Paid speech-to-text calls per day (UTC) from everyone together. Once spent,
-# voice checks answer 503 "try later" until midnight UTC, so a flood of
-# requests can't drain the prepaid credit.
+# Paid speech-to-text calls per day (UTC) from everyone together, voice
+# checks and enrollment samples alike. Once spent, both answer 503 "try
+# later" until midnight UTC, so a flood of requests can't drain the prepaid
+# credit.
 TRANSCRIPTION_DAILY_BUDGET = int(os.getenv("TRANSCRIPTION_DAILY_BUDGET", "300"))
 if TRANSCRIPTION_DAILY_BUDGET <= 0:
     raise RuntimeError("TRANSCRIPTION_DAILY_BUDGET must be more than 0.")
