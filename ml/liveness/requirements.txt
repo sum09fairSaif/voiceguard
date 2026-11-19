@@ -3,10 +3,10 @@
 # soundfile reads FLAC, WAV and MP3; soxr resamples; huggingface_hub
 # downloads the datasets hosted there (download.py). miniaudio decodes the
 # ASVspoof 2019 PA FLAC files soundfile's libsndfile 1.2.2 can't (validate.py).
-huggingface_hub==0.26.2
+huggingface_hub==2.4.0
 miniaudio==1.73
-numpy==1.26.4
+numpy==2.5.4
 pandas==2.3.3
-pyarrow==23.0.1
+pyarrow==26.0.1
 soundfile==0.14.0
 soxr==1.1.0
