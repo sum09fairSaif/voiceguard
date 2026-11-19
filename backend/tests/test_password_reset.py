@@ -324,7 +324,9 @@ def test_if_sessions_cant_be_ended_the_password_and_link_stay_as_they_were(clien
 
 
 def test_sessions_started_after_the_reset_are_unaffected(revoked):
-    reset = datetime(2026, 11, 17, 12, 0, 0, 500_000, tzinfo=UTC)
+    # Relative to now: the entry is kept for a day, and mongomock applies
+    # the TTL index, so a fixed date would be deleted before the asserts.
+    reset = datetime.now(UTC).replace(microsecond=500_000)
     revoke_all(revoked, "u1", now=reset)
     second = int(reset.timestamp())
 
@@ -344,7 +346,7 @@ def test_a_token_without_an_issue_time_counts_as_before(revoked):
 
 
 def test_a_later_reset_moves_the_line_and_an_earlier_one_cant_move_it_back(revoked):
-    noon = datetime(2026, 11, 17, 12, 0, tzinfo=UTC)
+    noon = datetime.now(UTC) - timedelta(minutes=10)
     revoke_all(revoked, "u1", now=noon)
     revoke_all(revoked, "u1", now=noon + timedelta(minutes=5))
     revoke_all(revoked, "u1", now=noon + timedelta(minutes=1))
