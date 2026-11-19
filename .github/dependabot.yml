@@ -6,9 +6,14 @@
 # updates go into dev, like everyone else's PRs, and need a review and green
 # CI before they merge.
 #
-# Security fixes come as soon as they're published, also grouped, one PR per
-# folder. GitHub always opens those against the default branch (main), not
-# target-branch, so after merging one, merge main back into dev.
+# A new version is only proposed once it's 14 days old (cooldown): a release
+# that turns out to be broken or tampered with is usually caught and pulled
+# within days.
+#
+# Security fixes come as soon as they're published (the cooldown doesn't
+# apply to them), also grouped, one PR per folder. GitHub always opens those
+# against the default branch (main), not target-branch, so after merging
+# one, merge main back into dev.
 #
 # GitHub only reads this file from main: a change here takes effect after
 # the next release.
@@ -19,6 +24,8 @@ updates:
     target-branch: dev
     schedule:
       interval: monthly
+    cooldown:
+      default-days: 14
     open-pull-requests-limit: 2
     groups:
       minor-and-patch:
@@ -34,6 +41,8 @@ updates:
     target-branch: dev
     schedule:
       interval: monthly
+    cooldown:
+      default-days: 14
     open-pull-requests-limit: 2
     ignore:
       # ZeroGPU only accepts certain PyTorch versions, and torchaudio stops
@@ -57,6 +66,8 @@ updates:
     target-branch: dev
     schedule:
       interval: monthly
+    cooldown:
+      default-days: 14
     open-pull-requests-limit: 2
     groups:
       minor-and-patch:
@@ -72,6 +83,8 @@ updates:
     target-branch: dev
     schedule:
       interval: monthly
+    cooldown:
+      default-days: 14
     open-pull-requests-limit: 2
     ignore:
       # TypeScript 7 breaks typescript-eslint (see #81). Remove this once
@@ -94,6 +107,8 @@ updates:
     target-branch: dev
     schedule:
       interval: monthly
+    cooldown:
+      default-days: 14
     open-pull-requests-limit: 1
     groups:
       actions:
