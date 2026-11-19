@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from pymongo.collection import Collection
 
 import config
+import switches
 from audio_upload import read_recording
 from audit import track
 from content_check import ContentResult
@@ -81,9 +82,9 @@ def enrollment_status(
 @router.post(
     "/samples",
     response_model=EnrollmentStatus,
-    # Before anything else: an unconfirmed email address (#110) gets its own
-    # answer, not the "only right after signup" one.
-    dependencies=[Depends(require_verified_email)],
+    # Paused first. Then, before anything else, an unconfirmed email address
+    # (#110) gets its own answer, not the "only right after signup" one.
+    dependencies=[Depends(switches.require("enrollment")), Depends(require_verified_email)],
 )
 def add_enrollment_sample(
     request: Request,
