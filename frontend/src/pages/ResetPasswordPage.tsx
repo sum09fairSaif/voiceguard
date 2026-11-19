@@ -4,6 +4,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { describeApiError, invalidFieldProblems } from "../api/errors";
 import { confirmPasswordReset, tokenFromHash } from "../api/passwordReset";
 import { clearToken } from "../api/session";
+import { heldResetLinkToken } from "../resetLinkToken";
 import badgeLock from "../assets/icons/badge-lock.svg";
 import { Button } from "../components/Button";
 import { Logo } from "../components/Logo";
@@ -26,13 +27,16 @@ const BADGE = { src: badgeLock, width: 15.7, height: 19.7 };
 export function ResetPasswordPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  // Read once: the address is then tidied so the token doesn't stay in the
-  // address bar or the history.
-  const [token] = useState(() => tokenFromHash(location.hash));
+  // Normally already taken out of the address before anything else ran
+  // (resetLinkToken.ts, so analytics never sees it). If it's still in the
+  // address, it's read once here and the address tidied below.
+  const [token] = useState(() => heldResetLinkToken() ?? tokenFromHash(location.hash));
   const [password, setPassword] = useState("");
   const [passwordError, setPasswordError] = useState("");
   const [formError, setFormError] = useState("");
   const [linkUnusable, setLinkUnusable] = useState(!token);
+  // The server refused the link when saving (not just a link with no token).
+  const [refusedOnSave, setRefusedOnSave] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const shown = useStillShown();
 
@@ -50,9 +54,10 @@ export function ResetPasswordPage() {
     setSubmitting(true);
     try {
       await confirmPasswordReset(token, password);
-      if (!shown.current) return;
-      // The reset ended every session, this browser's included.
+      // The reset ended every session, this browser's included: forgotten
+      // even if the person has already left this page.
       clearToken();
+      if (!shown.current) return;
       const state: PasswordChangedState = { passwordChanged: true };
       navigate("/signin", { replace: true, state });
     } catch (error) {
@@ -60,6 +65,7 @@ export function ResetPasswordPage() {
       setSubmitting(false);
       if (isAxiosError(error) && error.response?.status === 400) {
         setLinkUnusable(true);
+        setRefusedOnSave(true);
         return;
       }
       const refused = invalidFieldProblems(error).find((problem) => problem.field === "password");
@@ -90,6 +96,13 @@ export function ResetPasswordPage() {
             Reset links work once, for 30 minutes, and only the newest one works. <Link to="/forgot-password">Ask for a
             new link</Link>.
           </p>
+          {refusedOnSave && (
+            // An earlier save may have gone through even though its answer
+            // never arrived (e.g. the connection dropped), using the link up.
+            <p>
+              If you’ve already set a new password with this link, <Link to="/signin">sign in</Link> with it.
+            </p>
+          )}
         </div>
       ) : (
         <form className={styles.form} onSubmit={handleSubmit} noValidate>

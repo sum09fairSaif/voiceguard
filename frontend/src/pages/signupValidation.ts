@@ -32,9 +32,15 @@ export function validateSignup(form: SignupForm): SignupErrors {
   return errors;
 }
 
+// Characters as the server counts them (Python's len): an emoji or other
+// character outside the basic range is one, where JavaScript's .length says two.
+export function characterCount(text: string): number {
+  return [...text].length;
+}
+
 // The length rules for a new password, at signup or after a reset.
 export function validatePassword(password: string): string | undefined {
-  if (password.length < MIN_PASSWORD_LENGTH) return `Use at least ${MIN_PASSWORD_LENGTH} characters.`;
+  if (characterCount(password) < MIN_PASSWORD_LENGTH) return `Use at least ${MIN_PASSWORD_LENGTH} characters.`;
   if (new TextEncoder().encode(password).length > MAX_PASSWORD_BYTES) {
     return "That password is too long. Try a shorter one.";
   }
@@ -66,11 +72,12 @@ function looksPredictable(password: string): boolean {
 // its list of breached passwords), so this never decides on its own.
 export function passwordStrength(password: string): Strength {
   if (!password) return { level: 0, label: "" };
-  if (password.length < MIN_PASSWORD_LENGTH) {
-    return { level: 0, label: `${MIN_PASSWORD_LENGTH - password.length} more characters` };
+  const length = characterCount(password);
+  if (length < MIN_PASSWORD_LENGTH) {
+    return { level: 0, label: `${MIN_PASSWORD_LENGTH - length} more characters` };
   }
   if (looksPredictable(password)) return { level: 1, label: "Too predictable" };
   const varied = new Set(password.toLowerCase()).size >= 8;
-  if (password.length >= 20 && varied) return { level: 3, label: "Strong" };
+  if (length >= 20 && varied) return { level: 3, label: "Strong" };
   return { level: varied ? 2 : 1, label: varied ? "Good" : "Too predictable" };
 }
