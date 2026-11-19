@@ -90,14 +90,19 @@ class VerifyResponse(BaseModel):
     # "approved" only when all three checks pass; "incomplete" when the
     # account has no voiceprint, so only the words could be checked.
     decision: Literal["approved", "rejected", "incomplete"]
+    # Says which check failed while VERIFY_CHECK_DETAILS is on; a general
+    # message that names no check while it's off (#112).
     reason: str
-    content: ContentScore
+    # content, identity and liveness are None while VERIFY_CHECK_DETAILS is
+    # off (#112): telling an attacker which check failed helps them tune a
+    # replay or voice clone. The server log still has them.
+    content: ContentScore | None
     # Pass or fail only. The similarity score stays on the server: handing
     # it back would let someone tune a voice clone until it scores high.
-    identity: Literal["passed", "failed", "not_enrolled"]
+    identity: Literal["passed", "failed", "not_enrolled"] | None
     # Pass or fail only, for the same reason. "not_checked" when the account
     # has no voiceprint: liveness runs in the same model-service call.
-    liveness: Literal["passed", "failed", "not_checked"]
+    liveness: Literal["passed", "failed", "not_checked"] | None
     # Rejected checks the user has left before voice checks lock. Back to
     # the maximum after an approval; not lowered by an "incomplete".
     attempts_left: int
