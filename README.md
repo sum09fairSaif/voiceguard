@@ -145,15 +145,24 @@ curl -X POST $API/api/verify -H "Authorization: Bearer <access_token>" \
 | Method | Path | What it does | Sign-in needed |
 |---|---|---|---|
 | GET | `/health` | Is the server up? | No |
-| POST | `/api/auth/signup` | Create an account; returns a limited token (password only) | No |
+| POST | `/api/auth/signup` | Create an account; returns a limited token (password only). With email verification on, the account starts unverified (`email_verified: false`) and a 6-digit code is emailed; signing up again replaces an unconfirmed account with the same email | No |
+| POST | `/api/auth/email/code` | Email a new confirmation code (the old one stops working); 5 per hour; 409 once confirmed (204) | Any token |
+| POST | `/api/auth/email/verify` | Confirm the email with the code (`{"code": "123456"}`); works once, expires in 15 min, 5 wrong tries use it up | Any token |
 | POST | `/api/auth/login` | Sign in with email and password; returns a limited token; locks for 30 min after 5 wrong tries within 15 min | No |
 | POST | `/api/auth/logout` | Sign out: ends this sign-in on the server, so its limited and voice-verified tokens both stop working (204) | Any token |
 | POST | `/api/challenge` | Get a fresh, single-use passage to read (expires in 2 min); 423 while voice checks are paused | Limited token |
 | POST | `/api/verify` | Send a recording of the passage; runs the checks and returns the decision, `attempts_left` and `fallback_required`, plus a voice-verified `access_token` (15 min) when approved; 423 while voice checks are paused. Each check's outcome (`content`, `identity`, `liveness`) and a reason naming the failed check only while `VERIFY_CHECK_DETAILS` is on; off, those are `null` and the reason is general | Limited token |
 | GET | `/api/enroll` | Enrollment progress, a sentence to read for the next sample, and whether this session may enroll (`can_enroll`) | Limited token |
-| POST | `/api/enroll/samples` | Add one voice sample (it must hold every word of the sentence, in order, sound live, and match the earlier samples); the voiceprint is built after 3 good ones. Only the signup session, within 30 min of creating the account; until 2026-11-16 00:00 ET, accounts made before this rule may also enroll after signing in (403 otherwise) | Signup token (or sign-in token during the grace period) |
+| POST | `/api/enroll/samples` | Add one voice sample (it must hold every word of the sentence, in order, sound live, and match the earlier samples); the voiceprint is built after 3 good ones. Only the signup session, within 30 min of creating the account, or the session that confirmed the email, within 30 min of confirming; never before the email is confirmed (when verification is on); until 2026-11-16 00:00 ET, accounts made before this rule may also enroll after signing in (403 otherwise) | Signup token (or sign-in token during the grace period) |
 | DELETE | `/api/enroll/samples` | Start enrollment over | Limited token |
 | GET | `/api/me` | The account summary (name, email, dates, previous sign-in); 403 with a limited token | Voice-verified token |
+
+**Email verification (#110)** is behind the `EMAIL_VERIFICATION_REQUIRED`
+switch, off until the "check your email" screen is live. When on, an account
+can't set up Voice ID, get a passage or run a voice check (403) until its
+email is confirmed. The session that confirms may enroll for 30 minutes
+afterwards. Unconfirmed accounts are deleted after 24 hours. Accounts made
+before verification existed keep working as they are.
 
 A password alone gives a **limited token**: it can only start the voice check.
 Only an approved voice check (words, voice and liveness) gives a
