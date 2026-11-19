@@ -2,12 +2,14 @@ import logging
 from datetime import UTC, datetime
 
 from bson import ObjectId
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Response, UploadFile, status
 from pymongo.collection import Collection
 from pymongo.errors import PyMongoError
 
 import config
+import switches
 from audio_upload import read_recording
+from audit import track
 from challenges import use_challenge
 from content_check import check_content
 from db import (
@@ -18,12 +20,14 @@ from db import (
     get_voiceprints_collection,
 )
 from decision import decide
+from email_verification import require_verified_email
 from embedding import Embedder, get_embedder
 from identity_check import IdentityResult, IdentityUnavailable, check_identity
 from liveness_check import LivenessResult, check_liveness
 from rate_limit import count_client_request, count_request
 from schemas import ContentScore, VerifyResponse
 from security import create_verified_token, get_current_user_id, get_token_claims
+from session_cookie import set_session_cookie
 from transcription import Transcriber, get_transcriber, transcribe_and_log
 from transcription_budget import release_transcription, reserve_transcription
 from voice_attempts import ensure_not_locked, record_outcome
@@ -43,8 +47,15 @@ GENERAL_REASONS = {
 }
 
 
-@router.post("/verify", response_model=VerifyResponse)
+@router.post(
+    "/verify",
+    response_model=VerifyResponse,
+    # Paused first. Then, before the paid speech-to-text call: no voice
+    # checks until the email address is confirmed (#110).
+    dependencies=[Depends(switches.require("voice_checks")), Depends(require_verified_email)],
+)
 def verify(
+    response: Response,
     request: Request,
     audio: UploadFile = File(...),
     attempt_id: str = Form(...),
@@ -134,11 +145,19 @@ def verify(
             content.matched,
             content.total,
         )
+    # Which check decided it, as a word: never a score.
+    track(f"voice_check_{result.decision}", user_id, reason=result.check)
+    if result.decision == "rejected" and attempts_left == 0:
+        track("voice_checks_paused", user_id)
     access_token = None
     if result.decision == "approved":
         # Only an approval opens the account: password, voice and liveness.
         # Same session as the token that ran the check: signing out ends both.
         access_token = create_verified_token(user_id, claims["sid"])
+        # The voice-verified token replaces the limited one in the cookie.
+        set_session_cookie(response, access_token, config.VERIFIED_TOKEN_MINUTES)
+        if not config.TOKEN_IN_RESPONSE_BODY:
+            access_token = None
         _record_sign_in(users, user_id)
         logger.info("voice_check_approved user=%s attempt=%s", user_id, attempt_id)
     fallback_required = result.decision == "rejected" and attempts_left == 0
@@ -199,4 +218,3 @@ def _liveness_status(liveness: LivenessResult | None) -> str:
     if liveness is None:
         return "not_checked"
     return "passed" if liveness.passed else "failed"
-
