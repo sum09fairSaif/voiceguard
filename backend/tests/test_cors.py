@@ -1,9 +1,20 @@
 import pytest
 from fastapi.testclient import TestClient
 
+import config
 from main import app
 
 client = TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def production_origins(monkeypatch):
+    origins = ["https://voiceguard-nu.vercel.app"]
+    monkeypatch.setattr(config, "ALLOWED_ORIGINS", origins)
+    for middleware in app.user_middleware:
+        if middleware.cls.__name__ == "CORSMiddleware":
+            monkeypatch.setitem(middleware.kwargs, "allow_origins", origins)
+            break
 
 
 def preflight(origin: str):

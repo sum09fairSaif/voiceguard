@@ -8,12 +8,15 @@ from fastapi.responses import JSONResponse
 from pymongo.errors import PyMongoError
 
 import config
+from body_limit import BodyLimitMiddleware
 from email_sender import EmailUnavailable
 from identity_check import IdentityUnavailable
 from rate_limit import RateLimited
 from routers import account, auth, challenge, enroll, verify
+from security_headers import SecurityHeadersMiddleware
 from session_cookie import OriginCheckMiddleware
 from transcription import AudioNotUnderstood, TranscriptionUnavailable
+from transcription_budget import BudgetUsedUp
 from voice_attempts import VoiceLockedOut
 
 # uvicorn only sets up its own loggers, so without this our info lines
@@ -22,7 +25,26 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 
 logger = logging.getLogger("voiceguard")
 
-app = FastAPI(title="VoiceGuard API", version="0.1.0")
+
+def docs_settings(enabled: bool) -> dict:
+    """Where FastAPI serves its docs; None turns each one off (404)."""
+    if enabled:
+        return {"docs_url": "/docs", "redoc_url": "/redoc", "openapi_url": "/openapi.json"}
+    return {"docs_url": None, "redoc_url": None, "openapi_url": None}
+
+
+class VoiceGuardAPI(FastAPI):
+    def build_middleware_stack(self):
+        # Security headers go outside everything, Starlette's own error
+        # handler included, so even an unexpected 500 carries them.
+        return SecurityHeadersMiddleware(super().build_middleware_stack())
+
+
+app = VoiceGuardAPI(title="VoiceGuard API", version="0.1.0", **docs_settings(config.DOCS_ENABLED))
+
+# Refuses oversized request bodies before anything reads them. Added before
+# CORS so CORS wraps it: the frontend can read the 413 like any other error.
+app.add_middleware(BodyLimitMiddleware)
 
 # Requests that change something must come from our own pages
 # (session_cookie.py): the cross-site request forgery check. Added before
@@ -120,6 +142,17 @@ def voice_locked_out(request: Request, exc: VoiceLockedOut) -> JSONResponse:
     )
 
 
+@app.exception_handler(BudgetUsedUp)
+def budget_used_up(request: Request, exc: BudgetUsedUp) -> JSONResponse:
+    # Logged so someone can raise the budget if real users hit it.
+    logger.warning("transcription_budget_used_up path=%s", request.url.path)
+    return JSONResponse(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        content={"detail": "Voice checks are busy right now. Please try again later."},
+        headers={"Retry-After": str(exc.retry_after)},
+    )
+
+
 @app.exception_handler(RateLimited)
 def rate_limited(request: Request, exc: RateLimited) -> JSONResponse:
     minutes = math.ceil(exc.retry_after / 60)
@@ -131,6 +164,7 @@ def rate_limited(request: Request, exc: RateLimited) -> JSONResponse:
     )
 
 
-@app.get("/health")
+# HEAD too: uptime monitors often check with HEAD.
+@app.api_route("/health", methods=["GET", "HEAD"])
 def health():
     return {"status": "ok", "service": "voiceguard-api"}

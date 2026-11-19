@@ -19,9 +19,10 @@ SIGNUP = {"full_name": "Sam Doe", "email": EMAIL, "password": PASSWORD}
 
 
 @pytest.fixture
-def browser(client):
+def browser(client, monkeypatch):
     """Like a browser on our own page: HTTPS (Secure cookies are only sent
     over it), keeps cookies, and says where each request comes from."""
+    monkeypatch.setattr(config, "SESSION_COOKIE_SECURE", True)
     return TestClient(app, base_url="https://testserver", headers={"Origin": OURS})
 
 
