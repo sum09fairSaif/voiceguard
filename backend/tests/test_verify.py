@@ -938,6 +938,28 @@ def details_hidden(monkeypatch):
     monkeypatch.setattr(config, "VERIFY_CHECK_DETAILS", False)
 
 
+def test_details_are_hidden_unless_switched_on():
+    # A fresh interpreter without the setting: the live server hides them
+    # unless VERIFY_CHECK_DETAILS=true is set on purpose.
+    import os
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    env = {k: v for k, v in os.environ.items() if k != "VERIFY_CHECK_DETAILS"}
+    backend = Path(__file__).resolve().parent.parent
+    shown = subprocess.run(
+        [sys.executable, "-c", "import config; print(config.VERIFY_CHECK_DETAILS)"],
+        cwd=backend,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+
+    assert shown == "False"
+
+
 HIDDEN_FIELDS = ("content", "identity", "liveness")
 
 
