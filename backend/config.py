@@ -35,6 +35,17 @@ SIGNUPS_ENABLED = os.getenv("SIGNUPS_ENABLED", "true").strip().lower() != "false
 VOICE_CHECKS_ENABLED = os.getenv("VOICE_CHECKS_ENABLED", "true").strip().lower() != "false"
 ENROLLMENT_ENABLED = os.getenv("ENROLLMENT_ENABLED", "true").strip().lower() != "false"
 
+
+def is_true(value: str) -> bool:
+    """Only the word "true" (any case, spaces ignored) turns a switch on."""
+    return value.strip().lower() == "true"
+
+
+# The interactive API docs (/docs, /redoc, /openapi.json). Handy locally,
+# but in production they'd hand anyone a map of every route, so off unless
+# set to true.
+DOCS_ENABLED = is_true(os.getenv("DOCS_ENABLED", ""))
+
 JWT_SECRET = os.getenv("JWT_SECRET", "")
 JWT_ALGORITHM = "HS256"
 # Who issues our tokens and who they're for: a token minted for anything
