@@ -37,6 +37,17 @@ if AUDIT_RETENTION_DAYS <= 0:
 POSTHOG_API_KEY = os.getenv("POSTHOG_API_KEY", "").strip()
 POSTHOG_HOST = os.getenv("POSTHOG_HOST", "https://us.i.posthog.com").strip()
 
+
+def is_true(value: str) -> bool:
+    """Only the word "true" (any case, spaces ignored) turns a switch on."""
+    return value.strip().lower() == "true"
+
+
+# The interactive API docs (/docs, /redoc, /openapi.json). Handy locally,
+# but in production they'd hand anyone a map of every route, so off unless
+# set to true.
+DOCS_ENABLED = is_true(os.getenv("DOCS_ENABLED", ""))
+
 JWT_SECRET = os.getenv("JWT_SECRET", "")
 JWT_ALGORITHM = "HS256"
 # Who issues our tokens and who they're for: a token minted for anything
