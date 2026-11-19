@@ -2,7 +2,7 @@ import logging
 from datetime import UTC, datetime
 
 from bson import ObjectId
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
 from pymongo.collection import Collection
 from pymongo.errors import PyMongoError
 
@@ -21,10 +21,11 @@ from decision import decide
 from embedding import Embedder, get_embedder
 from identity_check import IdentityResult, IdentityUnavailable, check_identity
 from liveness_check import LivenessResult, check_liveness
-from rate_limit import count_request
+from rate_limit import count_client_request, count_request
 from schemas import ContentScore, VerifyResponse
 from security import create_verified_token, get_current_user_id, get_token_claims
 from transcription import Transcriber, get_transcriber, transcribe_and_log
+from transcription_budget import release_transcription, reserve_transcription
 from voice_attempts import ensure_not_locked, record_outcome
 from voiceprints import load_voiceprint
 
@@ -44,6 +45,7 @@ GENERAL_REASONS = {
 
 @router.post("/verify", response_model=VerifyResponse)
 def verify(
+    request: Request,
     audio: UploadFile = File(...),
     attempt_id: str = Form(...),
     user_id: str = Depends(get_current_user_id),
@@ -59,7 +61,9 @@ def verify(
     # Checked before the passage is used up, so a refused request doesn't
     # cost the user their passage.
     ensure_not_locked(voice_failures, user_id)
+    count_client_request(rate_limits, "verify", request, config.VERIFY_CLIENT_LIMIT)
     count_request(rate_limits, "verify", user_id, config.VERIFY_RATE_LIMIT, config.RATE_LIMIT_WINDOW_SECONDS)
+    count_request(rate_limits, "verify-day", user_id, config.VERIFY_DAILY_LIMIT, 24 * 3600)
 
     recording, extension = read_recording(audio)
 
@@ -69,10 +73,19 @@ def verify(
     if voiceprint is not None and embed is None:
         raise IdentityUnavailable("EMBEDDING_SERVICE_URL or EMBEDDING_SERVICE_TOKEN is not set.")
 
+    # Before the passage is used up, so a spent budget doesn't cost the
+    # user their passage. Given back below if no paid call follows.
+    reserve_transcription(rate_limits)
+
     # Use up the attempt before transcribing, so a passage can never be
     # checked twice, even if transcription fails part-way.
-    passage = use_challenge(challenges, attempt_id, user_id)
+    try:
+        passage = use_challenge(challenges, attempt_id, user_id)
+    except Exception:
+        release_transcription(rate_limits)
+        raise
     if passage is None:
+        release_transcription(rate_limits)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="This passage has expired or was already used. Please get a new one.",

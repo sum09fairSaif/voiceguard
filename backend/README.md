@@ -54,7 +54,11 @@ ruff check .
 - `config.py`: every setting, read from the environment with defaults
 - `db.py`: MongoDB collections and their indexes
 - One module per check or rule: `content_check.py`, `identity_check.py`,
-  `decision.py`, `rate_limit.py`, `login_lockout.py`, `enrollment.py`
+  `decision.py`, `rate_limit.py`, `login_lockout.py`, `enrollment.py`,
+  `transcription_budget.py`
+- `client_address.py`: which client sent a request (`CLIENT_IP_SOURCE`), for
+  per-client limits. Set `CLIENT_IP_SOURCE=peer` locally; the live default
+  reads Cloudflare's `CF-Connecting-IP`
 - `transcription.py` (OpenAI Whisper) and `embedding.py` (model service):
   calls to outside services
 - `scripts/save_voiceprint.py`: dev tool to give a test account a voiceprint

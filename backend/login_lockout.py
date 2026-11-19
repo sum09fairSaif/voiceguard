@@ -1,6 +1,6 @@
 """Counting failures and locking out after too many: wrong passwords, by
-email (routers/auth.py), and rejected voice checks, by user id
-(voice_attempts.py). Each kind uses its own collection."""
+client + email and by email alone (routers/auth.py), and rejected voice
+checks, by user id (voice_attempts.py). Each kind uses its own collection."""
 
 import hashlib
 import math
