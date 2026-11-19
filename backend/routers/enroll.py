@@ -39,6 +39,7 @@ from rate_limit import count_client_request, count_request
 from schemas import EnrollmentStatus
 from security import get_current_user_id, get_token_claims
 from transcription import AudioNotUnderstood, Transcriber, get_transcriber, transcribe_and_log
+from transcription_budget import reserve_transcription
 from voiceprints import build_voiceprint, has_voiceprint, save_voiceprint
 
 router = APIRouter(prefix="/api/enroll", tags=["enroll"])
@@ -140,7 +141,11 @@ def add_enrollment_sample(
     content = None
     if problem is None:
         # The words are checked last: speech-to-text is a paid call, so a
-        # sample already turned away for its sound doesn't use one.
+        # sample already turned away for its sound doesn't use one. It counts
+        # against the same daily budget as voice checks (#151); a spent
+        # budget is a 503 "try later", and nothing about the sample is kept.
+        # Taken right before the call, so there's nothing to give back.
+        reserve_transcription(rate_limits)
         try:
             transcript = transcribe_and_log(
                 transcribe, recording, f"sample.{extension}", user_id, "enroll", logger
