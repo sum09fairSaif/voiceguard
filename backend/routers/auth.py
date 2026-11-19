@@ -10,6 +10,7 @@ from pymongo.collection import Collection
 from pymongo.errors import DuplicateKeyError
 
 import config
+import switches
 from audit import track
 from client_address import client_key
 from db import (
@@ -57,7 +58,12 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 logger = logging.getLogger("voiceguard.auth")
 
 
-@router.post("/signup", response_model=SignupResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/signup",
+    response_model=SignupResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(switches.require("signups"))],
+)
 def signup(
     body: SignupRequest,
     response: Response,

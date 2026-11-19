@@ -7,6 +7,7 @@ from pymongo.collection import Collection
 from pymongo.errors import PyMongoError
 
 import config
+import switches
 from audio_upload import read_recording
 from audit import track
 from challenges import use_challenge
@@ -49,9 +50,9 @@ GENERAL_REASONS = {
 @router.post(
     "/verify",
     response_model=VerifyResponse,
-    # Before the paid speech-to-text call: no voice checks until the email
-    # address is confirmed (#110).
-    dependencies=[Depends(require_verified_email)],
+    # Paused first. Then, before the paid speech-to-text call: no voice
+    # checks until the email address is confirmed (#110).
+    dependencies=[Depends(switches.require("voice_checks")), Depends(require_verified_email)],
 )
 def verify(
     response: Response,

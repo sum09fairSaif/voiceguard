@@ -32,6 +32,12 @@ ALLOWED_ORIGINS = [
 # the sign-in cookie never reaches the API from them (#102).
 ALLOWED_ORIGIN_REGEX = os.getenv("ALLOWED_ORIGIN_REGEX", r"https://voiceguard-[a-z0-9-]+-voice-guard2\.vercel\.app") or None
 
+# Backups for the pause switches (switches.py): "false" forces one off,
+# whatever the database says. Normally the database switch is used.
+SIGNUPS_ENABLED = os.getenv("SIGNUPS_ENABLED", "true").strip().lower() != "false"
+VOICE_CHECKS_ENABLED = os.getenv("VOICE_CHECKS_ENABLED", "true").strip().lower() != "false"
+ENROLLMENT_ENABLED = os.getenv("ENROLLMENT_ENABLED", "true").strip().lower() != "false"
+
 # Security events (audit.py): kept this many days in our database, and also
 # sent to PostHog when a project key is set (nothing is sent without one).
 AUDIT_RETENTION_DAYS = int(os.getenv("AUDIT_RETENTION_DAYS", "30"))

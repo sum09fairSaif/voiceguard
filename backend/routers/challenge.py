@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, Request, status
 from pymongo.collection import Collection
 
 import config
+import switches
 from challenges import create_challenge
 from db import get_challenges_collection, get_rate_limits_collection, get_voice_failures_collection
 from email_verification import require_verified_email
@@ -17,8 +18,9 @@ router = APIRouter(prefix="/api", tags=["challenge"])
     "/challenge",
     response_model=ChallengeResponse,
     status_code=status.HTTP_201_CREATED,
-    # No voice checks until the email address is confirmed (#110).
-    dependencies=[Depends(require_verified_email)],
+    # Paused first; then no voice checks until the email address is
+    # confirmed (#110).
+    dependencies=[Depends(switches.require("voice_checks")), Depends(require_verified_email)],
 )
 def new_challenge(
     request: Request,
