@@ -8,6 +8,7 @@ from pymongo.collection import Collection
 from pymongo.errors import DuplicateKeyError
 
 import config
+from audit import track
 from client_address import client_key
 from db import get_login_failures_collection, get_rate_limits_collection, get_users_collection
 from login_lockout import clear_failures, record_failure, seconds_locked
@@ -56,6 +57,7 @@ def signup(
             detail="An account with this email already exists.",
         )
 
+    track("signup", str(user_id))
     return SignupResponse(user=_public(user), access_token=token)
 
 
@@ -83,6 +85,7 @@ def login(
     # it's locked.
     locked = max(seconds_locked(login_failures, this_client), seconds_locked(login_failures, everyone))
     if locked:
+        track("login_failed", reason="locked")
         raise _locked_out(locked)
 
     user = users.find_one({"email": email})
@@ -99,9 +102,13 @@ def login(
             locked_for_everyone,
             record_failure(login_failures, this_client, config.LOGIN_MAX_FAILURES, window, lockout),
         )
+        # Our own record may say which it was; the answer never does.
+        why = "wrong_password" if user else "unknown_account"
         if locked:
             logger.info("login_locked user=%s", user["_id"] if user else "-")
+            track("login_locked", str(user["_id"]) if user else None, reason=why)
             raise _locked_out(locked)
+        track("login_failed", str(user["_id"]) if user else None, reason=why)
         # Same words whether the email or the password was wrong.
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -113,6 +120,7 @@ def login(
     # guesses, so the owner signing in doesn't reset a guesser's progress.
     clear_failures(login_failures, this_client)
     logger.info("login user=%s", user["_id"])
+    track("login_succeeded", str(user["_id"]))
     return LoginResponse(user=_public(user), access_token=token)
 
 
@@ -152,3 +160,4 @@ def logout(
     voice-verified one stop working at once."""
     revoke(revoked(), claims["sid"])
     logger.info("logout user=%s", claims["sub"])
+    track("logout", claims["sub"])

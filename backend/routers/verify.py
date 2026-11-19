@@ -8,6 +8,7 @@ from pymongo.errors import PyMongoError
 
 import config
 from audio_upload import read_recording
+from audit import track
 from challenges import use_challenge
 from content_check import check_content
 from db import (
@@ -134,6 +135,10 @@ def verify(
             content.matched,
             content.total,
         )
+    # Which check decided it, as a word: never a score.
+    track(f"voice_check_{result.decision}", user_id, reason=result.check)
+    if result.decision == "rejected" and attempts_left == 0:
+        track("voice_checks_paused", user_id)
     access_token = None
     if result.decision == "approved":
         # Only an approval opens the account: password, voice and liveness.

@@ -62,6 +62,11 @@ as soon as the voiceprint is built or the checks have run.
 - **Passwords (NIST SP 800-63B-4):** at least 15 characters, no rules about
   which kinds of character, and never a common or breached password, the
   person's own email name, or a simple repeat or sequence.
+- **Security events and uptime:** sign-ups, sign-ins, lockouts, enrollment,
+  voice-check decisions and sign-outs are recorded for 30 days without personal
+  data (user ids hashed with a server key, no emails, addresses or scores), and also sent to
+  PostHog when `POSTHOG_API_KEY` is set. A scheduled check opens an
+  "API is down" issue when `/health` stops answering.
 - **Abuse limits:** limits per client and per account on every route, so one
   sender is stopped without affecting anyone else. 5 wrong passwords within
   15 minutes lock that client out of the account for 30 minutes (20 from
