@@ -5,6 +5,7 @@ import pytest
 from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
 
+import audit
 import config
 from db import (
     get_challenges_collection,
@@ -99,6 +100,21 @@ def no_real_revocation_store(revoked):
     app.dependency_overrides[revoked_sessions] = lambda: (lambda: revoked)
     yield
     app.dependency_overrides.pop(revoked_sessions, None)
+
+
+@pytest.fixture
+def audit_events(monkeypatch):
+    # Security events go to an in-memory collection; PostHog is never called.
+    collection = mongomock.MongoClient()["voiceguard_test"]["audit_events"]
+    collection.create_index("expires_at", expireAfterSeconds=0)
+    monkeypatch.setattr(audit, "_collection", lambda: collection)
+    monkeypatch.setattr(config, "POSTHOG_API_KEY", "")
+    return collection
+
+
+@pytest.fixture(autouse=True)
+def _audit_in_memory(audit_events):
+    yield
 
 
 @pytest.fixture

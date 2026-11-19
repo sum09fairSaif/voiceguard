@@ -3,11 +3,15 @@ import math
 from datetime import UTC, datetime
 
 from bson import ObjectId
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi.responses import JSONResponse
+from fastapi.security import HTTPAuthorizationCredentials
 from pymongo.collection import Collection
 from pymongo.errors import DuplicateKeyError
 
 import config
+from audit import track
+from client_address import client_key
 from db import (
     get_email_codes_collection,
     get_login_failures_collection,
@@ -26,7 +30,7 @@ from email_verification import (
     unverified_fields,
 )
 from login_lockout import clear_failures, record_failure, seconds_locked
-from rate_limit import RateLimited, count_request
+from rate_limit import RateLimited, count_client_request, count_request
 from schemas import (
     EmailCodeRequest,
     EmailVerifiedResponse,
@@ -36,7 +40,16 @@ from schemas import (
     SignupResponse,
     UserPublic,
 )
-from security import check_password, create_access_token, get_token_claims, hash_password
+from security import (
+    _bearer,
+    check_password,
+    claims_for,
+    create_access_token,
+    get_token_claims,
+    hash_password,
+    request_token,
+)
+from session_cookie import clear_session_cookie, set_session_cookie
 from sessions import revoke, revoked_sessions
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -47,12 +60,16 @@ logger = logging.getLogger("voiceguard.auth")
 @router.post("/signup", response_model=SignupResponse, status_code=status.HTTP_201_CREATED)
 def signup(
     body: SignupRequest,
+    response: Response,
+    request: Request,
     users: Collection = Depends(get_users_collection),
     rate_limits: Collection = Depends(get_rate_limits_collection),
     codes: Collection = Depends(get_email_codes_collection),
     send: EmailSender | None = Depends(get_optional_email_sender),
 ) -> SignupResponse:
-    # One count for everyone (see config.SIGNUP_RATE_LIMIT).
+    # Per client first, so one sender is stopped long before the shared
+    # backstop (see config.SIGNUP_RATE_LIMIT) could affect anyone else.
+    count_client_request(rate_limits, "signup", request, config.SIGNUP_CLIENT_LIMIT)
     count_request(rate_limits, "signup", "all", config.SIGNUP_RATE_LIMIT, config.RATE_LIMIT_WINDOW_SECONDS)
 
     user_id = ObjectId()
@@ -91,6 +108,9 @@ def signup(
             # Someone else signed up with it at the same moment.
             raise _email_taken()
 
+    count_client_request(rate_limits, "signup", request, config.SIGNUP_CLIENT_LIMIT)
+    count_request(rate_limits, "signup", "all", config.SIGNUP_RATE_LIMIT, config.RATE_LIMIT_WINDOW_SECONDS)
+
     if verify_email:
         # The account exists either way; if the email can't go now, the
         # user asks for it again from the "check your email" screen.
@@ -98,7 +118,8 @@ def signup(
             _send_code(codes, rate_limits, send, str(user_id), email)
         except (EmailUnavailable, RateLimited) as exc:
             logger.warning("email_code_not_sent user=%s reason=%s", user_id, type(exc).__name__)
-    return SignupResponse(user=_public(user), access_token=token)
+    track("signup", str(user_id))
+    return SignupResponse(user=_public(user), access_token=_issue(response, token))
 
 
 def _email_taken() -> HTTPException:
@@ -199,30 +220,52 @@ def _already_confirmed() -> HTTPException:
 @router.post("/login", response_model=LoginResponse)
 def login(
     body: LoginRequest,
+    response: Response,
+    request: Request,
     users: Collection = Depends(get_users_collection),
     login_failures: Collection = Depends(get_login_failures_collection),
+    rate_limits: Collection = Depends(get_rate_limits_collection),
 ) -> LoginResponse:
+    # Every attempt counts, whichever emails it tries, so one client can't
+    # work through a list of accounts.
+    count_client_request(rate_limits, "login", request, config.LOGIN_CLIENT_LIMIT)
     email = body.email.lower()
+    # Two counts per email: this client's failures (a lock only for this
+    # client), and everyone's together (the ceiling, a lock for everyone).
+    # A stranger's guesses alone can't lock the owner out, but guessing
+    # spread across many addresses still stops.
+    # An unknown client (no trusted address) falls back to one shared count
+    # for the email: the stricter old rule, safe against guessing.
+    this_client = f"client:{client_key(request) or 'unknown'}:{email}"
+    everyone = f"account:{email}"
     # A locked email isn't even checked, so guessing can't go on while
     # it's locked.
-    locked = seconds_locked(login_failures, email)
+    locked = max(seconds_locked(login_failures, this_client), seconds_locked(login_failures, everyone))
     if locked:
+        track("login_failed", reason="locked")
         raise _locked_out(locked)
 
     user = users.find_one({"email": email})
     if not check_password(body.password, user["password_hash"] if user else None):
         # Emails with no account are counted and locked the same way, so
         # the answers never give away which emails have accounts.
-        locked = record_failure(
-            login_failures,
-            email,
-            config.LOGIN_MAX_FAILURES,
-            config.LOGIN_FAILURE_WINDOW_SECONDS,
-            config.LOGIN_LOCKOUT_SECONDS,
+        window, lockout = config.LOGIN_FAILURE_WINDOW_SECONDS, config.LOGIN_LOCKOUT_SECONDS
+        # The account-wide count first: if the second write fails, the
+        # ceiling has still counted the guess.
+        locked_for_everyone = record_failure(
+            login_failures, everyone, config.LOGIN_ACCOUNT_MAX_FAILURES, window, lockout
         )
+        locked = max(
+            locked_for_everyone,
+            record_failure(login_failures, this_client, config.LOGIN_MAX_FAILURES, window, lockout),
+        )
+        # Our own record may say which it was; the answer never does.
+        why = "wrong_password" if user else "unknown_account"
         if locked:
             logger.info("login_locked user=%s", user["_id"] if user else "-")
+            track("login_locked", str(user["_id"]) if user else None, reason=why)
             raise _locked_out(locked)
+        track("login_failed", str(user["_id"]) if user else None, reason=why)
         # Same words whether the email or the password was wrong.
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -230,9 +273,19 @@ def login(
         )
 
     token = create_access_token(str(user["_id"]), source="login")
-    clear_failures(login_failures, email)
+    # Only this client's count: the ceiling keeps counting other clients'
+    # guesses, so the owner signing in doesn't reset a guesser's progress.
+    clear_failures(login_failures, this_client)
     logger.info("login user=%s", user["_id"])
-    return LoginResponse(user=_public(user), access_token=token)
+    track("login_succeeded", str(user["_id"]))
+    return LoginResponse(user=_public(user), access_token=_issue(response, token))
+
+
+def _issue(response: Response, token: str) -> str | None:
+    """Set the new limited token as the HttpOnly cookie; return it for the
+    body only while TOKEN_IN_RESPONSE_BODY is on."""
+    set_session_cookie(response, token, config.JWT_EXPIRE_MINUTES)
+    return token if config.TOKEN_IN_RESPONSE_BODY else None
 
 
 def _public(user: dict) -> UserPublic:
@@ -265,10 +318,25 @@ def _locked_out(seconds: int) -> HTTPException:
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
 def logout(
-    claims: dict = Depends(get_token_claims),
+    request: Request,
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
     revoked=Depends(revoked_sessions),
-) -> None:
+) -> Response:
     """End this sign-in on the server: both its limited token and any
-    voice-verified one stop working at once."""
+    voice-verified one stop working at once. The cookie is cleared whatever
+    happens, even for a token that has already expired or been signed out."""
+    token = request_token(request, credentials)
+    try:
+        if token is None:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Please sign in first.")
+        claims = claims_for(token, revoked)
+    except HTTPException as exc:
+        refused = JSONResponse(status_code=exc.status_code, content={"detail": exc.detail}, headers=exc.headers)
+        clear_session_cookie(refused)
+        return refused
     revoke(revoked(), claims["sid"])
     logger.info("logout user=%s", claims["sub"])
+    track("logout", claims["sub"])
+    done = Response(status_code=status.HTTP_204_NO_CONTENT)
+    clear_session_cookie(done)
+    return done

@@ -20,16 +20,62 @@ MONGO_DB_NAME = os.getenv("MONGO_DB_NAME", "voiceguard")
 # The default covers local development and the live frontend.
 ALLOWED_ORIGINS = [
     origin.strip().rstrip("/")
-    for origin in os.getenv("ALLOWED_ORIGINS", "http://localhost:5173,https://voiceguard-nu.vercel.app").split(",")
+    # Production only by default; local development adds http://localhost:5173
+    # in its .env (see .env.example). An allowed origin can send requests
+    # that carry the sign-in cookie, so the list is kept to our own pages.
+    for origin in os.getenv("ALLOWED_ORIGINS", "https://voiceguard-nu.vercel.app").split(",")
     if origin.strip()
 ]
 # Also allowed: Vercel's preview deployments of the frontend (one per
 # branch and commit), whose addresses all end in our Vercel team's name.
-# Set to empty to turn off. Sign-in tokens travel in a header, not a
-# cookie, so CORS is a second line of defence here, not the only one.
+# Set to empty to turn off. Preview addresses aren't on our own domain, so
+# the sign-in cookie never reaches the API from them (#102).
 ALLOWED_ORIGIN_REGEX = os.getenv("ALLOWED_ORIGIN_REGEX", r"https://voiceguard-[a-z0-9-]+-voice-guard2\.vercel\.app") or None
 
+# Security events (audit.py): kept this many days in our database, and also
+# sent to PostHog when a project key is set (nothing is sent without one).
+AUDIT_RETENTION_DAYS = int(os.getenv("AUDIT_RETENTION_DAYS", "30"))
+if AUDIT_RETENTION_DAYS <= 0:
+    raise RuntimeError("AUDIT_RETENTION_DAYS must be more than 0.")
+POSTHOG_API_KEY = os.getenv("POSTHOG_API_KEY", "").strip()
+POSTHOG_HOST = os.getenv("POSTHOG_HOST", "https://us.i.posthog.com").strip()
+
+
+# Where the client's address comes from, for per-client limits (see
+# client_address.py): "cf-connecting-ip" (set by Cloudflare, in front of
+# Render), "x-forwarded-for-last" (the entry our last proxy added; only once
+# the live check shows it's the client, not a proxy) or "peer" (the direct
+# connection; local development). Confirm live after changing.
+def client_ip_source(value: str) -> str:
+    source = value.strip().lower()
+    if source not in ("cf-connecting-ip", "x-forwarded-for-last", "peer"):
+        raise RuntimeError("CLIENT_IP_SOURCE must be cf-connecting-ip, x-forwarded-for-last or peer.")
+    return source
+
+
+CLIENT_IP_SOURCE = client_ip_source(os.getenv("CLIENT_IP_SOURCE", "cf-connecting-ip"))
+
+
+def is_true(value: str) -> bool:
+    """Only the word "true" (any case, spaces ignored) turns a switch on."""
+    return value.strip().lower() == "true"
+
+
+# The interactive API docs (/docs, /redoc, /openapi.json). Handy locally,
+# but in production they'd hand anyone a map of every route, so off unless
+# set to true.
+DOCS_ENABLED = is_true(os.getenv("DOCS_ENABLED", ""))
+
 JWT_SECRET = os.getenv("JWT_SECRET", "")
+# The sign-in cookie (session_cookie.py). Secure (HTTPS only) unless set to
+# false, which local development in Safari needs: Chrome and Firefox accept
+# Secure cookies from http://localhost.
+SESSION_COOKIE_NAME = "voiceguard_session"
+SESSION_COOKIE_SECURE = os.getenv("SESSION_COOKIE_SECURE", "true").strip().lower() != "false"
+# While the frontend still stores the token itself, it's returned in the
+# response body as well as the cookie. Set to false once the frontend uses the
+# cookie only: then no page script ever sees the token (#102).
+TOKEN_IN_RESPONSE_BODY = os.getenv("TOKEN_IN_RESPONSE_BODY", "true").strip().lower() != "false"
 JWT_ALGORITHM = "HS256"
 # Who issues our tokens and who they're for: a token minted for anything
 # else (or before these were added) is refused.
@@ -44,11 +90,18 @@ VERIFIED_TOKEN_MINUTES = int(os.getenv("VERIFIED_TOKEN_MINUTES", "15"))
 if VERIFIED_TOKEN_MINUTES <= 0:
     raise RuntimeError("VERIFIED_TOKEN_MINUTES must be more than 0.")
 
-# Sign-in lockout: this many wrong passwords for one email within the
-# window locks that email out for the lockout time.
+# Sign-in lockout: this many wrong passwords for one email from one client
+# within the window locks that client out of that email for the lockout
+# time. Other clients (e.g. the account's owner) can still sign in.
 LOGIN_MAX_FAILURES = int(os.getenv("LOGIN_MAX_FAILURES", "5"))
+# The ceiling: this many wrong passwords for one email from all clients
+# together locks the email for everyone, so guessing spread across many
+# addresses still stops.
+LOGIN_ACCOUNT_MAX_FAILURES = int(os.getenv("LOGIN_ACCOUNT_MAX_FAILURES", "20"))
 LOGIN_FAILURE_WINDOW_SECONDS = int(os.getenv("LOGIN_FAILURE_WINDOW_SECONDS", "900"))
 LOGIN_LOCKOUT_SECONDS = int(os.getenv("LOGIN_LOCKOUT_SECONDS", "1800"))
+if LOGIN_ACCOUNT_MAX_FAILURES < LOGIN_MAX_FAILURES:
+    raise RuntimeError("LOGIN_ACCOUNT_MAX_FAILURES must be at least LOGIN_MAX_FAILURES.")
 if LOGIN_MAX_FAILURES <= 0 or LOGIN_FAILURE_WINDOW_SECONDS <= 0 or LOGIN_LOCKOUT_SECONDS <= 0:
     raise RuntimeError("LOGIN_MAX_FAILURES, LOGIN_FAILURE_WINDOW_SECONDS and LOGIN_LOCKOUT_SECONDS must be more than 0.")
 
@@ -153,12 +206,36 @@ if VOICE_MAX_FAILURES <= 0 or VOICE_FAILURE_WINDOW_SECONDS <= 0 or VOICE_LOCKOUT
 RATE_LIMIT_WINDOW_SECONDS = int(os.getenv("RATE_LIMIT_WINDOW_SECONDS", "3600"))
 CHALLENGE_RATE_LIMIT = int(os.getenv("CHALLENGE_RATE_LIMIT", "20"))
 VERIFY_RATE_LIMIT = int(os.getenv("VERIFY_RATE_LIMIT", "10"))
-# New accounts per window, from everyone together. Each account gets its
-# own voice-check allowance above, so without this one person could open
-# many accounts to multiply the paid calls. Counted across everyone, not
-# per address: behind Render's proxy the caller's address is either the
-# proxy's or taken from a header that can be faked.
-SIGNUP_RATE_LIMIT = int(os.getenv("SIGNUP_RATE_LIMIT", "30"))
+# Voice checks per account per day (UTC), so one account can't use most of
+# the shared TRANSCRIPTION_DAILY_BUDGET: at 10 an hour it could otherwise make
+# 240 a day. With 30, spending the whole budget takes 10+ accounts, which the
+# per-client signup limit slows down.
+VERIFY_DAILY_LIMIT = int(os.getenv("VERIFY_DAILY_LIMIT", "30"))
+if VERIFY_DAILY_LIMIT <= 0:
+    raise RuntimeError("VERIFY_DAILY_LIMIT must be more than 0.")
+# New accounts per window from everyone together: a backstop well above
+# normal use, in case client addresses turn out to be fakeable. Each account
+# gets its own voice-check allowance above, so without a cap one person could
+# open many accounts to multiply the paid calls.
+SIGNUP_RATE_LIMIT = int(os.getenv("SIGNUP_RATE_LIMIT", "100"))
+# Paid speech-to-text calls per day (UTC) from everyone together. Once spent,
+# voice checks answer 503 "try later" until midnight UTC, so a flood of
+# requests can't drain the prepaid credit.
+TRANSCRIPTION_DAILY_BUDGET = int(os.getenv("TRANSCRIPTION_DAILY_BUDGET", "300"))
+if TRANSCRIPTION_DAILY_BUDGET <= 0:
+    raise RuntimeError("TRANSCRIPTION_DAILY_BUDGET must be more than 0.")
+
+# Per-client limits (one address, see client_address.py), same window. They
+# stop one sender without affecting anyone else, alongside the per-account
+# limits above. A household or office shares one address, so they're set
+# well above one person's use.
+SIGNUP_CLIENT_LIMIT = int(os.getenv("SIGNUP_CLIENT_LIMIT", "5"))
+LOGIN_CLIENT_LIMIT = int(os.getenv("LOGIN_CLIENT_LIMIT", "30"))
+CHALLENGE_CLIENT_LIMIT = int(os.getenv("CHALLENGE_CLIENT_LIMIT", "60"))
+VERIFY_CLIENT_LIMIT = int(os.getenv("VERIFY_CLIENT_LIMIT", "30"))
+ENROLL_CLIENT_LIMIT = int(os.getenv("ENROLL_CLIENT_LIMIT", "60"))
+if min(SIGNUP_CLIENT_LIMIT, LOGIN_CLIENT_LIMIT, CHALLENGE_CLIENT_LIMIT, VERIFY_CLIENT_LIMIT, ENROLL_CLIENT_LIMIT) <= 0:
+    raise RuntimeError("The *_CLIENT_LIMIT settings must be more than 0.")
 if RATE_LIMIT_WINDOW_SECONDS <= 0 or CHALLENGE_RATE_LIMIT <= 0 or VERIFY_RATE_LIMIT <= 0 or SIGNUP_RATE_LIMIT <= 0:
     raise RuntimeError(
         "RATE_LIMIT_WINDOW_SECONDS, CHALLENGE_RATE_LIMIT, VERIFY_RATE_LIMIT and SIGNUP_RATE_LIMIT must be more than 0."

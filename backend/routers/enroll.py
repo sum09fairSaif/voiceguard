@@ -1,11 +1,12 @@
 import logging
 
 from bson import ObjectId
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 from pymongo.collection import Collection
 
 import config
 from audio_upload import read_recording
+from audit import track
 from content_check import ContentResult
 from db import (
     get_enroll_prompts_collection,
@@ -34,7 +35,7 @@ from enrollment import (
 )
 from enrollment_window import may_enroll
 from identity_check import IdentityUnavailable
-from rate_limit import count_request
+from rate_limit import count_client_request, count_request
 from schemas import EnrollmentStatus
 from security import get_current_user_id, get_token_claims
 from transcription import AudioNotUnderstood, Transcriber, get_transcriber, transcribe_and_log
@@ -84,6 +85,7 @@ def enrollment_status(
     dependencies=[Depends(require_verified_email)],
 )
 def add_enrollment_sample(
+    request: Request,
     audio: UploadFile = File(...),
     user_id: str = Depends(get_current_user_id),
     claims: dict = Depends(get_token_claims),
@@ -98,12 +100,16 @@ def add_enrollment_sample(
     # Replacing a voiceprint needs more than a password: otherwise anyone
     # who learned the password could swap in their own voice and pass the
     # voice check from then on.
+    # Per client first, refused or not: one address flooding uploads runs out
+    # of its own allowance (the owner, elsewhere, is unaffected).
+    count_client_request(rate_limits, "enroll", request, config.ENROLL_CLIENT_LIMIT)
     if has_voiceprint(voiceprints, user_id):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Your voice is already enrolled.")
     # Setting the voice needs more than a password, too: only the signup
     # session (or the one-off grace period) may do it. Checked before the
     # count, so refused requests can't use up the owner's allowance.
     if not _may_enroll(users, claims, user_id):
+        track("enroll_sample_refused", user_id, reason="not_signup_session")
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=NOT_NOW)
     count_request(rate_limits, "enroll", user_id, config.ENROLL_RATE_LIMIT, config.RATE_LIMIT_WINDOW_SECONDS)
 
@@ -120,6 +126,7 @@ def add_enrollment_sample(
         sample = embed(recording, f"sample.{extension}")
     except AudioNotUnderstood:
         _log(user_id, "unreadable", None, None, None)
+        track("enroll_sample_refused", user_id, reason="unreadable")
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=UNREADABLE_MESSAGE)
 
     if sample.speech_seconds is None or sample.clipped_share is None:
@@ -140,6 +147,7 @@ def add_enrollment_sample(
             )
         except AudioNotUnderstood:
             _log(user_id, "unreadable", sample, similarity, None)
+            track("enroll_sample_refused", user_id, reason="unreadable")
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=UNREADABLE_MESSAGE)
         content = use_prompt(prompts, user_id, transcript)
         if not content.passed:
@@ -149,7 +157,9 @@ def add_enrollment_sample(
 
     _log(user_id, problem or "accepted", sample, similarity, content)
     if problem is not None:
+        track("enroll_sample_refused", user_id, reason=problem)
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=RETRY_MESSAGES[problem])
+    track("enroll_sample_accepted", user_id)
 
     if add_sample(enrollments, user_id, sample.vector) >= config.ENROLL_SAMPLES_REQUIRED:
         samples = take_samples(enrollments, user_id)
@@ -158,6 +168,7 @@ def add_enrollment_sample(
             save_voiceprint(voiceprints, user_id, build_voiceprint(samples))
             discard_prompts(prompts, user_id)
             logger.info("enrolled user=%s samples=%d", user_id, len(samples))
+            track("enrolled", user_id)
     return _status(voiceprints, enrollments, prompts, user_id, True)  # already checked above
 
 
