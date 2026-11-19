@@ -1,13 +1,27 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, EmailStr, Field, ValidationInfo, field_validator
+from pydantic_core import PydanticCustomError
+
+from password_policy import MIN_LENGTH, password_problem
+
+# Why a password was refused, sent as the error's "type" so the screen can
+# say it in its own words (NIST: say why).
+PASSWORD_PROBLEMS = {
+    "common": "This password is too common or has appeared in a data breach.",
+    "personal": "This password is too close to your email or the app's name.",
+    "repetitive": "This password repeats the same characters or words.",
+    "sequential": "This password is a simple sequence, like letters or keys in order.",
+}
 
 
 class SignupRequest(BaseModel):
     full_name: str = Field(min_length=1, max_length=100)
     email: EmailStr
-    password: str = Field(min_length=8)
+    # NIST SP 800-63B-4: at least 15 when the password is one factor; no
+    # rules about which kinds of character it must contain.
+    password: str = Field(min_length=MIN_LENGTH)
 
     @field_validator("full_name")
     @classmethod
@@ -23,6 +37,15 @@ class SignupRequest(BaseModel):
         # bcrypt only reads the first 72 bytes of a password.
         if len(value.encode("utf-8")) > 72:
             raise ValueError("Password is too long (72 bytes at most).")
+        return value
+
+    @field_validator("password")
+    @classmethod
+    def password_not_known_bad(cls, value: str, info: ValidationInfo) -> str:
+        # The email is checked before the password, so it's here if valid.
+        problem = password_problem(value, str(info.data.get("email") or ""))
+        if problem:
+            raise PydanticCustomError(f"password_{problem}", PASSWORD_PROBLEMS[problem])
         return value
 
 
@@ -67,14 +90,19 @@ class VerifyResponse(BaseModel):
     # "approved" only when all three checks pass; "incomplete" when the
     # account has no voiceprint, so only the words could be checked.
     decision: Literal["approved", "rejected", "incomplete"]
+    # Says which check failed while VERIFY_CHECK_DETAILS is on; a general
+    # message that names no check while it's off (#112).
     reason: str
-    content: ContentScore
+    # content, identity and liveness are None while VERIFY_CHECK_DETAILS is
+    # off (#112): telling an attacker which check failed helps them tune a
+    # replay or voice clone. The server log still has them.
+    content: ContentScore | None
     # Pass or fail only. The similarity score stays on the server: handing
     # it back would let someone tune a voice clone until it scores high.
-    identity: Literal["passed", "failed", "not_enrolled"]
+    identity: Literal["passed", "failed", "not_enrolled"] | None
     # Pass or fail only, for the same reason. "not_checked" when the account
     # has no voiceprint: liveness runs in the same model-service call.
-    liveness: Literal["passed", "failed", "not_checked"]
+    liveness: Literal["passed", "failed", "not_checked"] | None
     # Rejected checks the user has left before voice checks lock. Back to
     # the maximum after an approval; not lowered by an "incomplete".
     attempts_left: int

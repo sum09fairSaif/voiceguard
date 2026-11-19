@@ -13,7 +13,7 @@ SIGNUP_URL = "/api/auth/signup"
 
 
 def new_user(**changes):
-    user = {"full_name": "Sam Lee", "email": "sam@example.com", "password": "correct-horse"}
+    user = {"full_name": "Sam Lee", "email": "sam@example.com", "password": "correct-horse-battery"}
     user.update(changes)
     return user
 
@@ -41,8 +41,8 @@ def test_signup_creates_account_and_returns_token(client, users):
         jwt.decode(body["access_token"], "a-different-key-" * 4, algorithms=[config.JWT_ALGORITHM])
 
     saved = users.find_one({"email": "sam@example.com"})
-    assert saved["password_hash"] != "correct-horse"
-    assert bcrypt.checkpw(b"correct-horse", saved["password_hash"].encode("utf-8"))
+    assert saved["password_hash"] != "correct-horse-battery"
+    assert bcrypt.checkpw(b"correct-horse-battery", saved["password_hash"].encode("utf-8"))
 
 
 def test_signup_stores_email_in_lowercase(client, users):

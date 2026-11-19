@@ -124,3 +124,25 @@ def test_the_noise_pack_holds_every_echo_and_noise(tmp_path):
 def test_no_noise_downloaded_means_no_noise_pack(tmp_path):
     assert not kaggle_pack.write_noise(tmp_path, tmp_path / "kaggle" / "noise")
     assert not (tmp_path / "kaggle" / "noise").exists()
+
+
+def test_kaggle_installs_the_versions_in_requirements(tmp_path):
+    out = tmp_path / "script"
+    here = kaggle_pack.Path(kaggle_pack.__file__).parent
+    kaggle_pack.write_script(here, out, "someone", "run1", 3, 7.5, resume=False)
+    script = (out / "run.py").read_text(encoding="utf-8")
+    requirements = (here / "requirements.txt").read_text(encoding="utf-8").splitlines()
+    for name in kaggle_pack.KAGGLE_INSTALLS:
+        pin = next(line.strip() for line in requirements if line.strip().startswith(f"{name}=="))
+        assert repr(pin) in script
+
+
+def test_kaggle_pins_reads_only_what_kaggle_needs(tmp_path):
+    requirements = tmp_path / "requirements.txt"
+    requirements.write_text("# a comment\nnumpy==1.26.4\nsoxr==1.1.0  # resamples\nSoundFile==0.14.0\n"
+                            "miniaudio==1.73\n", encoding="utf-8")
+    assert kaggle_pack.kaggle_pins(requirements) == ["soxr==1.1.0", "SoundFile==0.14.0", "miniaudio==1.73"]
+
+    requirements.write_text("soxr==1.1.0\nsoundfile>=0.13\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="soundfile, miniaudio"):
+        kaggle_pack.kaggle_pins(requirements)

@@ -55,3 +55,23 @@ def test_wrong_words_are_rejected_with_a_reason():
 
             assert result.decision == "rejected"
             assert result.reason == "The words didn't match the passage."
+
+
+# --- The deciding check, as recorded in the security log (#167) ----------------
+
+
+def test_each_result_names_the_check_that_decided_it():
+    assert decide(RIGHT_WORDS, SAME_VOICE, LIVE).check is None
+    assert decide(WRONG_WORDS, OTHER_VOICE, SPOOFED).check == "words"
+    assert decide(RIGHT_WORDS, SAME_VOICE, SPOOFED).check == "liveness"
+    assert decide(RIGHT_WORDS, OTHER_VOICE, LIVE).check == "voice"
+    assert decide(RIGHT_WORDS, None, None).check == "not_enrolled"
+    assert decide(RIGHT_WORDS, SAME_VOICE, None).check == "liveness_not_checked"
+
+
+def test_when_voice_and_liveness_both_fail_liveness_decides():
+    # The deepfake case: the reason shown and the check recorded agree.
+    result = decide(RIGHT_WORDS, OTHER_VOICE, SPOOFED)
+
+    assert result.reason == "The recording didn't sound like a live voice."
+    assert result.check == "liveness"
