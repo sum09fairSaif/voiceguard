@@ -56,6 +56,9 @@ WEIGHTS = "asvspoof5_aasist.pth"  # the starting point: the ASVspoof 5 baseline
 WEIGHTS_SOURCE = "external/asvspoof5/Baseline-AASIST/models/weights/AASIST/best.pth"
 NOISE_SOURCE = "augment/RIRS_NOISES"
 NOISE_PACK = "rirs_noises.tar.gz"
+# The uncompressed pack earlier versions made. Removed when packing, so an old
+# one can't be uploaded or picked up beside the new one.
+OLD_NOISE_PACK = "rirs_noises.tar"
 CODE = ["audio.py", "augment.py", "manifest.py", "score_baseline.py", "train.py", "training_data.py",
         "validate.py", "models/__init__.py", "models/aasist.py", "models/LICENSE-AASIST"]
 # What Kaggle has to install. It already has torch, numpy and pandas, and
@@ -134,21 +137,42 @@ def write_data(data_dir: Path, out: Path, workers: int | None) -> None:
     shutil.copyfile(data_dir / WEIGHTS_SOURCE, out / WEIGHTS)
 
     if not write_noise(data_dir, out):
-        print(f"no {data_dir / NOISE_SOURCE}: training on Kaggle will skip echo and noise "
+        print(f"no complete {data_dir / NOISE_SOURCE}: training on Kaggle will skip echo and noise "
               "unless the noise dataset is attached (see --noise-only)")
     gb = sum(f.stat().st_size for f in out.iterdir()) / 1e9
     print(f"{out}: {gb:.1f} GB, {index.groupby('split').size().to_dict()}")
 
 
+def noise_usable(root: Path) -> bool:
+    """Whether root holds both room echoes and noises, as augment.Augmenter
+    needs (a half-copied or emptied folder doesn't)."""
+    real = list(root.glob("real_rirs_isotropic_noises/*.wav"))
+    echoes = any((root / "simulated_rirs").rglob("*.wav")) or any("noise" not in p.name for p in real)
+    noises = any((root / "pointsource_noises").rglob("*.wav")) or any("noise" in p.name for p in real)
+    return echoes and noises
+
+
 def write_noise(data_dir: Path, out: Path) -> bool:
     """RIRS_NOISES as one gzipped tar file in out (3.6 GB of WAVs, about
-    1.3 GB packed). False if it hasn't been downloaded."""
+    1.3 GB packed). False, with no pack left in out, if it hasn't been
+    downloaded or isn't complete."""
     noise = data_dir / NOISE_SOURCE
-    if not noise.is_dir():
+    target = out / NOISE_PACK
+    partial = out / f".{NOISE_PACK}.partial"
+    # Whatever happens next, no older pack stays behind to be uploaded or used.
+    for old in (target, out / OLD_NOISE_PACK, partial):
+        old.unlink(missing_ok=True)
+    if not noise.is_dir() or not noise_usable(noise):
         return False
     out.mkdir(parents=True, exist_ok=True)
-    with tarfile.open(out / NOISE_PACK, "w:gz", compresslevel=6) as tar:
-        tar.add(noise, arcname="RIRS_NOISES")
+    # Written beside the final name and moved in only when complete, so an
+    # interrupted pack never leaves a corrupt archive under the real name.
+    try:
+        with tarfile.open(partial, "w:gz", compresslevel=6) as tar:
+            tar.add(noise, arcname="RIRS_NOISES")
+        partial.replace(target)
+    finally:
+        partial.unlink(missing_ok=True)
     return True
 
 
@@ -178,6 +202,17 @@ run's output is attached (kaggle_pack.py --resume), it carries on from there.
 import base64, glob, io, subprocess, sys, tarfile
 from pathlib import Path
 
+
+def noise_usable(root):
+    # Both room echoes and noises, as augment.Augmenter needs. Checked here,
+    # before train.py makes the run's folder, so a bad dataset can be fixed
+    # and the run started again under the same name.
+    root = Path(root)
+    real = list(root.glob("real_rirs_isotropic_noises/*.wav"))
+    echoes = any((root / "simulated_rirs").rglob("*.wav")) or any("noise" not in p.name for p in real)
+    noises = any((root / "pointsource_noises").rglob("*.wav")) or any("noise" in p.name for p in real)
+    return echoes and noises
+
 NAME, EPOCHS, MAX_HOURS, RESUME, NOISE = {name!r}, {epochs}, {max_hours}, {resume}, {noise}
 CODE = {code!r}
 
@@ -200,18 +235,21 @@ data = Path(find("manifest.processed.parquet")[0]).parent
 args = ["--name", NAME, "--data-dir", str(data), "--out-dir", str(work / "runs"), "--epochs", str(EPOCHS),
         "--max-hours", str(MAX_HOURS), "--workers", "4"]
 
-# The echoes and noises: unpacked if Kaggle unpacked them, or a tar file
-# (gzipped or not), in the data pack or in the separate noise dataset.
-noise = find("RIRS_NOISES/pointsource_noises")
-tars = find("rirs_noises.tar*")
+# The echoes and noises: unpacked if Kaggle unpacked them, or a tar file in
+# the data pack or the separate noise dataset. The gzipped pack is the
+# current one; a plain .tar is only used if there's no .tar.gz.
+noise = [Path(hit).parent for hit in find("RIRS_NOISES/pointsource_noises")]
+tars = find("rirs_noises.tar.gz") or find("rirs_noises.tar")
 if not noise and tars:
     with tarfile.open(tars[0]) as t:  # into /tmp: /kaggle/working is kept as output
         t.extractall("/tmp/noise", filter="data")
-    noise = ["/tmp/noise/RIRS_NOISES/pointsource_noises"]
+    noise = [Path("/tmp/noise/RIRS_NOISES")]
+noise = [root for root in noise if noise_usable(root)]
 if NOISE and not noise:
     # Asked for echo and noise: don't spend GPU hours on a run without them.
-    sys.exit("no RIRS_NOISES or rirs_noises.tar* in /kaggle/input; is the noise dataset attached?")
-args += ["--noise-dir", str(Path(noise[0]).parent)] if noise else ["--no-noise"]
+    sys.exit("no usable room echoes and noises (RIRS_NOISES or rirs_noises.tar.gz) in /kaggle/input; "
+             "is the noise dataset attached and complete?")
+args += ["--noise-dir", str(noise[0])] if noise else ["--no-noise"]
 
 previous = find(f"runs/{{NAME}}/last.pth")
 if previous:
@@ -273,7 +311,7 @@ def main() -> None:
     out = args.data_dir / "kaggle"
     if args.noise_only:
         if not write_noise(args.data_dir, out / "noise"):
-            raise SystemExit(f"no {args.data_dir / NOISE_SOURCE}; run `python download.py rirs_noises` first")
+            raise SystemExit(f"no complete {args.data_dir / NOISE_SOURCE}; run `python download.py rirs_noises` first")
         write_noise_metadata(out / "noise", args.user)
         print(f"{out / 'noise'}: upload once with `kaggle datasets create -p {out / 'noise'}`")
         return
