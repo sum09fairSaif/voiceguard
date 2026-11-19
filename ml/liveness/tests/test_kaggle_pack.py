@@ -1,4 +1,5 @@
 import base64
+import inspect
 import io
 import json
 import tarfile
@@ -124,6 +125,89 @@ def test_the_noise_pack_holds_every_echo_and_noise(tmp_path):
 def test_no_noise_downloaded_means_no_noise_pack(tmp_path):
     assert not kaggle_pack.write_noise(tmp_path, tmp_path / "kaggle" / "noise")
     assert not (tmp_path / "kaggle" / "noise").exists()
+
+
+def make_noise(root, files=("simulated_rirs/smallroom/Room001/Room001-00001.wav",
+                            "pointsource_noises/noise-free-sound-0001.wav")):
+    for name in files:
+        (root / name).parent.mkdir(parents=True, exist_ok=True)
+        sf.write(str(root / name), np.zeros(160, dtype=np.float32), 16000)
+
+
+def test_an_incomplete_download_makes_no_pack(tmp_path):
+    # Noises but no room echoes, as after an interrupted copy.
+    make_noise(tmp_path / kaggle_pack.NOISE_SOURCE, ["pointsource_noises/noise-free-sound-0001.wav"])
+
+    assert not kaggle_pack.write_noise(tmp_path, tmp_path / "out")
+    assert not (tmp_path / "out" / kaggle_pack.NOISE_PACK).exists()
+
+
+def test_an_old_pack_is_removed_when_the_noise_is_gone(tmp_path):
+    out = tmp_path / "out"
+    out.mkdir()
+    (out / kaggle_pack.NOISE_PACK).write_bytes(b"stale")
+
+    assert not kaggle_pack.write_noise(tmp_path, out)
+    assert not (out / kaggle_pack.NOISE_PACK).exists()
+
+
+def test_packing_again_removes_the_old_uncompressed_pack(tmp_path):
+    make_noise(tmp_path / kaggle_pack.NOISE_SOURCE)
+    out = tmp_path / "out"
+    out.mkdir()
+    (out / kaggle_pack.OLD_NOISE_PACK).write_bytes(b"old")
+
+    assert kaggle_pack.write_noise(tmp_path, out)
+    assert sorted(path.name for path in out.iterdir()) == [kaggle_pack.NOISE_PACK]
+
+
+def test_an_interrupted_pack_leaves_no_archive_under_the_real_name(tmp_path, monkeypatch):
+    make_noise(tmp_path / kaggle_pack.NOISE_SOURCE)
+    out = tmp_path / "out"
+    out.mkdir()
+    (out / kaggle_pack.NOISE_PACK).write_bytes(b"earlier")
+
+    def interrupted(self, *args, **kwargs):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(tarfile.TarFile, "add", interrupted)
+    with pytest.raises(KeyboardInterrupt):
+        kaggle_pack.write_noise(tmp_path, out)
+
+    # Neither a half-written archive nor the earlier one is left to upload.
+    assert list(out.iterdir()) == []
+
+
+@pytest.mark.parametrize(
+    "files, usable",
+    [
+        (("simulated_rirs/a/b.wav", "pointsource_noises/n.wav"), True),
+        (("real_rirs_isotropic_noises/air_rir.wav", "real_rirs_isotropic_noises/air_noise.wav"), True),
+        (("pointsource_noises/n.wav",), False),
+        (("simulated_rirs/a/b.wav",), False),
+        ((), False),
+    ],
+)
+def test_noise_counts_as_usable_only_with_both_echoes_and_noises(tmp_path, files, usable):
+    make_noise(tmp_path, files)
+
+    assert kaggle_pack.noise_usable(tmp_path) is usable
+
+
+def test_the_run_checks_the_noise_the_same_way_before_training():
+    # The run can't import kaggle_pack, so it has its own copy of the check.
+    lines = [line.strip() for line in inspect.getsource(kaggle_pack.noise_usable).splitlines()]
+    logic = [line for line in lines if line.startswith(("real =", "echoes =", "noises =", "return "))]
+    script = kaggle_pack.RUN_SCRIPT
+    assert len(logic) == 4
+    for line in logic:
+        assert line in script
+
+
+def test_the_run_prefers_the_gzipped_noise_pack():
+    script = kaggle_pack.RUN_SCRIPT
+    assert 'find("rirs_noises.tar.gz") or find("rirs_noises.tar")' in script
+    assert script.index("noise_usable(root)]") < script.index('subprocess.run([sys.executable, "train.py"')
 
 
 def test_kaggle_installs_the_versions_in_requirements(tmp_path):
