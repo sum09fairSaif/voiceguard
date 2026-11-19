@@ -5,7 +5,9 @@ import pytest
 import config
 from transcription_budget import BudgetUsedUp, release_transcription, reserve_transcription
 
-NOON = datetime(2026, 11, 16, 12, 0, tzinfo=UTC)
+# Noon today, not a fixed date: the counters carry a TTL, and mongomock
+# deletes expired entries, so a fixed past date makes the tests fail later.
+NOON = datetime.now(UTC).replace(hour=12, minute=0, second=0, microsecond=0)
 
 
 @pytest.fixture(autouse=True)

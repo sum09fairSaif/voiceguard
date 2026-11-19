@@ -861,7 +861,8 @@ def test_the_daily_cap_resets_each_day(rate_limits):
 
     from rate_limit import RateLimited, count_request
 
-    day = datetime(2026, 11, 16, 12, 0, tzinfo=UTC)
+    # Noon today: a fixed past date would have expired under the TTL index.
+    day = datetime.now(UTC).replace(hour=12, minute=0, second=0, microsecond=0)
     count_request(rate_limits, "verify-day", "u1", 1, 24 * 3600, now=day)
     with pytest.raises(RateLimited):
         count_request(rate_limits, "verify-day", "u1", 1, 24 * 3600, now=day)
