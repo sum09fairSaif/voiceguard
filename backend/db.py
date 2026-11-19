@@ -7,6 +7,13 @@ import config
 
 
 @lru_cache
+def get_switches_collection() -> Collection:
+    # Pause switches (switches.py): one document per switch, set by
+    # scripts/switch.py. No index needed beyond _id.
+    return get_client()[config.MONGO_DB_NAME]["switches"]
+
+
+@lru_cache
 def get_revoked_sessions_collection() -> Collection:
     # Signed-out sessions (sessions.py). MongoDB deletes each once all the
     # session's tokens would have expired. Checked on every signed-in

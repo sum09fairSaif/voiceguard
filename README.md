@@ -56,12 +56,15 @@ as soon as the voiceprint is built or the checks have run.
 - **Encrypted voiceprints:** only a numeric summary of the voice is kept,
   encrypted at rest. Recordings are never saved.
 - **Scores stay on the server:** the identity check answers only pass or
-  fail, never its score, so nobody can tune a voice clone against it. With
-  `VERIFY_CHECK_DETAILS=false` (for outside testing and the final product), a
-  voice check's answer doesn't even say which check failed (#112).
+  fail, never its score, so nobody can tune a voice clone against it. A voice
+  check's answer doesn't even say which check failed (#112), unless
+  `VERIFY_CHECK_DETAILS=true` is set for a demo or debugging (off by default).
 - **Passwords (NIST SP 800-63B-4):** at least 15 characters, no rules about
   which kinds of character, and never a common or breached password, the
   person's own email name, or a simple repeat or sequence.
+- **Pause switches:** sign-ups, voice checks and enrollment can each be paused
+  in seconds without a redeploy (`backend/scripts/switch.py`); see the
+  [runbook](docs/runbook.md) for what to do when something goes wrong.
 - **Security events and uptime:** sign-ups, sign-ins, lockouts, enrollment,
   voice-check decisions and sign-outs are recorded for 30 days without personal
   data (user ids hashed with a server key, no emails, addresses or scores), and also sent to

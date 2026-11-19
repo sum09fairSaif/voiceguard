@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 
 import audit
 import config
+import switches
 from db import (
     get_challenges_collection,
     get_email_codes_collection,
@@ -88,6 +89,22 @@ def email_codes():
 
 
 @pytest.fixture
+def switch_store():
+    return mongomock.MongoClient()["voiceguard_test"]["switches"]
+
+
+@pytest.fixture(autouse=True)
+def in_memory_switches(switch_store):
+    # Every app in the tests reads switches from an in-memory collection,
+    # with nothing cached from an earlier test.
+    switches._cache.clear()
+    app.dependency_overrides[switches.switches_store] = lambda: (lambda: switch_store)
+    yield
+    app.dependency_overrides.pop(switches.switches_store, None)
+    switches._cache.clear()
+
+
+@pytest.fixture
 def revoked():
     collection = mongomock.MongoClient()["voiceguard_test"]["revoked_sessions"]
     collection.create_index("expires_at", expireAfterSeconds=0)
@@ -124,7 +141,8 @@ def client(
 ):
     # A fresh random key each run, so the code can't pass by hard-coding one.
     monkeypatch.setattr(config, "JWT_SECRET", secrets.token_urlsafe(32))
-    # The default, whatever a local .env says; tests that hide them say so.
+    # Details on, whatever a local .env says: most tests check them. The
+    # live default is off (see test_verify.py); tests that hide them say so.
     monkeypatch.setattr(config, "VERIFY_CHECK_DETAILS", True)
     app.dependency_overrides[get_users_collection] = lambda: users
     app.dependency_overrides[get_challenges_collection] = lambda: challenges
