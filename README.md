@@ -66,7 +66,7 @@ as soon as the voiceprint is built or the checks have run.
   sender is stopped without affecting anyone else. 5 wrong passwords within
   15 minutes lock that client out of the account for 30 minutes (20 from
   everyone together lock it for everyone), and a daily budget caps the paid
-  speech-to-text calls.
+  speech-to-text calls, from voice checks and enrollment alike.
 - **Fallback:** after 3 rejected voice checks within 30 minutes, voice
   checks pause for 30 minutes and the app is told to offer an email code
   (the code itself is planned, #20).
