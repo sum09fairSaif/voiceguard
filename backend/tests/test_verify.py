@@ -778,9 +778,13 @@ def test_anything_but_approval_returns_no_token(client, transcriber, embedder, v
 
 
 def test_a_failed_sign_in_history_write_still_signs_the_user_in(
-    client, transcriber, embedder, enrolled, attempt, caplog
+    client, users, transcriber, embedder, enrolled, attempt, caplog
 ):
     class BrokenUsers:
+        def find_one(self, *args, **kwargs):
+            # Reads still work (the email check, #110); only the write fails.
+            return users.find_one(*args, **kwargs)
+
         def update_one(self, *args, **kwargs):
             raise ServerSelectionTimeoutError("database unreachable")
 

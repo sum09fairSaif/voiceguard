@@ -142,6 +142,26 @@ EMBEDDING_SERVICE_HF_TOKEN = os.getenv("EMBEDDING_SERVICE_HF_TOKEN", "")
 # affected.
 EMAIL_API_KEY = os.getenv("EMAIL_API_KEY", "")
 EMAIL_FROM = os.getenv("EMAIL_FROM", "")
+
+# Email verification at signup (email_verification.py, #110). Off by default:
+# turn it on only once the frontend has its "check your email" screen and
+# EMAIL_FROM is on a domain verified in Resend (otherwise real users never
+# get the code). While off, new accounts are made as before. Turning it off
+# again doesn't unlock accounts already waiting for a code.
+EMAIL_VERIFICATION_REQUIRED = os.getenv("EMAIL_VERIFICATION_REQUIRED", "false").strip().lower() in ("1", "true", "yes")
+# How long a code works, and how many wrong tries use it up.
+EMAIL_CODE_MINUTES = int(os.getenv("EMAIL_CODE_MINUTES", "15"))
+EMAIL_CODE_MAX_TRIES = int(os.getenv("EMAIL_CODE_MAX_TRIES", "5"))
+# Codes emailed per account per RATE_LIMIT_WINDOW_SECONDS, the one sent at
+# signup included. Each is an email from our Resend allowance.
+EMAIL_CODE_SEND_LIMIT = int(os.getenv("EMAIL_CODE_SEND_LIMIT", "5"))
+# An account never confirmed is deleted this long after signup, so it can't
+# hold on to someone else's address.
+UNVERIFIED_ACCOUNT_HOURS = int(os.getenv("UNVERIFIED_ACCOUNT_HOURS", "24"))
+if EMAIL_CODE_MINUTES <= 0 or EMAIL_CODE_MAX_TRIES <= 0 or EMAIL_CODE_SEND_LIMIT <= 0 or UNVERIFIED_ACCOUNT_HOURS <= 0:
+    raise RuntimeError(
+        "EMAIL_CODE_MINUTES, EMAIL_CODE_MAX_TRIES, EMAIL_CODE_SEND_LIMIT and UNVERIFIED_ACCOUNT_HOURS must be more than 0."
+    )
 # Which model made the voiceprints. Changing models means re-enrolling.
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "speechbrain/spkrec-ecapa-voxceleb")
 # Encrypts voiceprints at rest. A Fernet key: generate one with

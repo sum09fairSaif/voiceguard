@@ -40,7 +40,20 @@ def get_users_collection() -> Collection:
     # The database itself refuses a second account with the same email,
     # even if two signups arrive at the same moment.
     users.create_index([("email", ASCENDING)], unique=True)
+    # Accounts that never confirmed their email (#110) are deleted once
+    # this time passes. Only those carry the field: it's removed when the
+    # email is confirmed, and other accounts never have it.
+    users.create_index("unverified_expires_at", expireAfterSeconds=0)
     return users
+
+
+@lru_cache
+def get_email_codes_collection() -> Collection:
+    # The current email-confirmation code per account, hashed (#110).
+    # MongoDB deletes each once it has expired.
+    codes = get_client()[config.MONGO_DB_NAME]["email_codes"]
+    codes.create_index("expires_at", expireAfterSeconds=0)
+    return codes
 
 
 @lru_cache

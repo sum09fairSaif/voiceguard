@@ -15,6 +15,7 @@ from db import (
     get_users_collection,
     get_voiceprints_collection,
 )
+from email_verification import require_verified_email
 from embedding import Embedder, Embedding, get_embedder
 from enrollment import (
     INCONSISTENT,
@@ -77,7 +78,13 @@ def enrollment_status(
     return _status(voiceprints, enrollments, prompts, user_id, _may_enroll(users, claims, user_id))
 
 
-@router.post("/samples", response_model=EnrollmentStatus)
+@router.post(
+    "/samples",
+    response_model=EnrollmentStatus,
+    # Before anything else: an unconfirmed email address (#110) gets its own
+    # answer, not the "only right after signup" one.
+    dependencies=[Depends(require_verified_email)],
+)
 def add_enrollment_sample(
     request: Request,
     audio: UploadFile = File(...),
@@ -185,7 +192,13 @@ def start_over(
 
 
 def _may_enroll(users: Collection, claims: dict, user_id: str) -> bool:
-    fields = {"created_at": 1, "signup_session_enrollment": 1}
+    fields = {
+        "created_at": 1,
+        "signup_session_enrollment": 1,
+        "email_verified": 1,
+        "email_verified_at": 1,
+        "email_verified_sid": 1,
+    }
     user = users.find_one({"_id": ObjectId(user_id)}, fields) if ObjectId.is_valid(user_id) else None
     return may_enroll(claims, user)
 

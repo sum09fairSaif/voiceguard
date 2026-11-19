@@ -75,3 +75,13 @@ def get_email_sender() -> EmailSender:
     if not config.EMAIL_API_KEY or not config.EMAIL_FROM:
         raise EmailUnavailable("EMAIL_API_KEY or EMAIL_FROM is not set.")
     return partial(send_email, config.EMAIL_API_KEY, config.EMAIL_FROM)
+
+
+def get_optional_email_sender() -> EmailSender | None:
+    """Like get_email_sender, but None when email isn't set up, for places
+    that carry on without it (signup still creates the account; the user
+    can ask for the email again later). Tests replace it too."""
+    try:
+        return get_email_sender()
+    except EmailUnavailable:
+        return None
