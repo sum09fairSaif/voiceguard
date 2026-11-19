@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 from pymongo.errors import PyMongoError
 
 import config
+import switches
 from body_limit import BodyLimitMiddleware
 from email_sender import EmailUnavailable
 from identity_check import IdentityUnavailable
@@ -139,6 +140,15 @@ def voice_locked_out(request: Request, exc: VoiceLockedOut) -> JSONResponse:
         status_code=status.HTTP_423_LOCKED,
         content={"detail": f"Too many failed voice checks, so they're paused for now. Please try again in {wait}."},
         headers={"Retry-After": str(exc.retry_after)},
+    )
+
+
+@app.exception_handler(switches.Paused)
+def paused(request: Request, exc: switches.Paused) -> JSONResponse:
+    # "paused" names the switch, so the frontend can say it in its own words.
+    return JSONResponse(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        content={"detail": switches.PAUSED_MESSAGES[exc.name], "paused": exc.name},
     )
 
 

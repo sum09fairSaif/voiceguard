@@ -62,6 +62,9 @@ as soon as the voiceprint is built or the checks have run.
 - **Passwords (NIST SP 800-63B-4):** at least 15 characters, no rules about
   which kinds of character, and never a common or breached password, the
   person's own email name, or a simple repeat or sequence.
+- **Pause switches:** sign-ups, voice checks and enrollment can each be paused
+  in seconds without a redeploy (`backend/scripts/switch.py`); see the
+  [runbook](docs/runbook.md) for what to do when something goes wrong.
 - **Security events and uptime:** sign-ups, sign-ins, lockouts, enrollment,
   voice-check decisions and sign-outs are recorded for 30 days without personal
   data (user ids hashed with a server key, no emails, addresses or scores), and also sent to
