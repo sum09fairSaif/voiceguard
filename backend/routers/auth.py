@@ -108,9 +108,6 @@ def signup(
             # Someone else signed up with it at the same moment.
             raise _email_taken()
 
-    count_client_request(rate_limits, "signup", request, config.SIGNUP_CLIENT_LIMIT)
-    count_request(rate_limits, "signup", "all", config.SIGNUP_RATE_LIMIT, config.RATE_LIMIT_WINDOW_SECONDS)
-
     if verify_email:
         # The account exists either way; if the email can't go now, the
         # user asks for it again from the "check your email" screen.
