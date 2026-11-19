@@ -8,12 +8,14 @@ from fastapi.responses import JSONResponse
 from pymongo.errors import PyMongoError
 
 import config
+import switches
 from body_limit import BodyLimitMiddleware
 from email_sender import EmailUnavailable
 from identity_check import IdentityUnavailable
 from rate_limit import RateLimited
 from routers import account, auth, challenge, enroll, verify
 from security_headers import SecurityHeadersMiddleware
+from session_cookie import OriginCheckMiddleware
 from transcription import AudioNotUnderstood, TranscriptionUnavailable
 from transcription_budget import BudgetUsedUp
 from voice_attempts import VoiceLockedOut
@@ -45,12 +47,19 @@ app = VoiceGuardAPI(title="VoiceGuard API", version="0.1.0", **docs_settings(con
 # CORS so CORS wraps it: the frontend can read the 413 like any other error.
 app.add_middleware(BodyLimitMiddleware)
 
+# Requests that change something must come from our own pages
+# (session_cookie.py): the cross-site request forgery check. Added before
+# CORS, so CORS wraps it.
+app.add_middleware(OriginCheckMiddleware)
+
 # CORS lets the frontend (a different address) call this API from the
-# browser. Only our own frontends are allowed (see config.ALLOWED_ORIGINS).
+# browser. Only our own frontends are allowed (see config.ALLOWED_ORIGINS),
+# and they may send the sign-in cookie (allow_credentials).
 app.add_middleware(
     CORSMiddleware,
     allow_origins=config.ALLOWED_ORIGINS,
     allow_origin_regex=config.ALLOWED_ORIGIN_REGEX,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
     # Browsers hide most response headers from another site's code. The
@@ -134,13 +143,24 @@ def voice_locked_out(request: Request, exc: VoiceLockedOut) -> JSONResponse:
     )
 
 
+@app.exception_handler(switches.Paused)
+def paused(request: Request, exc: switches.Paused) -> JSONResponse:
+    # "paused" names the switch, so the frontend can say it in its own words.
+    return JSONResponse(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        content={"detail": switches.PAUSED_MESSAGES[exc.name], "paused": exc.name},
+    )
+
+
 @app.exception_handler(BudgetUsedUp)
 def budget_used_up(request: Request, exc: BudgetUsedUp) -> JSONResponse:
     # Logged so someone can raise the budget if real users hit it.
     logger.warning("transcription_budget_used_up path=%s", request.url.path)
+    # Enrollment shares the budget (#151), so name what the person was doing.
+    what = "Voice ID setup is" if request.url.path.startswith("/api/enroll") else "Voice checks are"
     return JSONResponse(
         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-        content={"detail": "Voice checks are busy right now. Please try again later."},
+        content={"detail": f"{what} busy right now. Please try again later."},
         headers={"Retry-After": str(exc.retry_after)},
     )
 

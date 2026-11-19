@@ -6,10 +6,11 @@ from functools import lru_cache
 
 import bcrypt
 import jwt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 import config
+from session_cookie import token_from_cookie
 from sessions import is_revoked, revoked_sessions
 
 # Reads the "Authorization: Bearer <token>" header. auto_error=False lets us
@@ -91,19 +92,31 @@ def _not_signed_in(detail: str) -> HTTPException:
     )
 
 
+def request_token(request: Request, credentials: HTTPAuthorizationCredentials | None) -> str | None:
+    """The sign-in token: an Authorization: Bearer header if there is one,
+    otherwise the HttpOnly cookie (#102)."""
+    return credentials.credentials if credentials is not None else token_from_cookie(request)
+
+
 def get_token_claims(
+    request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
     revoked: Callable = Depends(revoked_sessions),
 ) -> dict:
     """The claims of any valid sign-in token, limited or voice-verified, whose
     session hasn't been signed out."""
-    if credentials is None:
+    token = request_token(request, credentials)
+    if token is None:
         raise _not_signed_in("Please sign in first.")
+    return claims_for(token, revoked)
+
+
+def claims_for(token: str, revoked: Callable) -> dict:
     if not config.JWT_SECRET:
         raise config.NotConfigured("JWT_SECRET is not set. Add it to your .env file.")
     try:
         claims = jwt.decode(
-            credentials.credentials,
+            token,
             config.JWT_SECRET,
             algorithms=[config.JWT_ALGORITHM],
             audience=config.JWT_AUDIENCE,

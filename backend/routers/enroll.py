@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from pymongo.collection import Collection
 
 import config
+import switches
 from audio_upload import read_recording
 from audit import track
 from content_check import ContentResult
@@ -15,6 +16,7 @@ from db import (
     get_users_collection,
     get_voiceprints_collection,
 )
+from email_verification import require_verified_email
 from embedding import Embedder, Embedding, get_embedder
 from enrollment import (
     INCONSISTENT,
@@ -38,6 +40,7 @@ from rate_limit import count_client_request, count_request
 from schemas import EnrollmentStatus
 from security import get_current_user_id, get_token_claims
 from transcription import AudioNotUnderstood, Transcriber, get_transcriber, transcribe_and_log
+from transcription_budget import reserve_transcription
 from voiceprints import build_voiceprint, has_voiceprint, save_voiceprint
 
 router = APIRouter(prefix="/api/enroll", tags=["enroll"])
@@ -76,7 +79,13 @@ def enrollment_status(
     return _status(voiceprints, enrollments, prompts, user_id, _may_enroll(users, claims, user_id))
 
 
-@router.post("/samples", response_model=EnrollmentStatus)
+@router.post(
+    "/samples",
+    response_model=EnrollmentStatus,
+    # Paused first. Then, before anything else, an unconfirmed email address
+    # (#110) gets its own answer, not the "only right after signup" one.
+    dependencies=[Depends(switches.require("enrollment")), Depends(require_verified_email)],
+)
 def add_enrollment_sample(
     request: Request,
     audio: UploadFile = File(...),
@@ -133,7 +142,11 @@ def add_enrollment_sample(
     content = None
     if problem is None:
         # The words are checked last: speech-to-text is a paid call, so a
-        # sample already turned away for its sound doesn't use one.
+        # sample already turned away for its sound doesn't use one. It counts
+        # against the same daily budget as voice checks (#151); a spent
+        # budget is a 503 "try later", and nothing about the sample is kept.
+        # Taken right before the call, so there's nothing to give back.
+        reserve_transcription(rate_limits)
         try:
             transcript = transcribe_and_log(
                 transcribe, recording, f"sample.{extension}", user_id, "enroll", logger
@@ -180,7 +193,13 @@ def start_over(
 
 
 def _may_enroll(users: Collection, claims: dict, user_id: str) -> bool:
-    fields = {"created_at": 1, "signup_session_enrollment": 1}
+    fields = {
+        "created_at": 1,
+        "signup_session_enrollment": 1,
+        "email_verified": 1,
+        "email_verified_at": 1,
+        "email_verified_sid": 1,
+    }
     user = users.find_one({"_id": ObjectId(user_id)}, fields) if ObjectId.is_valid(user_id) else None
     return may_enroll(claims, user)
 
