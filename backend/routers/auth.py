@@ -3,7 +3,9 @@ import math
 from datetime import UTC, datetime
 
 from bson import ObjectId
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi.responses import JSONResponse
+from fastapi.security import HTTPAuthorizationCredentials
 from pymongo.collection import Collection
 from pymongo.errors import DuplicateKeyError
 
@@ -14,7 +16,8 @@ from db import get_login_failures_collection, get_rate_limits_collection, get_us
 from login_lockout import clear_failures, record_failure, seconds_locked
 from rate_limit import count_client_request, count_request
 from schemas import LoginRequest, LoginResponse, SignupRequest, SignupResponse, UserPublic
-from security import check_password, create_access_token, get_token_claims, hash_password
+from security import _bearer, check_password, claims_for, create_access_token, hash_password, request_token
+from session_cookie import clear_session_cookie, set_session_cookie
 from sessions import revoke, revoked_sessions
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -25,6 +28,7 @@ logger = logging.getLogger("voiceguard.auth")
 @router.post("/signup", response_model=SignupResponse, status_code=status.HTTP_201_CREATED)
 def signup(
     body: SignupRequest,
+    response: Response,
     request: Request,
     users: Collection = Depends(get_users_collection),
     rate_limits: Collection = Depends(get_rate_limits_collection),
@@ -58,12 +62,13 @@ def signup(
         )
 
     track("signup", str(user_id))
-    return SignupResponse(user=_public(user), access_token=token)
+    return SignupResponse(user=_public(user), access_token=_issue(response, token))
 
 
 @router.post("/login", response_model=LoginResponse)
 def login(
     body: LoginRequest,
+    response: Response,
     request: Request,
     users: Collection = Depends(get_users_collection),
     login_failures: Collection = Depends(get_login_failures_collection),
@@ -121,7 +126,14 @@ def login(
     clear_failures(login_failures, this_client)
     logger.info("login user=%s", user["_id"])
     track("login_succeeded", str(user["_id"]))
-    return LoginResponse(user=_public(user), access_token=token)
+    return LoginResponse(user=_public(user), access_token=_issue(response, token))
+
+
+def _issue(response: Response, token: str) -> str | None:
+    """Set the new limited token as the HttpOnly cookie; return it for the
+    body only while TOKEN_IN_RESPONSE_BODY is on."""
+    set_session_cookie(response, token, config.JWT_EXPIRE_MINUTES)
+    return token if config.TOKEN_IN_RESPONSE_BODY else None
 
 
 def _public(user: dict) -> UserPublic:
@@ -153,11 +165,25 @@ def _locked_out(seconds: int) -> HTTPException:
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
 def logout(
-    claims: dict = Depends(get_token_claims),
+    request: Request,
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
     revoked=Depends(revoked_sessions),
-) -> None:
+) -> Response:
     """End this sign-in on the server: both its limited token and any
-    voice-verified one stop working at once."""
+    voice-verified one stop working at once. The cookie is cleared whatever
+    happens, even for a token that has already expired or been signed out."""
+    token = request_token(request, credentials)
+    try:
+        if token is None:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Please sign in first.")
+        claims = claims_for(token, revoked)
+    except HTTPException as exc:
+        refused = JSONResponse(status_code=exc.status_code, content={"detail": exc.detail}, headers=exc.headers)
+        clear_session_cookie(refused)
+        return refused
     revoke(revoked(), claims["sid"])
     logger.info("logout user=%s", claims["sub"])
     track("logout", claims["sub"])
+    done = Response(status_code=status.HTTP_204_NO_CONTENT)
+    clear_session_cookie(done)
+    return done
