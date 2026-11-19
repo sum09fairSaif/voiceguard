@@ -65,8 +65,11 @@ as soon as the voiceprint is built or the checks have run.
 - **Pause switches:** sign-ups, voice checks and enrollment can each be paused
   in seconds without a redeploy (`backend/scripts/switch.py`); see the
   [runbook](docs/runbook.md) for what to do when something goes wrong.
-- **Abuse limits:** sign-in locks for 30 minutes after 5 wrong passwords
-  within 15 minutes, and per-user limits cap the paid speech-to-text calls.
+- **Abuse limits:** limits per client and per account on every route, so one
+  sender is stopped without affecting anyone else. 5 wrong passwords within
+  15 minutes lock that client out of the account for 30 minutes (20 from
+  everyone together lock it for everyone), and a daily budget caps the paid
+  speech-to-text calls.
 - **Fallback:** after 3 rejected voice checks within 30 minutes, voice
   checks pause for 30 minutes and the app is told to offer an email code
   (the code itself is planned, #20).
@@ -343,8 +346,9 @@ runs the tests, lint and the frontend build on every pull request.
    approves on its own.
 2. Voice data is sensitive. Mitigation: store only encrypted voiceprints,
    never raw audio, and keep secrets out of the repo via environment variables.
-3. Paid speech-to-text calls could be abused. Mitigation: per-user limits on
-   passages and checks, a cap on new accounts, and one log line per call.
+3. Paid speech-to-text calls could be abused. Mitigation: per-client and
+   per-user limits on passages and checks, per-client and overall caps on new
+   accounts, a daily budget, and one log line per call.
 4. The three-month timeline is tight for a small team. Mitigation: ship the
    skeleton in Sprint 0, then build one user story per feature branch behind
    passing CI.
