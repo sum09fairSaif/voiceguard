@@ -5,7 +5,7 @@
 Voice-biometric multi-factor authentication with anti-spoofing and deepfake detection.
 
 - **Live app:** https://voiceguard-nu.vercel.app/
-- **Live API:** https://voiceguard-83cj.onrender.com/ (health check at [`/health`](https://voiceguard-83cj.onrender.com/health), interactive docs at [`/docs`](https://voiceguard-83cj.onrender.com/docs))
+- **Live API:** https://voiceguard-83cj.onrender.com/ (health check at [`/health`](https://voiceguard-83cj.onrender.com/health); the interactive docs are only on a local server, see [Backend](#2-backend))
 
 > The free hosting tiers sleep when idle, so the first request after a
 > while can take up to a minute.
@@ -62,8 +62,19 @@ as soon as the voiceprint is built or the checks have run.
 - **Passwords (NIST SP 800-63B-4):** at least 15 characters, no rules about
   which kinds of character, and never a common or breached password, the
   person's own email name, or a simple repeat or sequence.
-- **Abuse limits:** sign-in locks for 30 minutes after 5 wrong passwords
-  within 15 minutes, and per-user limits cap the paid speech-to-text calls.
+- **Pause switches:** sign-ups, voice checks and enrollment can each be paused
+  in seconds without a redeploy (`backend/scripts/switch.py`); see the
+  [runbook](docs/runbook.md) for what to do when something goes wrong.
+- **Security events and uptime:** sign-ups, sign-ins, lockouts, enrollment,
+  voice-check decisions and sign-outs are recorded for 30 days without personal
+  data (user ids hashed with a server key, no emails, addresses or scores), and also sent to
+  PostHog when `POSTHOG_API_KEY` is set. A scheduled check opens an
+  "API is down" issue when `/health` stops answering.
+- **Abuse limits:** limits per client and per account on every route, so one
+  sender is stopped without affecting anyone else. 5 wrong passwords within
+  15 minutes lock that client out of the account for 30 minutes (20 from
+  everyone together lock it for everyone), and a daily budget caps the paid
+  speech-to-text calls, from voice checks and enrollment alike.
 - **Fallback:** after 3 rejected voice checks within 30 minutes, voice
   checks pause for 30 minutes and the app is told to offer an email code
   (the code itself is planned, #20).
@@ -137,15 +148,24 @@ curl -X POST $API/api/verify -H "Authorization: Bearer <access_token>" \
 | Method | Path | What it does | Sign-in needed |
 |---|---|---|---|
 | GET | `/health` | Is the server up? | No |
-| POST | `/api/auth/signup` | Create an account; returns a limited token (password only) | No |
+| POST | `/api/auth/signup` | Create an account; returns a limited token (password only). With email verification on, the account starts unverified (`email_verified: false`) and a 6-digit code is emailed; signing up again replaces an unconfirmed account with the same email | No |
+| POST | `/api/auth/email/code` | Email a new confirmation code (the old one stops working); 5 per hour; 409 once confirmed (204) | Any token |
+| POST | `/api/auth/email/verify` | Confirm the email with the code (`{"code": "123456"}`); works once, expires in 15 min, 5 wrong tries use it up | Any token |
 | POST | `/api/auth/login` | Sign in with email and password; returns a limited token; locks for 30 min after 5 wrong tries within 15 min | No |
 | POST | `/api/auth/logout` | Sign out: ends this sign-in on the server, so its limited and voice-verified tokens both stop working (204) | Any token |
 | POST | `/api/challenge` | Get a fresh, single-use passage to read (expires in 2 min); 423 while voice checks are paused | Limited token |
 | POST | `/api/verify` | Send a recording of the passage; runs the checks and returns the decision, `attempts_left` and `fallback_required`, plus a voice-verified `access_token` (15 min) when approved; 423 while voice checks are paused. Each check's outcome (`content`, `identity`, `liveness`) and a reason naming the failed check only while `VERIFY_CHECK_DETAILS` is on; off, those are `null` and the reason is general | Limited token |
 | GET | `/api/enroll` | Enrollment progress, a sentence to read for the next sample, and whether this session may enroll (`can_enroll`) | Limited token |
-| POST | `/api/enroll/samples` | Add one voice sample (it must hold every word of the sentence, in order, sound live, and match the earlier samples); the voiceprint is built after 3 good ones. Only the signup session, within 30 min of creating the account; until 2026-11-16 00:00 ET, accounts made before this rule may also enroll after signing in (403 otherwise) | Signup token (or sign-in token during the grace period) |
+| POST | `/api/enroll/samples` | Add one voice sample (it must hold every word of the sentence, in order, sound live, and match the earlier samples); the voiceprint is built after 3 good ones. Only the signup session, within 30 min of creating the account, or the session that confirmed the email, within 30 min of confirming; never before the email is confirmed (when verification is on); until 2026-11-16 00:00 ET, accounts made before this rule may also enroll after signing in (403 otherwise) | Signup token (or sign-in token during the grace period) |
 | DELETE | `/api/enroll/samples` | Start enrollment over | Limited token |
 | GET | `/api/me` | The account summary (name, email, dates, previous sign-in); 403 with a limited token | Voice-verified token |
+
+**Email verification (#110)** is behind the `EMAIL_VERIFICATION_REQUIRED`
+switch, off until the "check your email" screen is live. When on, an account
+can't set up Voice ID, get a passage or run a voice check (403) until its
+email is confirmed. The session that confirms may enroll for 30 minutes
+afterwards. Unconfirmed accounts are deleted after 24 hours. Accounts made
+before verification existed keep working as they are.
 
 A password alone gives a **limited token**: it can only start the voice check.
 Only an approved voice check (words, voice and liveness) gives a
@@ -153,7 +173,19 @@ Only an approved voice check (words, voice and liveness) gives a
 to one sign-in session; signing out ends the session on the server, so a
 copied token stops working too.
 
-Full request and response details are in the interactive docs at `/docs`.
+The token travels in a cookie marked **HttpOnly** (no script on the page can
+read it, so a cross-site scripting bug can't steal it), **Secure** and
+**SameSite=Strict**, set by the API at sign-up, sign-in and an approved voice
+check, and cleared at sign-out. Requests that change something must come from
+one of our own pages (their `Origin` is checked against `ALLOWED_ORIGINS`), so
+another site can't act with a signed-in user's cookie. The frontend and API
+must share a site for the browser to send the cookie (our own domain:
+`app.` and `api.` addresses). Until the frontend relies on the cookie alone,
+the token is also returned in the response (`TOKEN_IN_RESPONSE_BODY=true`) and
+an `Authorization: Bearer` header still works.
+
+Full request and response details are in the interactive docs at `/docs` on a
+local server with `DOCS_ENABLED=true` (they're off on the live API).
 
 ## Tech stack
 
@@ -246,8 +278,8 @@ uvicorn main:app --reload --port 8000
 ```
 
 Open http://localhost:8000/health. You should see
-`{"status":"ok","service":"voiceguard-api"}`, and the interactive API docs
-are at http://localhost:8000/docs. More detail: [backend/README.md](backend/README.md).
+`{"status":"ok","service":"voiceguard-api"}`. For the interactive API docs at
+http://localhost:8000/docs, set `DOCS_ENABLED=true` in `.env` first. More detail: [backend/README.md](backend/README.md).
 
 ### 3. Model service (optional: only for enrollment and the identity check)
 
@@ -294,6 +326,7 @@ runs the tests, lint and the frontend build on every pull request.
 | `/health` works but other calls answer 503 "The service is temporarily unavailable" | `MONGO_URI` or `JWT_SECRET` is missing from `.env` (the server log names the missing setting), or the database can't be reached (check `MONGO_URI`, and that your IP is allowed under **Network Access** in Atlas). An unreachable database gives the same message, and the log doesn't name a setting for it. |
 | Voice checks answer "Voice checks are temporarily unavailable" | `OPENAI_API_KEY` (content check, enrollment), `VOICEPRINT_KEY` (enrollment, identity check) or the model service settings (identity check, enrollment) are missing, or the model service is asleep: try again in a minute. |
 | The browser shows a CORS error | Add the frontend's address (e.g. `http://localhost:5173`) to `ALLOWED_ORIGINS` in `.env`, then restart the backend. |
+| A change answers 403 "This request didn't come from VoiceGuard" | The page's address isn't in `ALLOWED_ORIGINS`: add it (local development: `http://localhost:5173`) and restart the backend. |
 | The frontend talks to the wrong backend | Set `VITE_API_BASE_URL` in `frontend/.env.local` (not the root `.env`) and restart `npm run dev`. |
 | Model service tests fail with "ffmpeg not found" | Install ffmpeg, or set `FFMPEG_BINARY` to the full path of an ffmpeg file. `pip install imageio-ffmpeg` provides one; print its path with `python -c "import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())"`. |
 | The microphone doesn't start | Allow microphone access for the site in the browser. Browsers only allow it on `https://` or `localhost`. |
@@ -340,8 +373,9 @@ runs the tests, lint and the frontend build on every pull request.
    approves on its own.
 2. Voice data is sensitive. Mitigation: store only encrypted voiceprints,
    never raw audio, and keep secrets out of the repo via environment variables.
-3. Paid speech-to-text calls could be abused. Mitigation: per-user limits on
-   passages and checks, a cap on new accounts, and one log line per call.
+3. Paid speech-to-text calls could be abused. Mitigation: per-client and
+   per-user limits on passages and checks, per-client and overall caps on new
+   accounts, a daily budget, and one log line per call.
 4. The three-month timeline is tight for a small team. Mitigation: ship the
    skeleton in Sprint 0, then build one user story per feature branch behind
    passing CI.
