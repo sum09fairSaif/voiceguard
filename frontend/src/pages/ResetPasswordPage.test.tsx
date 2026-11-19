@@ -1,10 +1,11 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MESSAGES } from "../api/errors";
 import { confirmPasswordReset, tokenFromHash } from "../api/passwordReset";
 import { getToken, saveToken } from "../api/session";
+import { forgetResetLinkToken, holdResetLinkToken } from "../resetLinkToken";
 import { apiError, networkError } from "../test/apiError";
 import { ResetPasswordPage } from "./ResetPasswordPage";
 
@@ -58,6 +59,7 @@ async function save(password = NEW_PASSWORD) {
 beforeEach(() => {
   mockConfirm.mockReset().mockResolvedValue(undefined);
   sessionStorage.clear();
+  forgetResetLinkToken();
 });
 
 describe("tokenFromHash", () => {
@@ -162,5 +164,46 @@ describe("ResetPasswordPage", () => {
 
     expect(screen.getByRole("button", { name: /saving/i })).toBeDisabled();
     expect(screen.getByLabelText("New password")).toBeDisabled();
+  });
+
+  it("uses the token taken out of the address before the app started", async () => {
+    holdResetLinkToken(
+      { pathname: "/reset-password", search: "", hash: `#token=${TOKEN}` } as Location,
+      { state: null, replaceState: () => {} } as unknown as History,
+    );
+    renderPage("");
+    await save();
+
+    expect(mockConfirm).toHaveBeenCalledWith(TOKEN, NEW_PASSWORD);
+  });
+
+  it("forgets this browser's session after a reset even if the person has left the page", async () => {
+    saveToken("old-session");
+    let finish: () => void = () => {};
+    mockConfirm.mockReturnValue(new Promise<void>((resolve) => (finish = resolve)));
+    renderPage();
+    const user = await save();
+    await user.click(screen.getByRole("link", { name: "Back to sign in" }));
+
+    await act(async () => finish());
+
+    expect(getToken()).toBeNull();
+  });
+
+  it("suggests signing in when the link is refused on saving, in case an earlier save went through", async () => {
+    mockConfirm.mockRejectedValue(apiError(400, { detail: "used" }));
+    renderPage();
+    await save();
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "If you’ve already set a new password with this link, sign in with it.",
+    );
+    expect(screen.getByRole("link", { name: "sign in" })).toHaveAttribute("href", "/signin");
+  });
+
+  it("doesn't suggest signing in when the link never had a token", () => {
+    renderPage("");
+
+    expect(screen.queryByText(/already set a new password/)).not.toBeInTheDocument();
   });
 });
