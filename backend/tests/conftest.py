@@ -2,6 +2,7 @@ import secrets
 
 import mongomock
 import pytest
+from bson import ObjectId
 from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
 
@@ -20,6 +21,7 @@ from db import (
 )
 from email_sender import get_optional_email_sender
 from main import app
+from security import user_accounts
 from sessions import revoked_sessions
 
 
@@ -29,6 +31,19 @@ def users():
     collection = mongomock.MongoClient()["voiceguard_test"]["users"]
     collection.create_index("email", unique=True)
     return collection
+
+
+@pytest.fixture
+def new_account(users):
+    """Makes an account and returns its id, for tests that make their own
+    tokens: a token whose account doesn't exist is refused (#194)."""
+
+    def make(user_id: str | None = None) -> str:
+        _id = ObjectId(user_id) if user_id else ObjectId()
+        users.insert_one({"_id": _id, "full_name": "Test User", "email": f"{_id}@example.com"})
+        return str(_id)
+
+    return make
 
 
 @pytest.fixture
@@ -127,6 +142,7 @@ def client(
     # The default, whatever a local .env says; tests that hide them say so.
     monkeypatch.setattr(config, "VERIFY_CHECK_DETAILS", True)
     app.dependency_overrides[get_users_collection] = lambda: users
+    app.dependency_overrides[user_accounts] = lambda: lambda: users
     app.dependency_overrides[get_challenges_collection] = lambda: challenges
     app.dependency_overrides[get_rate_limits_collection] = lambda: rate_limits
     app.dependency_overrides[get_voiceprints_collection] = lambda: voiceprints
