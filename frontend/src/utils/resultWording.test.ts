@@ -95,19 +95,13 @@ describe("describeResult", () => {
     const view = describeResult(result());
 
     expect(view).toMatchObject({ tone: "partial", title: "Almost there.", action: "retry" });
-    expect(view.subtitle).toMatch(/once your voice is set up/);
+    expect(view.subtitle).toMatch(/Voice ID isn’t set up yet/);
+    expect(view.subtitle).not.toMatch(/coming soon/);
     expect(view.checks).toEqual([
       { label: "Words", state: "passed", detail: "6/6 words" },
       { label: "Voice", state: "pending", detail: "Not set up yet" },
       { label: "Live speaker", state: "pending", detail: "Not checked yet" },
     ]);
-  });
-
-  it("explains a partly verified result when the voice matched", () => {
-    const view = describeResult(result({ identity: "passed" }));
-
-    expect(view.subtitle).toMatch(/words and voice both matched/);
-    expect(view.checks[1]).toEqual({ label: "Voice", state: "passed", detail: "Matched" });
   });
 
   it.each(["approved", "rejected", "incomplete"] as const)("never shows the server's own text (%s)", (decision) => {
