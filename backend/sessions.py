@@ -5,6 +5,11 @@ carried by its limited token and by the voice-verified token an approved check
 gives it. Signing out puts the sid on a revocation list that every protected
 request checks, so both tokens stop working at once. Entries delete themselves
 once every token of the session would have expired anyway.
+
+A password reset ends every session of the account at once (#109): one entry,
+"user:<id>", records when, and any token issued up to then stops working.
+Tokens issued afterwards (the user signing in with the new password) aren't
+affected.
 """
 
 from collections.abc import Callable
@@ -53,5 +58,36 @@ def revoke(revoked: Collection, sid: str, now: datetime | None = None) -> None:
         pass
 
 
-def is_revoked(revoked: Collection, sid: str) -> bool:
-    return revoked.count_documents({"_id": sid}, limit=1) > 0
+def _user_key(user_id: str) -> str:
+    # Session ids are hex, so this can't clash with one.
+    return f"user:{user_id}"
+
+
+def revoke_all(revoked: Collection, user_id: str, now: datetime | None = None) -> None:
+    """End every session of this account that has started by now."""
+    now = now or datetime.now(UTC)
+    # $max: a later reset moves the line forward; one recorded at the same
+    # moment by another request can't move it back.
+    revoked.update_one(
+        {"_id": _user_key(user_id)},
+        {"$max": {"before": now, "expires_at": now + keep_for()}},
+        upsert=True,
+    )
+
+
+def is_revoked(revoked: Collection, sid: str, user_id: str | None = None, issued_at: float | None = None) -> bool:
+    """True if this session was signed out, or (given the account and when
+    the token was issued) all the account's sessions were ended after it
+    was issued. One database lookup either way."""
+    keys = [sid] if user_id is None else [sid, _user_key(user_id)]
+    for entry in revoked.find({"_id": {"$in": keys}}):
+        if entry["_id"] == sid:
+            return True
+        # Token times are whole seconds, rounded down: a token from the same
+        # second as the reset counts as before it. A sign-in in that second
+        # just has to be repeated; a stolen token never survives.
+        before = entry["before"]
+        before = before if before.tzinfo else before.replace(tzinfo=UTC)
+        if issued_at is None or issued_at <= before.timestamp():
+            return True
+    return False

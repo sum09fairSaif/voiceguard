@@ -14,6 +14,7 @@ from db import (
     get_enroll_prompts_collection,
     get_enrollments_collection,
     get_login_failures_collection,
+    get_password_resets_collection,
     get_rate_limits_collection,
     get_users_collection,
     get_voice_failures_collection,
@@ -70,6 +71,13 @@ def enroll_prompts():
 @pytest.fixture
 def login_failures():
     collection = mongomock.MongoClient()["voiceguard_test"]["login_failures"]
+    collection.create_index("expires_at", expireAfterSeconds=0)
+    return collection
+
+
+@pytest.fixture
+def password_resets():
+    collection = mongomock.MongoClient()["voiceguard_test"]["password_resets"]
     collection.create_index("expires_at", expireAfterSeconds=0)
     return collection
 
@@ -137,7 +145,7 @@ def _audit_in_memory(audit_events):
 @pytest.fixture
 def client(
     users, challenges, rate_limits, voiceprints, enrollments, enroll_prompts, login_failures, voice_failures,
-    email_codes, monkeypatch,
+    password_resets, email_codes, monkeypatch,
 ):
     # A fresh random key each run, so the code can't pass by hard-coding one.
     monkeypatch.setattr(config, "JWT_SECRET", secrets.token_urlsafe(32))
@@ -158,6 +166,7 @@ def client(
     app.dependency_overrides[get_enroll_prompts_collection] = lambda: enroll_prompts
     app.dependency_overrides[get_login_failures_collection] = lambda: login_failures
     app.dependency_overrides[get_voice_failures_collection] = lambda: voice_failures
+    app.dependency_overrides[get_password_resets_collection] = lambda: password_resets
     app.dependency_overrides[get_email_codes_collection] = lambda: email_codes
     # Tests never send real email; test_email_verification.py records it.
     app.dependency_overrides[get_optional_email_sender] = lambda: None

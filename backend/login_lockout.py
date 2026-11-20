@@ -92,6 +92,14 @@ def record_failure(
     return lockout_seconds
 
 
+def login_subjects(client: str | None, email: str) -> tuple[str, str]:
+    """The two wrong-password counts for an email: this client's, and
+    everyone's together. An unknown client (no trusted address) shares one
+    count for the email."""
+    email = email.lower()
+    return f"client:{client or 'unknown'}:{email}", f"account:{email}"
+
+
 def clear_failures(login_failures: Collection, subject: str) -> None:
     """Forget earlier failures once one succeeds."""
     login_failures.delete_one({"_id": _key(subject)})
