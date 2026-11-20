@@ -7,8 +7,10 @@ from fastapi.testclient import TestClient
 
 import audit
 import config
+import switches
 from db import (
     get_challenges_collection,
+    get_email_codes_collection,
     get_enroll_prompts_collection,
     get_enrollments_collection,
     get_login_failures_collection,
@@ -18,6 +20,7 @@ from db import (
     get_voice_failures_collection,
     get_voiceprints_collection,
 )
+from email_sender import get_optional_email_sender
 from main import app
 from sessions import revoked_sessions
 
@@ -87,6 +90,29 @@ def voice_failures():
 
 
 @pytest.fixture
+def email_codes():
+    collection = mongomock.MongoClient()["voiceguard_test"]["email_codes"]
+    collection.create_index("expires_at", expireAfterSeconds=0)
+    return collection
+
+
+@pytest.fixture
+def switch_store():
+    return mongomock.MongoClient()["voiceguard_test"]["switches"]
+
+
+@pytest.fixture(autouse=True)
+def in_memory_switches(switch_store):
+    # Every app in the tests reads switches from an in-memory collection,
+    # with nothing cached from an earlier test.
+    switches._cache.clear()
+    app.dependency_overrides[switches.switches_store] = lambda: (lambda: switch_store)
+    yield
+    app.dependency_overrides.pop(switches.switches_store, None)
+    switches._cache.clear()
+
+
+@pytest.fixture
 def revoked():
     collection = mongomock.MongoClient()["voiceguard_test"]["revoked_sessions"]
     collection.create_index("expires_at", expireAfterSeconds=0)
@@ -119,12 +145,19 @@ def _audit_in_memory(audit_events):
 @pytest.fixture
 def client(
     users, challenges, rate_limits, voiceprints, enrollments, enroll_prompts, login_failures, voice_failures,
-    password_resets, monkeypatch,
+    password_resets, email_codes, monkeypatch,
 ):
     # A fresh random key each run, so the code can't pass by hard-coding one.
     monkeypatch.setattr(config, "JWT_SECRET", secrets.token_urlsafe(32))
-    # The default, whatever a local .env says; tests that hide them say so.
+    # Details on, whatever a local .env says: most tests check them. The
+    # live default is off (see test_verify.py); tests that hide them say so.
     monkeypatch.setattr(config, "VERIFY_CHECK_DETAILS", True)
+    # Limits count in fixed blocks of time (rate_limit.py). With the real
+    # hour, a test whose requests straddle hh:00:00 splits its count across
+    # two windows and isn't refused when it should be. These windows' edges
+    # fall in 2001 and 2033, never during a run. test_rate_limit.py checks
+    # the real windows with fixed times.
+    monkeypatch.setattr(config, "RATE_LIMIT_WINDOW_SECONDS", 10**9)
     app.dependency_overrides[get_users_collection] = lambda: users
     app.dependency_overrides[get_challenges_collection] = lambda: challenges
     app.dependency_overrides[get_rate_limits_collection] = lambda: rate_limits
@@ -134,5 +167,10 @@ def client(
     app.dependency_overrides[get_login_failures_collection] = lambda: login_failures
     app.dependency_overrides[get_voice_failures_collection] = lambda: voice_failures
     app.dependency_overrides[get_password_resets_collection] = lambda: password_resets
+    app.dependency_overrides[get_email_codes_collection] = lambda: email_codes
+    # Tests never send real email; test_email_verification.py records it.
+    app.dependency_overrides[get_optional_email_sender] = lambda: None
+    # Verification stays off unless a test turns it on, as in production.
+    monkeypatch.setattr(config, "EMAIL_VERIFICATION_REQUIRED", False)
     yield TestClient(app)
     app.dependency_overrides.clear()

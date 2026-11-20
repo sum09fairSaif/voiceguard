@@ -7,6 +7,7 @@ from pymongo.collection import Collection
 from pymongo.errors import PyMongoError
 
 import config
+import switches
 from audio_upload import read_recording
 from audit import track
 from challenges import use_challenge
@@ -19,6 +20,7 @@ from db import (
     get_voiceprints_collection,
 )
 from decision import decide
+from email_verification import require_verified_email
 from embedding import Embedder, get_embedder
 from identity_check import IdentityResult, IdentityUnavailable, check_identity
 from liveness_check import LivenessResult, check_liveness
@@ -45,7 +47,13 @@ GENERAL_REASONS = {
 }
 
 
-@router.post("/verify", response_model=VerifyResponse)
+@router.post(
+    "/verify",
+    response_model=VerifyResponse,
+    # Paused first. Then, before the paid speech-to-text call: no voice
+    # checks until the email address is confirmed (#110).
+    dependencies=[Depends(switches.require("voice_checks")), Depends(require_verified_email)],
+)
 def verify(
     response: Response,
     request: Request,

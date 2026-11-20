@@ -778,9 +778,13 @@ def test_anything_but_approval_returns_no_token(client, transcriber, embedder, v
 
 
 def test_a_failed_sign_in_history_write_still_signs_the_user_in(
-    client, transcriber, embedder, enrolled, attempt, caplog
+    client, users, transcriber, embedder, enrolled, attempt, caplog
 ):
     class BrokenUsers:
+        def find_one(self, *args, **kwargs):
+            # Reads still work (the email check, #110); only the write fails.
+            return users.find_one(*args, **kwargs)
+
         def update_one(self, *args, **kwargs):
             raise ServerSelectionTimeoutError("database unreachable")
 
@@ -932,6 +936,28 @@ def test_the_daily_cap_resets_each_day(rate_limits):
 @pytest.fixture
 def details_hidden(monkeypatch):
     monkeypatch.setattr(config, "VERIFY_CHECK_DETAILS", False)
+
+
+def test_details_are_hidden_unless_switched_on():
+    # A fresh interpreter without the setting: the live server hides them
+    # unless VERIFY_CHECK_DETAILS=true is set on purpose.
+    import os
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    env = {k: v for k, v in os.environ.items() if k != "VERIFY_CHECK_DETAILS"}
+    backend = Path(__file__).resolve().parent.parent
+    shown = subprocess.run(
+        [sys.executable, "-c", "import config; print(config.VERIFY_CHECK_DETAILS)"],
+        cwd=backend,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+
+    assert shown == "False"
 
 
 HIDDEN_FIELDS = ("content", "identity", "liveness")

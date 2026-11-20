@@ -32,6 +32,12 @@ ALLOWED_ORIGINS = [
 # the sign-in cookie never reaches the API from them (#102).
 ALLOWED_ORIGIN_REGEX = os.getenv("ALLOWED_ORIGIN_REGEX", r"https://voiceguard-[a-z0-9-]+-voice-guard2\.vercel\.app") or None
 
+# Backups for the pause switches (switches.py): "false" forces one off,
+# whatever the database says. Normally the database switch is used.
+SIGNUPS_ENABLED = os.getenv("SIGNUPS_ENABLED", "true").strip().lower() != "false"
+VOICE_CHECKS_ENABLED = os.getenv("VOICE_CHECKS_ENABLED", "true").strip().lower() != "false"
+ENROLLMENT_ENABLED = os.getenv("ENROLLMENT_ENABLED", "true").strip().lower() != "false"
+
 # Security events (audit.py): kept this many days in our database, and also
 # sent to PostHog when a project key is set (nothing is sent without one).
 AUDIT_RETENTION_DAYS = int(os.getenv("AUDIT_RETENTION_DAYS", "30"))
@@ -156,6 +162,25 @@ PASSWORD_RESET_EMAIL_LIMIT = int(os.getenv("PASSWORD_RESET_EMAIL_LIMIT", "3"))
 PASSWORD_RESET_RATE_LIMIT = int(os.getenv("PASSWORD_RESET_RATE_LIMIT", "30"))
 if PASSWORD_RESET_MINUTES <= 0 or PASSWORD_RESET_EMAIL_LIMIT <= 0 or PASSWORD_RESET_RATE_LIMIT <= 0:
     raise RuntimeError("PASSWORD_RESET_MINUTES, PASSWORD_RESET_EMAIL_LIMIT and PASSWORD_RESET_RATE_LIMIT must be more than 0.")
+# Email verification at signup (email_verification.py, #110). Off by default:
+# turn it on only once the frontend has its "check your email" screen and
+# EMAIL_FROM is on a domain verified in Resend (otherwise real users never
+# get the code). While off, new accounts are made as before. Turning it off
+# again doesn't unlock accounts already waiting for a code.
+EMAIL_VERIFICATION_REQUIRED = os.getenv("EMAIL_VERIFICATION_REQUIRED", "false").strip().lower() in ("1", "true", "yes")
+# How long a code works, and how many wrong tries use it up.
+EMAIL_CODE_MINUTES = int(os.getenv("EMAIL_CODE_MINUTES", "15"))
+EMAIL_CODE_MAX_TRIES = int(os.getenv("EMAIL_CODE_MAX_TRIES", "5"))
+# Codes emailed per account per RATE_LIMIT_WINDOW_SECONDS, the one sent at
+# signup included. Each is an email from our Resend allowance.
+EMAIL_CODE_SEND_LIMIT = int(os.getenv("EMAIL_CODE_SEND_LIMIT", "5"))
+# An account never confirmed is deleted this long after signup, so it can't
+# hold on to someone else's address.
+UNVERIFIED_ACCOUNT_HOURS = int(os.getenv("UNVERIFIED_ACCOUNT_HOURS", "24"))
+if EMAIL_CODE_MINUTES <= 0 or EMAIL_CODE_MAX_TRIES <= 0 or EMAIL_CODE_SEND_LIMIT <= 0 or UNVERIFIED_ACCOUNT_HOURS <= 0:
+    raise RuntimeError(
+        "EMAIL_CODE_MINUTES, EMAIL_CODE_MAX_TRIES, EMAIL_CODE_SEND_LIMIT and UNVERIFIED_ACCOUNT_HOURS must be more than 0."
+    )
 # Which model made the voiceprints. Changing models means re-enrolling.
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "speechbrain/spkrec-ecapa-voxceleb")
 # Encrypts voiceprints at rest. A Fernet key: generate one with
@@ -179,11 +204,11 @@ if not math.isfinite(LIVENESS_THRESHOLD):
     raise RuntimeError("LIVENESS_THRESHOLD must be a number.")
 
 # Whether a voice check's answer says which check (words, voice, liveness)
-# passed or failed (#112). On while the team tests and trains the checks;
-# turn off before outside testing: knowing which check failed helps someone
-# tune a replay or voice clone. Off, the answer has only the outcome, a
-# general reason and the attempts left; the server log keeps the details.
-VERIFY_CHECK_DETAILS = os.getenv("VERIFY_CHECK_DETAILS", "true").strip().lower() in ("1", "true", "yes")
+# passed or failed (#112). Off by default: knowing which check failed helps
+# someone tune a replay or voice clone. Off, the answer has only the outcome,
+# a general reason and the attempts left; the server log keeps the details.
+# Set to true only for demos or debugging, never on the live server.
+VERIFY_CHECK_DETAILS = os.getenv("VERIFY_CHECK_DETAILS", "false").strip().lower() in ("1", "true", "yes")
 
 # Failed voice checks. After this many rejections within the window, voice
 # checks are locked for the lockout time, and the user falls back to an

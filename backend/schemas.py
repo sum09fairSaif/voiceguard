@@ -58,6 +58,10 @@ class UserPublic(BaseModel):
     full_name: str
     email: EmailStr
     created_at: datetime
+    # False until the code we emailed is entered (#110). Until then the
+    # account can't set up Voice ID or run voice checks. Accounts made
+    # before verification existed, or while it's switched off, are true.
+    email_verified: bool = True
 
 
 class SignupResponse(BaseModel):
@@ -94,6 +98,25 @@ class PasswordResetConfirm(BaseModel):
     @classmethod
     def password_fits_bcrypt(cls, value: str) -> str:
         return fits_bcrypt(value)
+
+
+class EmailCodeRequest(BaseModel):
+    # Six digits; spaces the user may type between them are dropped.
+    code: str = Field(min_length=1, max_length=20)
+
+    @field_validator("code")
+    @classmethod
+    def six_digits(cls, value: str) -> str:
+        value = "".join(value.split())
+        if len(value) != 6 or not value.isascii() or not value.isdigit():
+            raise ValueError("The code is 6 digits.")
+        return value
+
+
+class EmailVerifiedResponse(BaseModel):
+    """The account, now confirmed."""
+
+    user: UserPublic
 
 
 class ChallengeResponse(BaseModel):
