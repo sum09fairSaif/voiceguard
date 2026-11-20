@@ -144,6 +144,12 @@ def client(
     # Details on, whatever a local .env says: most tests check them. The
     # live default is off (see test_verify.py); tests that hide them say so.
     monkeypatch.setattr(config, "VERIFY_CHECK_DETAILS", True)
+    # Limits count in fixed blocks of time (rate_limit.py). With the real
+    # hour, a test whose requests straddle hh:00:00 splits its count across
+    # two windows and isn't refused when it should be. These windows' edges
+    # fall in 2001 and 2033, never during a run. test_rate_limit.py checks
+    # the real windows with fixed times.
+    monkeypatch.setattr(config, "RATE_LIMIT_WINDOW_SECONDS", 10**9)
     app.dependency_overrides[get_users_collection] = lambda: users
     app.dependency_overrides[get_challenges_collection] = lambda: challenges
     app.dependency_overrides[get_rate_limits_collection] = lambda: rate_limits
