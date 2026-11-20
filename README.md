@@ -153,6 +153,8 @@ curl -X POST $API/api/verify -H "Authorization: Bearer <access_token>" \
 | POST | `/api/auth/email/verify` | Confirm the email with the code (`{"email": ..., "code": "123456"}`) and start the session: returns a limited token like sign-in. Works once, expires in 15 min, 5 wrong tries use it up; every failure is the same 400 | No |
 | POST | `/api/auth/login` | Sign in with email and password; returns a limited token; locks for 30 min after 5 wrong tries within 15 min | No |
 | POST | `/api/auth/logout` | Sign out: ends this sign-in on the server, so its limited and voice-verified tokens both stop working (204) | Any token |
+| POST | `/api/auth/password-reset` | Forgot password: emails a single-use reset link (30 min) if the address has an account. Always the same answer (202), account or not; 3 requests per address per hour, 30 from everyone | No |
+| POST | `/api/auth/password-reset/confirm` | Set a new password with the link's token (same rules as signup; 400 if the link expired or was used). Clears the sign-in lockout and ends every session the account had (204); then sign in | No (the link) |
 | POST | `/api/challenge` | Get a fresh, single-use passage to read (expires in 2 min); 423 while voice checks are paused | Limited token |
 | POST | `/api/verify` | Send a recording of the passage; runs the checks and returns the decision, `attempts_left` and `fallback_required`, plus a voice-verified `access_token` (15 min) when approved; 423 while voice checks are paused. Each check's outcome (`content`, `identity`, `liveness`) and a reason naming the failed check only while `VERIFY_CHECK_DETAILS` is on; off, those are `null` and the reason is general | Limited token |
 | GET | `/api/enroll` | Enrollment progress, a sentence to read for the next sample, and whether this session may enroll (`can_enroll`) | Limited token |
@@ -177,7 +179,8 @@ A password alone gives a **limited token**: it can only start the voice check.
 Only an approved voice check (words, voice and liveness) gives a
 **voice-verified token**, the only kind that opens the account. Both belong
 to one sign-in session; signing out ends the session on the server, so a
-copied token stops working too.
+copied token stops working too. A password reset ends every session
+of the account the same way.
 
 The token travels in a cookie marked **HttpOnly** (no script on the page can
 read it, so a cross-site scripting bug can't steal it), **Secure** and

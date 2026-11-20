@@ -16,6 +16,13 @@ PASSWORD_PROBLEMS = {
 }
 
 
+def fits_bcrypt(password: str) -> str:
+    # bcrypt only reads the first 72 bytes of a password.
+    if len(password.encode("utf-8")) > 72:
+        raise ValueError("Password is too long (72 bytes at most).")
+    return password
+
+
 class SignupRequest(BaseModel):
     full_name: str = Field(min_length=1, max_length=100)
     email: EmailStr
@@ -34,10 +41,7 @@ class SignupRequest(BaseModel):
     @field_validator("password")
     @classmethod
     def password_fits_bcrypt(cls, value: str) -> str:
-        # bcrypt only reads the first 72 bytes of a password.
-        if len(value.encode("utf-8")) > 72:
-            raise ValueError("Password is too long (72 bytes at most).")
-        return value
+        return fits_bcrypt(value)
 
     @field_validator("password")
     @classmethod
@@ -90,6 +94,23 @@ class EmailAddressRequest(BaseModel):
     """Asking for a new confirmation code (#111): by address, not sign-in."""
 
     email: EmailStr
+
+
+class PasswordResetRequest(BaseModel):
+    email: EmailStr
+
+
+class PasswordResetConfirm(BaseModel):
+    # From the emailed link (43 characters today; some room for change).
+    token: str = Field(min_length=20, max_length=200)
+    # Same rules as signup. The checks that need the account's email
+    # (password_policy) run in the endpoint, which knows whose link it is.
+    password: str = Field(min_length=MIN_LENGTH)
+
+    @field_validator("password")
+    @classmethod
+    def password_fits_bcrypt(cls, value: str) -> str:
+        return fits_bcrypt(value)
 
 
 class EmailCodeRequest(BaseModel):

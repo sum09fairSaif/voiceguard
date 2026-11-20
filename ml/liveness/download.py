@@ -25,6 +25,7 @@ listed in each loader in sources/.
 import argparse
 import csv
 import hashlib
+import shutil
 import sys
 import tarfile
 import time
@@ -113,7 +114,15 @@ def rirs_noises(out: Path) -> None:
     with zipfile.ZipFile(path) as z:
         if (bad := z.testzip()) is not None:
             sys.exit(f"{path} is corrupt ({bad}); delete it and run again")
-        z.extractall(out)
+        # Unpacked beside the final place and moved in only once complete, so
+        # an interrupted unpack never looks finished (the check above, and
+        # kaggle_pack.py's noise pack, would otherwise take it as complete).
+        staging = out / "RIRS_NOISES.unpacking"
+        if staging.exists():
+            shutil.rmtree(staging)
+        z.extractall(staging)
+    (staging / "RIRS_NOISES").rename(out / "RIRS_NOISES")
+    staging.rmdir()
     path.unlink()
 
 

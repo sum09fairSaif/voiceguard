@@ -12,6 +12,8 @@ import { PageHeading } from "../components/PageHeading";
 import { TextField } from "../components/TextField";
 import type { SignOutState } from "../hooks/useSignOut";
 import { useStillShown } from "../hooks/useStillShown";
+import type { ForgotPasswordState } from "./ForgotPasswordPage";
+import type { PasswordChangedState } from "./ResetPasswordPage";
 import styles from "./SignInPage.module.css";
 import { validateSignIn, type SignInErrors, type SignInForm } from "./signInValidation";
 
@@ -19,7 +21,9 @@ import { validateSignIn, type SignInErrors, type SignInForm } from "./signInVali
 // a voice check needs a token, which needs the password first.
 export function SignInPage() {
   const navigate = useNavigate();
-  const serverSignOutFailed = (useLocation().state as SignOutState | null)?.serverSignOutFailed === true;
+  const arrivedWith = useLocation().state as (SignOutState & Partial<PasswordChangedState>) | null;
+  const serverSignOutFailed = arrivedWith?.serverSignOutFailed === true;
+  const passwordChanged = arrivedWith?.passwordChanged === true;
   const [form, setForm] = useState<SignInForm>({ email: "", password: "" });
   const [errors, setErrors] = useState<SignInErrors>({});
   const [formError, setFormError] = useState("");
@@ -93,6 +97,13 @@ export function SignInPage() {
         </p>
       )}
 
+      {passwordChanged && (
+        <p className={styles.notice} role="status">
+          Your password has been changed, and your account has been signed out on every device. Sign in with your new
+          password.
+        </p>
+      )}
+
       {/* Fields lock while sending, so a server error always matches what was sent. */}
       <form className={styles.form} onSubmit={handleSubmit} noValidate>
         <TextField
@@ -117,10 +128,14 @@ export function SignInPage() {
           error={errors.password}
           disabled={submitting}
         />
-        {/* Placeholder until password recovery exists; it does nothing yet. */}
-        <button type="button" className={styles.forgot}>
+        {/* Carries over the email, if one was typed, so it needn't be typed twice. */}
+        <Link
+          to="/forgot-password"
+          state={{ email: form.email.trim() } satisfies ForgotPasswordState}
+          className={styles.forgot}
+        >
           Forgot password?
-        </button>
+        </Link>
 
         {formError && (
           <p className={styles.formError} role="alert">

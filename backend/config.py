@@ -149,6 +149,19 @@ EMBEDDING_SERVICE_HF_TOKEN = os.getenv("EMBEDDING_SERVICE_HF_TOKEN", "")
 EMAIL_API_KEY = os.getenv("EMAIL_API_KEY", "")
 EMAIL_FROM = os.getenv("EMAIL_FROM", "")
 
+# Password reset by email (password_reset.py, #109). The emailed link opens
+# this page of the frontend, with the token after a "#".
+PASSWORD_RESET_URL = os.getenv("PASSWORD_RESET_URL", "https://voiceguard-nu.vercel.app/reset-password").rstrip("/")
+# How long a reset link works.
+PASSWORD_RESET_MINUTES = int(os.getenv("PASSWORD_RESET_MINUTES", "30"))
+# Reset requests per email address per RATE_LIMIT_WINDOW_SECONDS, counted
+# whether or not the address has an account (so the limit gives nothing
+# away), and from everyone together. Each reset email comes out of our
+# Resend allowance (100 a day on the free plan).
+PASSWORD_RESET_EMAIL_LIMIT = int(os.getenv("PASSWORD_RESET_EMAIL_LIMIT", "3"))
+PASSWORD_RESET_RATE_LIMIT = int(os.getenv("PASSWORD_RESET_RATE_LIMIT", "30"))
+if PASSWORD_RESET_MINUTES <= 0 or PASSWORD_RESET_EMAIL_LIMIT <= 0 or PASSWORD_RESET_RATE_LIMIT <= 0:
+    raise RuntimeError("PASSWORD_RESET_MINUTES, PASSWORD_RESET_EMAIL_LIMIT and PASSWORD_RESET_RATE_LIMIT must be more than 0.")
 # Email verification at signup (email_verification.py, #110). Off by default:
 # turn it on only once the frontend has its "check your email" screen and
 # EMAIL_FROM is on a domain verified in Resend (otherwise real users never

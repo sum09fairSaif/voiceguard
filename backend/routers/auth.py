@@ -33,7 +33,7 @@ from email_verification import (
     mark_verified,
     unverified_fields,
 )
-from login_lockout import clear_failures, record_failure, seconds_locked
+from login_lockout import clear_failures, login_subjects, record_failure, seconds_locked
 from rate_limit import count_client_request, count_request
 from schemas import (
     EmailAddressRequest,
@@ -301,8 +301,7 @@ def login(
     # spread across many addresses still stops.
     # An unknown client (no trusted address) falls back to one shared count
     # for the email: the stricter old rule, safe against guessing.
-    this_client = f"client:{client_key(request) or 'unknown'}:{email}"
-    everyone = f"account:{email}"
+    this_client, everyone = login_subjects(client_key(request), email)
     # A locked email isn't even checked, so guessing can't go on while
     # it's locked.
     locked = max(seconds_locked(login_failures, this_client), seconds_locked(login_failures, everyone))

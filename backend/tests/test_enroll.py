@@ -592,10 +592,10 @@ def test_starting_over_leaves_a_finished_voiceprint_alone(client, voiceprints):
     assert load_voiceprint(voiceprints, USER_ID) == TAKES[0]
 
 
-def test_one_users_samples_dont_count_for_another(client, embedder):
+def test_one_users_samples_dont_count_for_another(client, embedder, new_account):
     send(client)
 
-    body = client.get(STATUS_URL, headers=signed_in(str(ObjectId()))).json()
+    body = client.get(STATUS_URL, headers=signed_in(new_account())).json()
 
     assert body["status"] == "not_started"
 
@@ -800,7 +800,8 @@ def test_an_enrolled_account_still_gets_409_not_403(client, voiceprints, embedde
 def test_a_missing_account_may_not_enroll(client, users, embedder):
     users.delete_many({})
 
-    assert send(client).status_code == 403
+    # Its token is refused outright (#194).
+    assert send(client).status_code == 401
 
 
 def test_refused_requests_dont_use_up_the_owners_allowance(client, embedder, monkeypatch, no_grace):
