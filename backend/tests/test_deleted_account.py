@@ -4,6 +4,8 @@ import pytest
 from bson import ObjectId
 
 import config
+from email_sender import get_optional_email_sender
+from main import app
 from security import create_access_token, create_verified_token
 
 GONE = "This account no longer exists. Please sign up or sign in again."
@@ -22,13 +24,12 @@ def sign_up(client):
 
 # Every route a signed-in user reaches, each with just enough of a request
 # that it would otherwise get past signing in.
+# (The email code routes take no token since #111: the code starts the session.)
 ROUTES = [
     ("post", "/api/challenge", {}),
     ("post", "/api/verify", {"files": {"audio": ("a", b"x", "audio/webm")}, "data": {"attempt_id": str(ObjectId())}}),
     ("get", "/api/enroll", {}),
     ("post", "/api/enroll/samples", {"files": {"audio": ("a", b"x", "audio/webm")}}),
-    ("post", "/api/auth/email/code", {}),
-    ("post", "/api/auth/email/verify", {"json": {"code": "123456"}}),
 ]
 
 
@@ -57,12 +58,18 @@ def test_the_same_token_works_while_the_account_exists_and_stops_once_deleted(cl
     assert client.post("/api/challenge", headers=auth(token)).status_code == 401
 
 
-def test_a_replaced_unconfirmed_account_cant_start_a_voice_check(client, monkeypatch):
+def test_a_replaced_unconfirmed_account_cant_start_a_voice_check(client, users, monkeypatch):
     monkeypatch.setattr(config, "EMAIL_VERIFICATION_REQUIRED", True)
-    old_token = sign_up(client)
+    app.dependency_overrides[get_optional_email_sender] = lambda: lambda *args: None
+    # Signup gives no token while confirmation is on (#111), so this one
+    # stands for a token made before the setting was switched on.
+    assert client.post("/api/auth/signup", json=SIGNUP).status_code == 202
+    old = users.find_one({"email": SIGNUP["email"]})
+    old_token = create_access_token(str(old["_id"]), source="signup")
     # Someone signs up again with the same, never-confirmed address: the
     # new signup replaces the old account.
-    sign_up(client)
+    assert client.post("/api/auth/signup", json=SIGNUP).status_code == 202
+    assert users.find_one({"email": SIGNUP["email"]})["_id"] != old["_id"]
 
     response = client.post("/api/challenge", headers=auth(old_token))
 
