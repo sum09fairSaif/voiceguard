@@ -71,7 +71,7 @@ def test_signing_out_ends_the_session(client, users):
 
     refused = client.post("/api/challenge", headers=bearer(token))
     assert refused.status_code == 401
-    assert refused.json()["detail"] == "You've signed out. Please sign in again."
+    assert refused.json()["detail"] == "This sign-in has ended. Please sign in again."
 
 
 def test_signing_out_also_ends_the_voice_verified_token(client, users):
@@ -165,8 +165,12 @@ def test_tokens_with_wrong_or_missing_claims_are_refused(client, change):
 
 def test_an_unavailable_revocation_list_never_lets_a_token_through(client):
     class Unreachable:
-        def count_documents(self, *args, **kwargs):
-            raise ServerSelectionTimeoutError("database unreachable")
+        # Every lookup fails, whichever method the check uses.
+        def __getattr__(self, name):
+            def unreachable(*args, **kwargs):
+                raise ServerSelectionTimeoutError("database unreachable")
+
+            return unreachable
 
     app.dependency_overrides[revoked_sessions] = lambda: lambda: Unreachable()
 
