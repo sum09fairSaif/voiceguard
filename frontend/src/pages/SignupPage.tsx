@@ -60,8 +60,9 @@ export function SignupPage() {
       if (!shown.current) return;
       saveToken(result.access_token, result.user);
       if (isPostHogConfigured) posthog.capture("account_created");
-      // A new account has no Voice ID yet, so set one up first (#10).
-      navigate("/enroll", { replace: true });
+      // The address is confirmed first, when the server asks for it (#110);
+      // then a new account sets up its Voice ID (#10).
+      navigate(result.user.email_verified === false ? "/confirm-email" : "/enroll", { replace: true });
     } catch (error) {
       if (!shown.current) return;
       const rejected = invalidFieldProblems(error);

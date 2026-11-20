@@ -14,6 +14,8 @@ export type SignupResponse = {
     full_name: string;
     email: string;
     created_at: string;
+    // False until the emailed code is entered (#110); missing on older servers.
+    email_verified?: boolean;
   };
   access_token: string;
   token_type: string;

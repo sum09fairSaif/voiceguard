@@ -9,16 +9,22 @@ type Props = {
   subtitle: string;
   // The voice screens in the designs have no shield badge.
   showBadge?: boolean;
+  // Most screens show the shield; the password reset screens a padlock.
+  badgeIcon?: BadgeIcon;
 };
+
+export type BadgeIcon = { src: string; width: number; height: number };
+
+const SHIELD: BadgeIcon = { src: shieldCheck, width: 17.7, height: 19.7 };
 
 // The badge, small all-caps label, big title and grey intro line that open
 // every screen in the designs.
-export function PageHeading({ eyebrow, title, subtitle, showBadge = true }: Props) {
+export function PageHeading({ eyebrow, title, subtitle, showBadge = true, badgeIcon = SHIELD }: Props) {
   return (
     <header className={styles.heading}>
       {showBadge && (
         <div className={styles.badge}>
-          <img src={shieldCheck} alt="" width={17.7} height={19.7} />
+          <img src={badgeIcon.src} alt="" width={badgeIcon.width} height={badgeIcon.height} />
         </div>
       )}
       <p className={styles.eyebrow}>{eyebrow}</p>

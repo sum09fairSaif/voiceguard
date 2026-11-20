@@ -59,6 +59,11 @@ export function saveToken(token: string, user?: AuthenticatedUser): void {
   }
 }
 
+// The signed-in account as saved at sign-in, e.g. to show its email address.
+export function getSignedInUser(): AuthenticatedUser | null {
+  return getStoredUser();
+}
+
 export function getToken(): string | null {
   try {
     return sessionStorage.getItem(TOKEN_KEY) ?? memoryToken;

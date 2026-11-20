@@ -1,6 +1,7 @@
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { RequireSession } from "./components/RequireSession";
 import { AccountPage } from "./pages/AccountPage";
+import { ConfirmEmailPage } from "./pages/ConfirmEmailPage";
 import { EnrollPage } from "./pages/enroll/EnrollPage";
 import { PassagePage } from "./pages/PassagePage";
 import { ResultPage } from "./pages/ResultPage";
@@ -15,6 +16,14 @@ function App() {
         <Route path="/" element={<WelcomePage />} />
         <Route path="/signin" element={<SignInPage />} />
         <Route path="/signup" element={<SignupPage />} />
+        <Route
+          path="/confirm-email"
+          element={
+            <RequireSession>
+              <ConfirmEmailPage />
+            </RequireSession>
+          }
+        />
         <Route
           path="/enroll"
           element={

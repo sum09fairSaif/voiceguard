@@ -1,0 +1,65 @@
+/* Built from Figma 19:146 "Reset password": spacing as there and on Sign in
+   (19:97). */
+.heading {
+  margin-top: 48px;
+}
+
+.form {
+  margin-top: 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.formError {
+  font-size: 13px;
+  color: var(--color-error);
+}
+
+.notice {
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--color-muted);
+}
+
+.submit {
+  margin-top: 10px;
+}
+
+/* Figma 19:187: gold, centred, 21px under the button. */
+.link,
+.secondaryLink {
+  align-self: center;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.link {
+  margin-top: 21px;
+  color: var(--color-gold);
+}
+
+.secondaryLink {
+  margin-top: 14px;
+  /* Keeps the note at the foot from touching it on short screens. */
+  margin-bottom: 32px;
+  font-weight: 400;
+  color: var(--color-muted);
+  text-decoration: underline;
+}
+
+.link:hover:not(:disabled),
+.link:focus-visible {
+  text-decoration: underline;
+}
+
+.link:disabled,
+.secondaryLink:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
