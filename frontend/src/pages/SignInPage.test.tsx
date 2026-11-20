@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { WRONG_CREDENTIALS, logIn } from "../api/auth";
 import { getEnrollment, type Enrollment } from "../api/enroll";
@@ -28,12 +28,18 @@ const account = {
   token_type: "bearer",
 };
 
+function ForgotPasswordStandIn() {
+  const email = (useLocation().state as { email?: string } | null)?.email;
+  return <p>forgot password screen for {email || "no email"}</p>;
+}
+
 function renderApp(state?: unknown) {
   render(
     <MemoryRouter initialEntries={[{ pathname: "/signin", state }]}>
       <Routes>
         <Route path="/signin" element={<SignInPage />} />
         <Route path="/signup" element={<p>signup screen</p>} />
+        <Route path="/forgot-password" element={<ForgotPasswordStandIn />} />
         <Route path="/enroll" element={<p>enroll screen</p>} />
         <Route
           path="/verify"
@@ -67,7 +73,7 @@ describe("SignInPage", () => {
     expect(screen.getByRole("heading", { name: "Welcome back." })).toBeInTheDocument();
     expect(screen.getByLabelText("Password")).toHaveAttribute("type", "password");
     expect(screen.getByLabelText("Password")).toHaveAttribute("autocomplete", "current-password");
-    expect(screen.getByRole("button", { name: "Forgot password?" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Forgot password?" })).toBeInTheDocument();
     expect(screen.queryByText(/voice id/i)).not.toBeInTheDocument();
   });
 
@@ -158,13 +164,28 @@ describe("SignInPage", () => {
     expect(screen.getByLabelText("Password")).toBeDisabled();
   });
 
-  it("does nothing yet when Forgot password? is tapped", async () => {
+  it("opens Reset password from Forgot password?, carrying the email typed", async () => {
     renderApp();
     const user = userEvent.setup();
-    await user.click(screen.getByRole("button", { name: "Forgot password?" }));
+    await user.type(screen.getByLabelText("Email address"), " sam@example.com ");
+    await user.click(screen.getByRole("link", { name: "Forgot password?" }));
 
-    expect(screen.getByRole("heading", { name: "Welcome back." })).toBeInTheDocument();
+    expect(screen.getByText("forgot password screen for sam@example.com")).toBeInTheDocument();
     expect(mockLogIn).not.toHaveBeenCalled();
+  });
+
+  it("says when the password was just changed", () => {
+    renderApp({ passwordChanged: true });
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Your password has been changed, and your account has been signed out on every device.",
+    );
+  });
+
+  it("says nothing about a password change otherwise", () => {
+    renderApp();
+
+    expect(screen.queryByText(/password has been changed/)).not.toBeInTheDocument();
   });
 
   it("links to Create account", async () => {

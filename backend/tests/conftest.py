@@ -15,6 +15,7 @@ from db import (
     get_enroll_prompts_collection,
     get_enrollments_collection,
     get_login_failures_collection,
+    get_password_resets_collection,
     get_rate_limits_collection,
     get_users_collection,
     get_voice_failures_collection,
@@ -90,6 +91,13 @@ def login_failures():
 
 
 @pytest.fixture
+def password_resets():
+    collection = mongomock.MongoClient()["voiceguard_test"]["password_resets"]
+    collection.create_index("expires_at", expireAfterSeconds=0)
+    return collection
+
+
+@pytest.fixture
 def voice_failures():
     collection = mongomock.MongoClient()["voiceguard_test"]["voice_failures"]
     collection.create_index("expires_at", expireAfterSeconds=0)
@@ -152,13 +160,19 @@ def _audit_in_memory(audit_events):
 @pytest.fixture
 def client(
     users, challenges, rate_limits, voiceprints, enrollments, enroll_prompts, login_failures, voice_failures,
-    email_codes, monkeypatch,
+    password_resets, email_codes, monkeypatch,
 ):
     # A fresh random key each run, so the code can't pass by hard-coding one.
     monkeypatch.setattr(config, "JWT_SECRET", secrets.token_urlsafe(32))
     # Details on, whatever a local .env says: most tests check them. The
     # live default is off (see test_verify.py); tests that hide them say so.
     monkeypatch.setattr(config, "VERIFY_CHECK_DETAILS", True)
+    # Limits count in fixed blocks of time (rate_limit.py). With the real
+    # hour, a test whose requests straddle hh:00:00 splits its count across
+    # two windows and isn't refused when it should be. These windows' edges
+    # fall in 2001 and 2033, never during a run. test_rate_limit.py checks
+    # the real windows with fixed times.
+    monkeypatch.setattr(config, "RATE_LIMIT_WINDOW_SECONDS", 10**9)
     app.dependency_overrides[get_users_collection] = lambda: users
     app.dependency_overrides[user_accounts] = lambda: lambda: users
     app.dependency_overrides[get_challenges_collection] = lambda: challenges
@@ -168,6 +182,7 @@ def client(
     app.dependency_overrides[get_enroll_prompts_collection] = lambda: enroll_prompts
     app.dependency_overrides[get_login_failures_collection] = lambda: login_failures
     app.dependency_overrides[get_voice_failures_collection] = lambda: voice_failures
+    app.dependency_overrides[get_password_resets_collection] = lambda: password_resets
     app.dependency_overrides[get_email_codes_collection] = lambda: email_codes
     # Tests never send real email; test_email_verification.py records it.
     app.dependency_overrides[get_optional_email_sender] = lambda: None

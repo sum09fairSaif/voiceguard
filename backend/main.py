@@ -13,7 +13,7 @@ from body_limit import BodyLimitMiddleware
 from email_sender import EmailUnavailable
 from identity_check import IdentityUnavailable
 from rate_limit import RateLimited
-from routers import account, auth, challenge, enroll, verify
+from routers import account, auth, challenge, enroll, password_reset, verify
 from security_headers import SecurityHeadersMiddleware
 from session_cookie import OriginCheckMiddleware
 from transcription import AudioNotUnderstood, TranscriptionUnavailable
@@ -68,6 +68,7 @@ app.add_middleware(
 )
 
 app.include_router(auth.router)
+app.include_router(password_reset.router)
 app.include_router(challenge.router)
 app.include_router(enroll.router)
 app.include_router(verify.router)
