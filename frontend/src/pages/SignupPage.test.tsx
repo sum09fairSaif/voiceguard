@@ -18,6 +18,7 @@ function renderApp(start = "/signup") {
       <Routes>
         <Route path="/signup" element={<SignupPage />} />
         <Route path="/enroll" element={<p>enroll screen</p>} />
+        <Route path="/confirm-email" element={<p>confirm email screen</p>} />
         <Route path="/signin" element={<p>sign-in screen</p>} />
         <Route
           path="/verify"
@@ -72,6 +73,15 @@ describe("Create account screen", () => {
       email: "alex@example.com",
       password: "correct-horse-battery",
     });
+    expect(getToken()).toBe("token-abc");
+  });
+
+  it("sends an account whose address isn't confirmed to confirm it first", async () => {
+    mockSignup.mockResolvedValue({ ...SIGNED_UP, user: { ...SIGNED_UP.user, email_verified: false } });
+    renderApp();
+    await fillAndSubmit();
+
+    expect(await screen.findByText("confirm email screen")).toBeInTheDocument();
     expect(getToken()).toBe("token-abc");
   });
 
