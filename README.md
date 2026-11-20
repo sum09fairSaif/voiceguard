@@ -148,9 +148,9 @@ curl -X POST $API/api/verify -H "Authorization: Bearer <access_token>" \
 | Method | Path | What it does | Sign-in needed |
 |---|---|---|---|
 | GET | `/health` | Is the server up? | No |
-| POST | `/api/auth/signup` | Create an account; returns a limited token (password only). With email verification on, the account starts unverified (`email_verified: false`) and a 6-digit code is emailed; signing up again replaces an unconfirmed account with the same email | No |
-| POST | `/api/auth/email/code` | Email a new confirmation code (the old one stops working); 5 per hour; 409 once confirmed (204) | Any token |
-| POST | `/api/auth/email/verify` | Confirm the email with the code (`{"code": "123456"}`); works once, expires in 15 min, 5 wrong tries use it up | Any token |
+| POST | `/api/auth/signup` | Create an account; returns a limited token (password only), or 409 if the email is taken. With email verification on: always 202 with the same answer and no token, whether or not the email has an account; a new email gets a 6-digit code, one with an account gets a notice instead. Signing up again replaces an unconfirmed account with the same email | No |
+| POST | `/api/auth/email/code` | Email a new confirmation code (`{"email": ...}`) if that email has an account waiting for one; the old code stops working. Always 202 with the same answer; 5 emails per address per hour, counted for every address (429) | No |
+| POST | `/api/auth/email/verify` | Confirm the email with the code (`{"email": ..., "code": "123456"}`) and start the session: returns a limited token like sign-in. Works once, expires in 15 min, 5 wrong tries use it up; every failure is the same 400 | No |
 | POST | `/api/auth/login` | Sign in with email and password; returns a limited token; locks for 30 min after 5 wrong tries within 15 min | No |
 | POST | `/api/auth/logout` | Sign out: ends this sign-in on the server, so its limited and voice-verified tokens both stop working (204) | Any token |
 | POST | `/api/challenge` | Get a fresh, single-use passage to read (expires in 2 min); 423 while voice checks are paused | Limited token |
@@ -166,6 +166,12 @@ can't set up Voice ID, get a passage or run a voice check (403) until its
 email is confirmed. The session that confirms may enroll for 30 minutes
 afterwards. Unconfirmed accounts are deleted after 24 hours. Accounts made
 before verification existed keep working as they are.
+
+With it on, **signup doesn't say whether an email has an account (#111)**:
+the answer is the same either way and comes with no token. The session
+starts when the emailed code is entered, with the email. Signing in to an
+account that never confirmed is answered like a wrong password, so signing
+up and then signing in can't tell either.
 
 A password alone gives a **limited token**: it can only start the voice check.
 Only an approved voice check (words, voice and liveness) gives a
