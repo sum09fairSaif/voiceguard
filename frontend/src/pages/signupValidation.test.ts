@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PASSWORD_PROBLEMS, passwordStrength, validateSignup } from "./signupValidation";
+import { PASSWORD_PROBLEMS, passwordStrength, validatePassword, validateSignup } from "./signupValidation";
 
 const VALID = { fullName: "Alex Morgan", email: "alex@example.com", password: "correct-horse-battery" };
 
@@ -61,6 +61,15 @@ describe("passwordStrength", () => {
   it("never asks for particular kinds of character", () => {
     // NIST: no composition rules. All lowercase letters and spaces can be Strong.
     expect(passwordStrength("quiet violet harbour mornings").level).toBe(3);
+  });
+
+  it("counts characters as the server does: an emoji is one, not two", () => {
+    // 8 emoji are 16 in JavaScript's .length but 8 characters to the server.
+    const emoji = "🌙🌊🌲🔥🍀🎈🐚🦉";
+    expect(emoji.length).toBe(16);
+    expect(passwordStrength(emoji)).toEqual({ level: 0, label: "7 more characters" });
+    expect(validatePassword(emoji)).toBe("Use at least 15 characters.");
+    expect(validatePassword(emoji + "lantern")).toBeUndefined();
   });
 });
 

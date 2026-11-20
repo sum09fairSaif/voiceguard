@@ -1,3 +1,6 @@
+// First, before analytics or anything else can read the address: takes a
+// password-reset link's token out of it (#109).
+import './resetLinkToken.ts'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import '@fontsource/inter/600.css'
