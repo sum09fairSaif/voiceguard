@@ -9,6 +9,7 @@ import { submitAttempt, type VerifyResult } from "../api/verify";
 import { RECORDER_MESSAGES } from "../hooks/useRecorder";
 import { apiError, networkError } from "../test/apiError";
 import { installFakeMicrophone, removeFakeMicrophone } from "../test/fakeMicrophone";
+import posthog from "../posthog";
 import { PassagePage } from "./PassagePage";
 import { ResultPage } from "./ResultPage";
 
@@ -21,6 +22,14 @@ vi.mock("../api/verify", async (importOriginal) => ({
 vi.mock("../api/auth", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../api/auth")>()),
   logOut: vi.fn(),
+}));
+// Analytics off unless a test turns it on.
+const analytics = vi.hoisted(() => ({ on: false }));
+vi.mock("../posthog", () => ({
+  default: { capture: vi.fn(), identify: vi.fn(), reset: vi.fn(), logger: { info: vi.fn() } },
+  get isPostHogConfigured() {
+    return analytics.on;
+  },
 }));
 const mockChallenge = vi.mocked(requestChallenge);
 const mockSubmit = vi.mocked(submitAttempt);
@@ -117,6 +126,36 @@ describe("Recording and submitting", () => {
 
     expect(await screen.findByText("You’re in. Securely.")).toBeInTheDocument();
     expect(getToken()).toBe("voice-verified");
+  });
+
+  it("records the outcome and shows the result when the check details are hidden", async () => {
+    analytics.on = true;
+    mockSubmit.mockResolvedValue({
+      ...INCOMPLETE,
+      decision: "rejected",
+      reason: "We couldn't verify you. Please try again with a new passage.",
+      content: null,
+      identity: null,
+      liveness: null,
+      attempts_left: 2,
+    });
+    const user = userEvent.setup();
+    renderFlow();
+    await recordClip(user);
+
+    try {
+      await user.click(screen.getByRole("button", { name: /submit/i }));
+
+      expect(await screen.findByText("That didn’t match.")).toBeInTheDocument();
+      expect(vi.mocked(posthog.capture)).toHaveBeenCalledWith("voice_verification_completed", {
+        decision: "rejected",
+        identity: null,
+        liveness: null,
+        content_passed: null,
+      });
+    } finally {
+      analytics.on = false;
+    }
   });
 
   it("keeps the password's token when the check isn't approved", async () => {

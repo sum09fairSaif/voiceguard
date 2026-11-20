@@ -32,6 +32,12 @@ ALLOWED_ORIGINS = [
 # the sign-in cookie never reaches the API from them (#102).
 ALLOWED_ORIGIN_REGEX = os.getenv("ALLOWED_ORIGIN_REGEX", r"https://voiceguard-[a-z0-9-]+-voice-guard2\.vercel\.app") or None
 
+# Backups for the pause switches (switches.py): "false" forces one off,
+# whatever the database says. Normally the database switch is used.
+SIGNUPS_ENABLED = os.getenv("SIGNUPS_ENABLED", "true").strip().lower() != "false"
+VOICE_CHECKS_ENABLED = os.getenv("VOICE_CHECKS_ENABLED", "true").strip().lower() != "false"
+ENROLLMENT_ENABLED = os.getenv("ENROLLMENT_ENABLED", "true").strip().lower() != "false"
+
 # Security events (audit.py): kept this many days in our database, and also
 # sent to PostHog when a project key is set (nothing is sent without one).
 AUDIT_RETENTION_DAYS = int(os.getenv("AUDIT_RETENTION_DAYS", "30"))
@@ -185,11 +191,11 @@ if not math.isfinite(LIVENESS_THRESHOLD):
     raise RuntimeError("LIVENESS_THRESHOLD must be a number.")
 
 # Whether a voice check's answer says which check (words, voice, liveness)
-# passed or failed (#112). On while the team tests and trains the checks;
-# turn off before outside testing: knowing which check failed helps someone
-# tune a replay or voice clone. Off, the answer has only the outcome, a
-# general reason and the attempts left; the server log keeps the details.
-VERIFY_CHECK_DETAILS = os.getenv("VERIFY_CHECK_DETAILS", "true").strip().lower() in ("1", "true", "yes")
+# passed or failed (#112). Off by default: knowing which check failed helps
+# someone tune a replay or voice clone. Off, the answer has only the outcome,
+# a general reason and the attempts left; the server log keeps the details.
+# Set to true only for demos or debugging, never on the live server.
+VERIFY_CHECK_DETAILS = os.getenv("VERIFY_CHECK_DETAILS", "false").strip().lower() in ("1", "true", "yes")
 
 # Failed voice checks. After this many rejections within the window, voice
 # checks are locked for the lockout time, and the user falls back to an
