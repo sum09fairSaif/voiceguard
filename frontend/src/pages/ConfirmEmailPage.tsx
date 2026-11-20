@@ -1,9 +1,8 @@
 import { useState, type FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
-import { isAxiosError } from "axios";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { confirmEmail, isWellFormedCode, normalizeCode, sendEmailCode } from "../api/emailVerification";
 import { describeApiError, MESSAGES } from "../api/errors";
-import { clearToken, getSignedInUser, getToken, saveToken } from "../api/session";
+import { saveToken } from "../api/session";
 import badgeLock from "../assets/icons/badge-lock.svg";
 import { Button } from "../components/Button";
 import { Logo } from "../components/Logo";
@@ -14,21 +13,33 @@ import { TextField } from "../components/TextField";
 import { useStillShown } from "../hooks/useStillShown";
 import posthog, { isPostHogConfigured } from "../posthog";
 import styles from "./ConfirmEmailPage.module.css";
+import { EMAIL_PATTERN } from "./signupValidation";
+
+// Signup passes on the address it used; there's no session yet.
+export type ConfirmEmailState = { email?: string };
 
 const BADGE = { src: badgeLock, width: 15.7, height: 19.7 };
 
+export const EMAIL_FORMAT = "Enter the email address you signed up with.";
 export const CODE_FORMAT = "Enter the 6-digit code from the email.";
 export const CODE_NOT_ACCEPTED =
   "That code didn’t work. It may be mistyped, used up or expired. Check the email, or send a new code.";
-export const NEW_CODE_SENT = "We’ve sent a new code. It replaces any earlier one.";
+export const NEW_CODE_SENT = "If the address can be used, we’ve sent it a new code. It replaces any earlier one.";
 
 // No Figma frame of its own: built from the parts of "Reset password"
-// (19:146), the other one-field screen about an email. New accounts come
-// here while their address is unconfirmed (#110); signup has already
-// emailed the first code.
+// (19:146), the other one-field screen about an email.
+//
+// Signup comes here while email confirmation is on (#110). It looks the
+// same whether or not the address already has an account (#111): a new
+// address has been sent a code, one with an account a note telling its owner
+// to sign in. Entering the code confirms the address and signs in.
 export function ConfirmEmailPage() {
   const navigate = useNavigate();
-  const email = getSignedInUser()?.email;
+  const passedEmail = (useLocation().state as ConfirmEmailState | null)?.email ?? "";
+  // Without one (say, after a refresh), the screen asks for the address too.
+  const askForEmail = passedEmail === "";
+  const [email, setEmail] = useState(passedEmail);
+  const [emailError, setEmailError] = useState("");
   const [code, setCode] = useState("");
   const [codeError, setCodeError] = useState("");
   const [formError, setFormError] = useState("");
@@ -36,36 +47,36 @@ export function ConfirmEmailPage() {
   const [busy, setBusy] = useState<"" | "confirming" | "sending">("");
   const shown = useStillShown();
 
-  // Already confirmed (409): nothing to do here, carry on to Voice ID.
-  function alreadyConfirmed(error: unknown): boolean {
-    return isAxiosError(error) && error.response?.status === 409;
+  // The address to use, or "" after showing why it can't be used.
+  function checkedEmail(): string {
+    const trimmed = email.trim();
+    if (!EMAIL_PATTERN.test(trimmed)) {
+      setEmailError(EMAIL_FORMAT);
+      return "";
+    }
+    return trimmed;
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setFormError("");
     setNotice("");
+    const address = checkedEmail();
     const cleaned = normalizeCode(code);
-    if (!isWellFormedCode(cleaned)) {
-      setCodeError(CODE_FORMAT);
-      return;
-    }
+    if (!isWellFormedCode(cleaned)) setCodeError(CODE_FORMAT);
+    if (!address || !isWellFormedCode(cleaned)) return;
 
     setBusy("confirming");
     try {
-      const result = await confirmEmail(cleaned);
+      const result = await confirmEmail(address, cleaned);
       if (!shown.current) return;
-      // Same token; the saved account now says it's confirmed.
-      const token = getToken();
-      if (token) saveToken(token, result.user);
-      if (isPostHogConfigured) posthog.capture("email_confirmed");
+      // The session starts here, as after signing in.
+      saveToken(result.access_token, result.user);
+      if (isPostHogConfigured) posthog.capture("account_created");
+      // A new account has no Voice ID yet, so set one up first (#10).
       navigate("/enroll", { replace: true });
     } catch (error) {
       if (!shown.current) return;
-      if (alreadyConfirmed(error)) {
-        navigate("/enroll", { replace: true });
-        return;
-      }
       setFormError(describeApiError(error, { 400: CODE_NOT_ACCEPTED, 422: CODE_FORMAT }));
       setBusy("");
     }
@@ -74,29 +85,21 @@ export function ConfirmEmailPage() {
   async function sendAgain() {
     setFormError("");
     setNotice("");
+    const address = checkedEmail();
+    if (!address) return;
+
     setBusy("sending");
     try {
-      await sendEmailCode();
+      await sendEmailCode(address);
       if (!shown.current) return;
       setCode("");
       setCodeError("");
       setNotice(NEW_CODE_SENT);
     } catch (error) {
       if (!shown.current) return;
-      if (alreadyConfirmed(error)) {
-        navigate("/enroll", { replace: true });
-        return;
-      }
       setFormError(describeApiError(error, { 503: MESSAGES.unavailable }));
     }
     setBusy("");
-  }
-
-  // A mistyped address can't be fixed here: signing up again with the right
-  // one starts over, and the unconfirmed account doesn't block anything.
-  function startOver() {
-    clearToken();
-    navigate("/signup", { replace: true });
   }
 
   return (
@@ -108,15 +111,31 @@ export function ConfirmEmailPage() {
           eyebrow="One last step"
           title="Check your email."
           subtitle={
-            email
-              ? `We sent a 6-digit code to ${email}. Enter it below to confirm the address is yours.`
-              : "We sent a 6-digit code to your email address. Enter it below to confirm the address is yours."
+            askForEmail
+              ? "Enter your email address and the 6-digit code we sent to it, to confirm the address is yours."
+              : `We’ve sent an email to ${passedEmail}. Enter the 6-digit code from it to confirm the address is yours.`
           }
         />
       </div>
 
-      {/* The field locks while sending, so an error always matches what was sent. */}
+      {/* Fields lock while sending, so an error always matches what was sent. */}
       <form className={styles.form} onSubmit={handleSubmit} noValidate>
+        {askForEmail && (
+          <TextField
+            id="email"
+            label="Email address"
+            type="email"
+            placeholder="you@example.com"
+            autoComplete="email"
+            value={email}
+            onChange={(event) => {
+              setEmail(event.target.value);
+              setEmailError("");
+            }}
+            error={emailError}
+            disabled={busy !== ""}
+          />
+        )}
         <TextField
           id="code"
           label="Confirmation code"
@@ -154,9 +173,11 @@ export function ConfirmEmailPage() {
       <button type="button" className={styles.link} onClick={sendAgain} disabled={busy !== ""}>
         {busy === "sending" ? "Sending…" : "Send a new code"}
       </button>
-      <button type="button" className={styles.secondaryLink} onClick={startOver} disabled={busy !== ""}>
+      {/* Signing up again with the right address starts over; an unconfirmed
+          account doesn't hold on to the address. */}
+      <Link to="/signup" replace className={styles.secondaryLink}>
         Wrong address? Sign up again
-      </button>
+      </Link>
 
       <ProtectedNote>Only someone with access to this inbox can confirm it</ProtectedNote>
     </Page>

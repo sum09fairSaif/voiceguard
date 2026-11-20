@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { signup } from "../api/auth";
+import { isSignedIn, signup } from "../api/auth";
+import type { ConfirmEmailState } from "./ConfirmEmailPage";
 import { describeApiError, invalidFieldProblems } from "../api/errors";
 import { saveToken } from "../api/session";
 import posthog, { isPostHogConfigured } from "../posthog";
@@ -58,11 +59,17 @@ export function SignupPage() {
       });
       // The user may have gone to Sign in while this was running.
       if (!shown.current) return;
+      if (!isSignedIn(result)) {
+        // Email confirmation is on: no sign-in yet, and the same answer
+        // whether or not the address already has an account (#110, #111).
+        const state: ConfirmEmailState = { email: form.email.trim() };
+        navigate("/confirm-email", { replace: true, state });
+        return;
+      }
       saveToken(result.access_token, result.user);
       if (isPostHogConfigured) posthog.capture("account_created");
-      // The address is confirmed first, when the server asks for it (#110);
-      // then a new account sets up its Voice ID (#10).
-      navigate(result.user.email_verified === false ? "/confirm-email" : "/enroll", { replace: true });
+      // A new account has no Voice ID yet, so set one up first (#10).
+      navigate("/enroll", { replace: true });
     } catch (error) {
       if (!shown.current) return;
       const rejected = invalidFieldProblems(error);

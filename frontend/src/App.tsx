@@ -16,14 +16,8 @@ function App() {
         <Route path="/" element={<WelcomePage />} />
         <Route path="/signin" element={<SignInPage />} />
         <Route path="/signup" element={<SignupPage />} />
-        <Route
-          path="/confirm-email"
-          element={
-            <RequireSession>
-              <ConfirmEmailPage />
-            </RequireSession>
-          }
-        />
+        {/* No session yet: confirming the email starts it (#111). */}
+        <Route path="/confirm-email" element={<ConfirmEmailPage />} />
         <Route
           path="/enroll"
           element={

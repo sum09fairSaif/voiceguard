@@ -35,7 +35,6 @@ function renderApp(state?: unknown) {
         <Route path="/signin" element={<SignInPage />} />
         <Route path="/signup" element={<p>signup screen</p>} />
         <Route path="/enroll" element={<p>enroll screen</p>} />
-        <Route path="/confirm-email" element={<p>confirm email screen</p>} />
         <Route
           path="/verify"
           element={
@@ -63,16 +62,6 @@ beforeEach(() => {
 });
 
 describe("SignInPage", () => {
-  it("sends an account whose address isn't confirmed to confirm it first", async () => {
-    mockLogIn.mockResolvedValue({ ...account, user: { ...account.user, email_verified: false } });
-    renderApp();
-    await fillAndSubmit();
-
-    expect(await screen.findByText("confirm email screen")).toBeInTheDocument();
-    expect(mockGetEnrollment).not.toHaveBeenCalled();
-    expect(getToken()).toBe("token-1");
-  });
-
   it("shows the Figma heading, fields and links", () => {
     renderApp();
     expect(screen.getByRole("heading", { name: "Welcome back." })).toBeInTheDocument();

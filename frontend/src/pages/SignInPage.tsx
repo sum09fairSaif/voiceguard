@@ -45,11 +45,6 @@ export function SignInPage() {
       if (!shown.current) return;
       saveToken(result.access_token, result.user);
       if (isPostHogConfigured) posthog.capture("signed_in");
-      // An address never confirmed is confirmed first (#110).
-      if (result.user.email_verified === false) {
-        navigate("/confirm-email", { replace: true });
-        return;
-      }
       // People without a Voice ID set one up first (#10). If the status can't
       // be read, the enrollment page explains, retries, and shows enrolled
       // users the way on.
