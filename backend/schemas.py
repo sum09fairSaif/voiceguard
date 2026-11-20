@@ -79,7 +79,23 @@ class LoginResponse(SignupResponse):
     """Same shape as signup: the account and a fresh token."""
 
 
+class SignupAccepted(BaseModel):
+    """Signup's answer while email confirmation is on (#111): the same
+    whether or not the address already has an account."""
+
+    detail: str
+
+
+class EmailAddressRequest(BaseModel):
+    """Asking for a new confirmation code (#111): by address, not sign-in."""
+
+    email: EmailStr
+
+
 class EmailCodeRequest(BaseModel):
+    """Confirming the address with the emailed code. Starts the session."""
+
+    email: EmailStr
     # Six digits; spaces the user may type between them are dropped.
     code: str = Field(min_length=1, max_length=20)
 
@@ -90,12 +106,6 @@ class EmailCodeRequest(BaseModel):
         if len(value) != 6 or not value.isascii() or not value.isdigit():
             raise ValueError("The code is 6 digits.")
         return value
-
-
-class EmailVerifiedResponse(BaseModel):
-    """The account, now confirmed."""
-
-    user: UserPublic
 
 
 class ChallengeResponse(BaseModel):

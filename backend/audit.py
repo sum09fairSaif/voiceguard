@@ -33,6 +33,7 @@ EVENTS = frozenset(
         "login_failed",
         "login_locked",
         "logout",
+        "email_verified",
         "enroll_sample_accepted",
         "enroll_sample_refused",
         "enrolled",

@@ -65,11 +65,12 @@ def _encode(payload: dict, minutes: int) -> str:
     return jwt.encode(payload, config.JWT_SECRET, algorithm=config.JWT_ALGORITHM)
 
 
-def create_access_token(user_id: str, source: str = "login") -> str:
+def create_access_token(user_id: str, source: str = "login", session_id: str | None = None) -> str:
     """A limited token after a password, starting a new session: `source` is
-    "signup" or "login" (enrollment uses it to tell the signup session apart)."""
+    "signup" or "login" (enrollment uses it to tell the signup session apart).
+    `session_id` only when the caller must record it first."""
     return _encode(
-        {"sub": user_id, "sid": uuid.uuid4().hex, "scope": PENDING, "amr": ["pwd"], "src": source},
+        {"sub": user_id, "sid": session_id or uuid.uuid4().hex, "scope": PENDING, "amr": ["pwd"], "src": source},
         config.JWT_EXPIRE_MINUTES,
     )
 
