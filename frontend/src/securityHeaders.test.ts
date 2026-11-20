@@ -38,9 +38,9 @@ function features(policy: string): Record<string, string> {
   return parsed;
 }
 
-// Our PostHog project is in the US region.
+// Our PostHog project is in the US region. Only its ingest address: the app
+// loads nothing from PostHog's asset host (#170).
 const POSTHOG_API = "https://us.i.posthog.com";
-const POSTHOG_ASSETS = "https://us-assets.i.posthog.com";
 
 describe("security headers in vercel.json", () => {
   it("apply to every page", () => {
@@ -51,8 +51,7 @@ describe("security headers in vercel.json", () => {
     const csp = directives(header("Content-Security-Policy"));
 
     expect(csp["default-src"]).toEqual(["'self'"]);
-    // PostHog lazy-loads its extras (e.g. the session recorder) from its asset host.
-    expect(csp["script-src"]).toEqual(["'self'", POSTHOG_ASSETS]);
+    expect(csp["script-src"]).toEqual(["'self'"]);
     expect(csp["style-src"]).toEqual(["'self'"]);
     expect(csp["img-src"]).toEqual(["'self'", "data:"]);
     expect(csp["font-src"]).toEqual(["'self'"]);
@@ -61,7 +60,6 @@ describe("security headers in vercel.json", () => {
       "'self'",
       "https://voiceguard-83cj.onrender.com",
       POSTHOG_API,
-      POSTHOG_ASSETS,
     ]);
     expect(csp["object-src"]).toEqual(["'none'"]);
     expect(csp["base-uri"]).toEqual(["'self'"]);
