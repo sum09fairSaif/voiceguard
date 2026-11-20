@@ -149,6 +149,19 @@ EMBEDDING_SERVICE_HF_TOKEN = os.getenv("EMBEDDING_SERVICE_HF_TOKEN", "")
 EMAIL_API_KEY = os.getenv("EMAIL_API_KEY", "")
 EMAIL_FROM = os.getenv("EMAIL_FROM", "")
 
+# Password reset by email (password_reset.py, #109). The emailed link opens
+# this page of the frontend, with the token after a "#".
+PASSWORD_RESET_URL = os.getenv("PASSWORD_RESET_URL", "https://voiceguard-nu.vercel.app/reset-password").rstrip("/")
+# How long a reset link works.
+PASSWORD_RESET_MINUTES = int(os.getenv("PASSWORD_RESET_MINUTES", "30"))
+# Reset requests per email address per RATE_LIMIT_WINDOW_SECONDS, counted
+# whether or not the address has an account (so the limit gives nothing
+# away), and from everyone together. Each reset email comes out of our
+# Resend allowance (100 a day on the free plan).
+PASSWORD_RESET_EMAIL_LIMIT = int(os.getenv("PASSWORD_RESET_EMAIL_LIMIT", "3"))
+PASSWORD_RESET_RATE_LIMIT = int(os.getenv("PASSWORD_RESET_RATE_LIMIT", "30"))
+if PASSWORD_RESET_MINUTES <= 0 or PASSWORD_RESET_EMAIL_LIMIT <= 0 or PASSWORD_RESET_RATE_LIMIT <= 0:
+    raise RuntimeError("PASSWORD_RESET_MINUTES, PASSWORD_RESET_EMAIL_LIMIT and PASSWORD_RESET_RATE_LIMIT must be more than 0.")
 # Email verification at signup (email_verification.py, #110). Off by default:
 # turn it on only once the frontend has its "check your email" screen and
 # EMAIL_FROM is on a domain verified in Resend (otherwise real users never
@@ -158,9 +171,13 @@ EMAIL_VERIFICATION_REQUIRED = os.getenv("EMAIL_VERIFICATION_REQUIRED", "false").
 # How long a code works, and how many wrong tries use it up.
 EMAIL_CODE_MINUTES = int(os.getenv("EMAIL_CODE_MINUTES", "15"))
 EMAIL_CODE_MAX_TRIES = int(os.getenv("EMAIL_CODE_MAX_TRIES", "5"))
-# Codes emailed per account per RATE_LIMIT_WINDOW_SECONDS, the one sent at
-# signup included. Each is an email from our Resend allowance.
+# Emails per address per RATE_LIMIT_WINDOW_SECONDS: codes, the one sent at
+# signup included, and "you already have an account" notices (#111). Counted
+# for every address, account or not. Each is from our Resend allowance.
 EMAIL_CODE_SEND_LIMIT = int(os.getenv("EMAIL_CODE_SEND_LIMIT", "5"))
+# Confirmation tries and new-code requests per client per window (#111):
+# both work by address, without a sign-in.
+EMAIL_CODE_CLIENT_LIMIT = int(os.getenv("EMAIL_CODE_CLIENT_LIMIT", "30"))
 # An account never confirmed is deleted this long after signup, so it can't
 # hold on to someone else's address.
 UNVERIFIED_ACCOUNT_HOURS = int(os.getenv("UNVERIFIED_ACCOUNT_HOURS", "24"))
@@ -241,7 +258,17 @@ LOGIN_CLIENT_LIMIT = int(os.getenv("LOGIN_CLIENT_LIMIT", "30"))
 CHALLENGE_CLIENT_LIMIT = int(os.getenv("CHALLENGE_CLIENT_LIMIT", "60"))
 VERIFY_CLIENT_LIMIT = int(os.getenv("VERIFY_CLIENT_LIMIT", "30"))
 ENROLL_CLIENT_LIMIT = int(os.getenv("ENROLL_CLIENT_LIMIT", "60"))
-if min(SIGNUP_CLIENT_LIMIT, LOGIN_CLIENT_LIMIT, CHALLENGE_CLIENT_LIMIT, VERIFY_CLIENT_LIMIT, ENROLL_CLIENT_LIMIT) <= 0:
+if (
+    min(
+        SIGNUP_CLIENT_LIMIT,
+        LOGIN_CLIENT_LIMIT,
+        CHALLENGE_CLIENT_LIMIT,
+        VERIFY_CLIENT_LIMIT,
+        ENROLL_CLIENT_LIMIT,
+        EMAIL_CODE_CLIENT_LIMIT,
+    )
+    <= 0
+):
     raise RuntimeError("The *_CLIENT_LIMIT settings must be more than 0.")
 if RATE_LIMIT_WINDOW_SECONDS <= 0 or CHALLENGE_RATE_LIMIT <= 0 or VERIFY_RATE_LIMIT <= 0 or SIGNUP_RATE_LIMIT <= 0:
     raise RuntimeError(

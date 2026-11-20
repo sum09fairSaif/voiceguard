@@ -2,7 +2,9 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { RequireSession } from "./components/RequireSession";
 import { AccountPage } from "./pages/AccountPage";
 import { EnrollPage } from "./pages/enroll/EnrollPage";
+import { ForgotPasswordPage } from "./pages/ForgotPasswordPage";
 import { PassagePage } from "./pages/PassagePage";
+import { ResetPasswordPage } from "./pages/ResetPasswordPage";
 import { ResultPage } from "./pages/ResultPage";
 import { SignInPage } from "./pages/SignInPage";
 import { SignupPage } from "./pages/SignupPage";
@@ -15,6 +17,9 @@ function App() {
         <Route path="/" element={<WelcomePage />} />
         <Route path="/signin" element={<SignInPage />} />
         <Route path="/signup" element={<SignupPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        {/* The emailed link opens this (backend PASSWORD_RESET_URL). */}
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route
           path="/enroll"
           element={

@@ -1,8 +1,10 @@
 """Confirming the email address given at signup (#110).
 
 A new account starts unverified, and we email it a 6-digit code. Typing the
-code into the app (in the same tab, so the session carries on) confirms the
-address. Until then the account can't set up Voice ID or run voice checks,
+code into the app, with the address, confirms it and starts the session:
+signup itself gives no sign-in while this is on, so its answer can be the
+same whether or not the address already has an account (#111). An address
+that has one gets a notice instead of a code (account_exists_email). Until then the account can't set up Voice ID or run voice checks,
 so nobody can take over an address they don't own.
 
 The code:
@@ -134,6 +136,21 @@ def code_email(code: str) -> tuple[str, str]:
         f"It works once and expires in {config.EMAIL_CODE_MINUTES} minutes.\n\n"
         "If you didn't create a VoiceGuard account, you can ignore this email: "
         "the account will be deleted unless the code is used."
+    )
+    return subject, text
+
+
+def account_exists_email() -> tuple[str, str]:
+    """Sent instead of a code when someone signs up with an address that
+    already has an account (#111): signup's answer doesn't say so, the
+    owner's inbox does."""
+    subject = "Someone tried to create a VoiceGuard account with your email"
+    text = (
+        "Someone just tried to create a new VoiceGuard account with this email address, "
+        "but you already have one.\n\n"
+        "If it was you, sign in with your password instead. If you've forgotten it, "
+        'use "Forgot password?" on the sign-in screen.\n\n'
+        "If it wasn't you, you can ignore this email: nothing has changed on your account."
     )
     return subject, text
 
