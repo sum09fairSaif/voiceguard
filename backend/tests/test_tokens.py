@@ -16,6 +16,7 @@ from security import (
     create_verified_token,
     get_current_user_id,
     get_verified_user_id,
+    user_accounts,
 )
 from sessions import revoked_sessions
 
@@ -28,11 +29,13 @@ def secret(monkeypatch):
 
 
 @pytest.fixture
-def api(revoked):
+def api(revoked, users, new_account):
     # A stand-in for the real routes: one per level, with the same in-memory
-    # sign-out list as the real app in the tests.
+    # sign-out list and accounts as the real app in the tests.
     app = FastAPI()
     app.dependency_overrides[revoked_sessions] = lambda: (lambda: revoked)
+    app.dependency_overrides[user_accounts] = lambda: (lambda: users)
+    new_account(USER)
 
     @app.get("/step")
     def step(user_id: str = Depends(get_current_user_id)):
