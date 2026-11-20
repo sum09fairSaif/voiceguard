@@ -26,6 +26,12 @@ def signed_in(user_id=USER_ID):
     return {"Authorization": f"Bearer {create_access_token(user_id)}"}
 
 
+@pytest.fixture(autouse=True)
+def _account(new_account):
+    # Tokens are refused once their account is gone (#194).
+    new_account(USER_ID)
+
+
 class FakeTranscriber:
     # Stands in for Whisper: "hears" whatever the test says and remembers
     # what it was sent.
@@ -187,8 +193,8 @@ def test_expired_passage_is_refused(client, challenges, transcriber, attempt):
     assert transcriber.calls == []
 
 
-def test_someone_elses_passage_is_refused(client, challenges, transcriber, attempt):
-    response = submit(client, attempt["id"], headers=signed_in(str(ObjectId())))
+def test_someone_elses_passage_is_refused(client, challenges, transcriber, attempt, new_account):
+    response = submit(client, attempt["id"], headers=signed_in(new_account()))
 
     assert response.status_code == 400
     assert is_unused(challenges, attempt["id"])
@@ -680,8 +686,10 @@ def test_an_outage_doesnt_count(client, challenges, transcriber, embedder, enrol
     assert check(client, challenges, transcriber, embedder, voice=OTHER_VOICE).json()["attempts_left"] == MAX - 1
 
 
-def test_one_users_failures_dont_lock_another(client, challenges, transcriber, embedder, enrolled, voiceprints):
-    other = str(ObjectId())
+def test_one_users_failures_dont_lock_another(
+    client, challenges, transcriber, embedder, enrolled, voiceprints, new_account
+):
+    other = new_account()
     save_voiceprint(voiceprints, other, USERS_VOICE)
     lock(client, challenges, transcriber, embedder)
 
@@ -802,7 +810,7 @@ def test_a_failed_sign_in_history_write_still_signs_the_user_in(
 
 def test_an_approval_moves_the_last_sign_in_to_previous(client, users, transcriber, embedder, enrolled, attempt):
     earlier = datetime(2026, 11, 13, 18, 30)
-    users.insert_one({"_id": ObjectId(USER_ID), "full_name": "Sam", "email": "s@example.com", "last_verified_at": earlier})
+    users.update_one({"_id": ObjectId(USER_ID)}, {"$set": {"last_verified_at": earlier}})
     transcriber.heard = attempt["passage"]
 
     submit(client, attempt["id"])
@@ -902,10 +910,10 @@ def test_one_account_hits_its_daily_cap_while_the_shared_budget_has_room(
     assert len(transcriber.calls) == 2
 
 
-def test_the_daily_cap_is_per_account(client, challenges, transcriber, monkeypatch):
+def test_the_daily_cap_is_per_account(client, challenges, transcriber, monkeypatch, new_account):
     monkeypatch.setattr(config, "VERIFY_DAILY_LIMIT", 1)
     transcriber.heard = "the quick brown fox jumps over"
-    other = str(ObjectId())
+    other = new_account()
 
     first = create_challenge(challenges, USER_ID)
     assert submit(client, str(first["_id"])).status_code == 200

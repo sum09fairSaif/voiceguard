@@ -115,17 +115,17 @@ def test_one_client_cant_try_endless_accounts(client, monkeypatch):
 # --- Signed-in routes --------------------------------------------------------
 
 
-def test_one_client_is_limited_across_accounts_for_passages(client, monkeypatch):
+def test_one_client_is_limited_across_accounts_for_passages(client, monkeypatch, new_account):
     # One address cycling through many accounts still runs out.
     monkeypatch.setattr(config, "CHALLENGE_CLIENT_LIMIT", 2)
     for _ in range(2):
-        assert client.post("/api/challenge", headers=from_client("203.0.113.1", str(ObjectId()))).status_code == 201
+        assert client.post("/api/challenge", headers=from_client("203.0.113.1", new_account())).status_code == 201
 
-    assert client.post("/api/challenge", headers=from_client("203.0.113.1", str(ObjectId()))).status_code == 429
-    assert client.post("/api/challenge", headers=from_client("198.51.100.2", str(ObjectId()))).status_code == 201
+    assert client.post("/api/challenge", headers=from_client("203.0.113.1", new_account())).status_code == 429
+    assert client.post("/api/challenge", headers=from_client("198.51.100.2", new_account())).status_code == 201
 
 
-def test_one_client_is_limited_across_accounts_for_voice_checks(client, monkeypatch, no_paid_calls):
+def test_one_client_is_limited_across_accounts_for_voice_checks(client, monkeypatch, no_paid_calls, new_account):
     monkeypatch.setattr(config, "VERIFY_CLIENT_LIMIT", 1)
 
     def submit(address):
@@ -133,7 +133,7 @@ def test_one_client_is_limited_across_accounts_for_voice_checks(client, monkeypa
             "/api/verify",
             files={"audio": ("attempt", RECORDING, "audio/webm")},
             data={"attempt_id": str(ObjectId())},
-            headers=from_client(address, str(ObjectId())),
+            headers=from_client(address, new_account()),
         )
 
     assert submit("203.0.113.1").status_code == 400  # past the limit: unknown passage
@@ -141,14 +141,14 @@ def test_one_client_is_limited_across_accounts_for_voice_checks(client, monkeypa
     assert submit("198.51.100.2").status_code == 400
 
 
-def test_one_client_is_limited_across_accounts_for_enrollment(client, monkeypatch, no_paid_calls):
+def test_one_client_is_limited_across_accounts_for_enrollment(client, monkeypatch, no_paid_calls, new_account):
     monkeypatch.setattr(config, "ENROLL_CLIENT_LIMIT", 1)
 
     def send(address):
         return client.post(
             "/api/enroll/samples",
             files={"audio": ("sample", RECORDING, "audio/webm")},
-            headers=from_client(address, str(ObjectId())),
+            headers=from_client(address, new_account()),
         )
 
     assert send("203.0.113.1").status_code != 429
