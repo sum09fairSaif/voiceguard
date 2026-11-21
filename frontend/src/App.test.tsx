@@ -65,6 +65,20 @@ describe("App routes", () => {
     expect(await screen.findByRole("heading", { name: "Meet your new key." })).toBeInTheDocument();
   });
 
+  it("serves Reset password at /forgot-password (#109)", () => {
+    window.history.pushState({}, "", "/forgot-password");
+    render(<App />);
+    expect(screen.getByRole("heading", { name: "A fresh start." })).toBeInTheDocument();
+  });
+
+  it("serves the new-password page at /reset-password, the address the emailed link uses (#109)", () => {
+    window.history.pushState({}, "", "/reset-password#token=Abc-123_xyzAbc-123_xyzAbc-123_xyzAbc-123_x");
+    render(<App />);
+    expect(screen.getByRole("heading", { name: "A new password." })).toBeInTheDocument();
+    expect(screen.getByLabelText("New password")).toBeInTheDocument();
+    expect(window.location.hash).toBe("");
+  });
+
   it("still serves signup at /signup", () => {
     window.history.pushState({}, "", "/signup");
     render(<App />);

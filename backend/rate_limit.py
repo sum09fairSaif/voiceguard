@@ -1,8 +1,12 @@
 import math
 from datetime import UTC, datetime
 
+from fastapi import Request
 from pymongo import ReturnDocument
 from pymongo.collection import Collection
+
+import config
+from client_address import client_key
 
 
 class RateLimited(Exception):
@@ -38,3 +42,14 @@ def count_request(
     )
     if counter["count"] > limit:
         raise RateLimited(retry_after=max(1, math.ceil((window_end - now).total_seconds())))
+
+
+def count_client_request(rate_limits: Collection, action: str, request: Request, limit: int) -> None:
+    """Count one request of this kind from this client (its address, hashed)
+    and raise RateLimited if it's over `limit` for the current window. Skipped
+    when the client can't be told (see client_address.py): the per-account
+    limits and the all-users backstops still apply."""
+    key = client_key(request)
+    if key is None:
+        return
+    count_request(rate_limits, f"{action}-client", key, limit, config.RATE_LIMIT_WINDOW_SECONDS)

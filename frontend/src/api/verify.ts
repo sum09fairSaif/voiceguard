@@ -5,11 +5,13 @@ import { describeApiError } from "./errors";
 export type VerifyResult = {
   decision: "approved" | "rejected" | "incomplete";
   reason: string;
-  content: { passed: boolean; score: number; matched: number; total: number };
-  identity: "passed" | "failed" | "not_enrolled";
-  // Only "not_checked" until the liveness check (#17) exists; the other
-  // values are handled already so the result screen needs no change then.
-  liveness: "passed" | "failed" | "not_checked";
+  // Each check's outcome. All three are null unless the server is set to
+  // show them (backend VERIFY_CHECK_DETAILS, off by default, #112): saying
+  // which check failed would help someone tune a replay or voice clone.
+  content: { passed: boolean; score: number; matched: number; total: number } | null;
+  identity: "passed" | "failed" | "not_enrolled" | null;
+  // "not_checked" when the account has no Voice ID yet.
+  liveness: "passed" | "failed" | "not_checked" | null;
   // Rejections left before voice checks pause. Back to the maximum after an
   // approval; an "incomplete" doesn't lower it. Optional: a backend from
   // before #141 doesn't send these, and the screen then leaves them out.

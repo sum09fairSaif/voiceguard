@@ -592,10 +592,10 @@ def test_starting_over_leaves_a_finished_voiceprint_alone(client, voiceprints):
     assert load_voiceprint(voiceprints, USER_ID) == TAKES[0]
 
 
-def test_one_users_samples_dont_count_for_another(client, embedder):
+def test_one_users_samples_dont_count_for_another(client, embedder, new_account):
     send(client)
 
-    body = client.get(STATUS_URL, headers=signed_in(str(ObjectId()))).json()
+    body = client.get(STATUS_URL, headers=signed_in(new_account())).json()
 
     assert body["status"] == "not_started"
 
@@ -800,7 +800,8 @@ def test_an_enrolled_account_still_gets_409_not_403(client, voiceprints, embedde
 def test_a_missing_account_may_not_enroll(client, users, embedder):
     users.delete_many({})
 
-    assert send(client).status_code == 403
+    # Its token is refused outright (#194).
+    assert send(client).status_code == 401
 
 
 def test_refused_requests_dont_use_up_the_owners_allowance(client, embedder, monkeypatch, no_grace):
@@ -834,3 +835,80 @@ def test_a_session_that_may_not_enroll_gets_no_sentence(client, enroll_prompts, 
     assert body["can_enroll"] is False
     assert body["prompt"] is None
     assert enroll_prompts.count_documents({}) == 0
+
+
+# --- Daily speech-to-text budget (shared with voice checks, #151) ----------------------
+
+
+def budget_used(rate_limits):
+    record = rate_limits.find_one({"_id": {"$regex": "^transcription-budget:"}})
+    return record["count"] if record else 0
+
+
+def test_each_paid_call_uses_one_slot_of_the_shared_budget(client, embedder, transcriber, rate_limits):
+    send(client)
+    send(client)
+
+    assert len(transcriber.calls) == 2
+    assert budget_used(rate_limits) == 2
+
+
+def test_a_sample_turned_away_for_its_sound_uses_no_slot(client, embedder, transcriber, rate_limits):
+    embedder.speech_seconds = 0.2
+
+    assert send(client).status_code == 422
+    assert transcriber.calls == []
+    assert budget_used(rate_limits) == 0
+
+
+def test_a_spent_budget_refuses_before_the_paid_call_and_keeps_the_sentence(
+    client, embedder, transcriber, enroll_prompts, enrollments, rate_limits, monkeypatch
+):
+    monkeypatch.setattr(config, "TRANSCRIPTION_DAILY_BUDGET", 1)
+    assert send(client).status_code == 200
+    client.get(STATUS_URL, headers=signed_in())
+    sentence = newest_prompt(enroll_prompts)
+
+    response = client.post(SAMPLES_URL, headers=signed_in(), files={"audio": ("s.webm", RECORDING, "audio/webm")})
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "Voice ID setup is busy right now. Please try again later."
+    assert 0 < int(response.headers["Retry-After"]) <= 24 * 3600
+    assert len(transcriber.calls) == 1
+    assert stored(enrollments) == 1
+    # The sentence wasn't used up: it still counts once the budget is back.
+    monkeypatch.setattr(config, "TRANSCRIPTION_DAILY_BUDGET", 2)
+    transcriber.heard = sentence
+    again = client.post(SAMPLES_URL, headers=signed_in(), files={"audio": ("s.webm", RECORDING, "audio/webm")})
+    assert again.status_code == 200
+    assert stored(enrollments) == 2
+
+# --- Security events (#167) ----------------------------------------------------
+
+
+def recorded(audit_events):
+    return [(e["event"], e["reason"]) for e in audit_events.find({}, {"_id": 0})]
+
+
+def test_enrollment_is_recorded(client, embedder, audit_events):
+    for _ in range(config.ENROLL_SAMPLES_REQUIRED):
+        send(client)
+
+    assert recorded(audit_events) == [("enroll_sample_accepted", None)] * config.ENROLL_SAMPLES_REQUIRED + [
+        ("enrolled", None)
+    ]
+
+
+def test_a_refused_sample_records_why(client, embedder, audit_events):
+    embedder.speech_seconds = 0.1
+    send(client)
+
+    ((event, reason),) = recorded(audit_events)
+    assert event == "enroll_sample_refused"
+    assert reason
+
+
+def test_enrolling_outside_the_signup_session_is_recorded(client, embedder, audit_events, no_grace):
+    send(client, headers=from_login())
+
+    assert recorded(audit_events) == [("enroll_sample_refused", "not_signup_session")]

@@ -242,6 +242,20 @@ Kaggle gives about 30 free GPU hours a week, in sessions of up to 9-12 hours.
    of the last version that finished without an error, so after a crash
    there's nothing to carry on from: the script then stops at once and lists
    what it found, rather than starting over.
+8. For room echo and noise, after `python download.py rirs_noises`:
+   `python kaggle_pack.py --user <kaggle-username> --noise-only` packs them
+   (about 1.3 GB) under `data/kaggle/noise/`, and `kaggle datasets create -p
+   data/kaggle/noise` uploads them once as their own private dataset, so the
+   15 GB data pack doesn't have to go up again. Then add `--noise` to every
+   `kaggle_pack.py --script-only` for that run, resumes included: it attaches
+   the noise dataset, and the run stops at once on Kaggle if it can't find
+   it, rather than spending GPU hours training without it.
+
+If `download.py rirs_noises` says openslr.org's certificate isn't valid
+while a browser opens the site fine, Python's certificate list is out of
+date rather than the site being unsafe: download `rirs_noises.zip` in the
+browser (or with `curl`), save it as `data/augment/rirs_noises.zip`, and run
+the command again to unpack and check it.
 
 On Kaggle's GPU it trains about 17 clips a second, about 65-75 minutes an
 epoch, so 10 epochs need two sessions. The GPU is mostly waiting: Opus and MP3
@@ -284,6 +298,36 @@ Test scores are worse than dev ones (ASVspoof 2019 LA: 27% against 14%)
 because LA's test set uses attack types not in training. Common Voice has no
 fakes, so its 1.6% may partly be the model learning that dataset's sound as
 "real"; the team recordings will measure real users being rejected better.
+
+### Echo and noise model
+
+`echo-noise` (November 2026): the same 10 epochs from the ASVspoof 5
+checkpoint, with room echo (25% of clips) and background noise (30%, 5-25 dB)
+from RIRS_NOISES added in training (step 8 above). Best dev EER 21.3%
+against first-try's 17.8%.
+
+On clean processed test audio (5,500 clips) it's slightly worse: pooled EER
+29.0% against 27.3%, In-the-Wild 25.4% against 22.4%, real Common Voice clips
+rejected 1.2% against 1.6%.
+
+On the same test clips as a phone or laptop in a room would hear them (2,700
+clips, each with a room echo, noise at 10-20 dB and Opus compression):
+
+| Room audio | echo-noise | first-try |
+|---|---|---|
+| Pooled EER % | **40.1** | 45.8 |
+| In-the-Wild EER % | **43.7** | 49.3 |
+| Real Common Voice clips rejected at threshold 0.0 | **6.0%** | 12.7% |
+| Real In-the-Wild clips rejected at threshold 0.0 | **10.0%** | 19.7% |
+| In-the-Wild fakes passing at threshold 0.0 | 79.7% | 80.3% |
+
+So it does what it was trained for, about half as many live voices wrongly
+rejected in a room, and the app uses it. But neither model separates fakes
+from real speech once room noise is added (EER 40-50%, near guessing). The
+echoes here come from the same RIRS_NOISES rooms used in training, so its
+numbers are if anything optimistic. Next: a model with a self-supervised
+front end (wav2vec 2.0 + AASIST), which holds up much better to microphones
+and noise.
 
 soundfile 0.13.1 (needed for its `compression_level`) bundles libsndfile
 1.2.2, which fails partway through about half of the raw ASVspoof 2019 PA FLAC

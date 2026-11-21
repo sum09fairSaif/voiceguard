@@ -1,11 +1,13 @@
 import logging
 
 from bson import ObjectId
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 from pymongo.collection import Collection
 
 import config
+import switches
 from audio_upload import read_recording
+from audit import track
 from content_check import ContentResult
 from db import (
     get_enroll_prompts_collection,
@@ -14,6 +16,7 @@ from db import (
     get_users_collection,
     get_voiceprints_collection,
 )
+from email_verification import require_verified_email
 from embedding import Embedder, Embedding, get_embedder
 from enrollment import (
     INCONSISTENT,
@@ -33,10 +36,11 @@ from enrollment import (
 )
 from enrollment_window import may_enroll
 from identity_check import IdentityUnavailable
-from rate_limit import count_request
+from rate_limit import count_client_request, count_request
 from schemas import EnrollmentStatus
 from security import get_current_user_id, get_token_claims
 from transcription import AudioNotUnderstood, Transcriber, get_transcriber, transcribe_and_log
+from transcription_budget import reserve_transcription
 from voiceprints import build_voiceprint, has_voiceprint, save_voiceprint
 
 router = APIRouter(prefix="/api/enroll", tags=["enroll"])
@@ -75,8 +79,15 @@ def enrollment_status(
     return _status(voiceprints, enrollments, prompts, user_id, _may_enroll(users, claims, user_id))
 
 
-@router.post("/samples", response_model=EnrollmentStatus)
+@router.post(
+    "/samples",
+    response_model=EnrollmentStatus,
+    # Paused first. Then, before anything else, an unconfirmed email address
+    # (#110) gets its own answer, not the "only right after signup" one.
+    dependencies=[Depends(switches.require("enrollment")), Depends(require_verified_email)],
+)
 def add_enrollment_sample(
+    request: Request,
     audio: UploadFile = File(...),
     user_id: str = Depends(get_current_user_id),
     claims: dict = Depends(get_token_claims),
@@ -91,12 +102,16 @@ def add_enrollment_sample(
     # Replacing a voiceprint needs more than a password: otherwise anyone
     # who learned the password could swap in their own voice and pass the
     # voice check from then on.
+    # Per client first, refused or not: one address flooding uploads runs out
+    # of its own allowance (the owner, elsewhere, is unaffected).
+    count_client_request(rate_limits, "enroll", request, config.ENROLL_CLIENT_LIMIT)
     if has_voiceprint(voiceprints, user_id):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Your voice is already enrolled.")
     # Setting the voice needs more than a password, too: only the signup
     # session (or the one-off grace period) may do it. Checked before the
     # count, so refused requests can't use up the owner's allowance.
     if not _may_enroll(users, claims, user_id):
+        track("enroll_sample_refused", user_id, reason="not_signup_session")
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=NOT_NOW)
     count_request(rate_limits, "enroll", user_id, config.ENROLL_RATE_LIMIT, config.RATE_LIMIT_WINDOW_SECONDS)
 
@@ -113,6 +128,7 @@ def add_enrollment_sample(
         sample = embed(recording, f"sample.{extension}")
     except AudioNotUnderstood:
         _log(user_id, "unreadable", None, None, None)
+        track("enroll_sample_refused", user_id, reason="unreadable")
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=UNREADABLE_MESSAGE)
 
     if sample.speech_seconds is None or sample.clipped_share is None:
@@ -126,13 +142,18 @@ def add_enrollment_sample(
     content = None
     if problem is None:
         # The words are checked last: speech-to-text is a paid call, so a
-        # sample already turned away for its sound doesn't use one.
+        # sample already turned away for its sound doesn't use one. It counts
+        # against the same daily budget as voice checks (#151); a spent
+        # budget is a 503 "try later", and nothing about the sample is kept.
+        # Taken right before the call, so there's nothing to give back.
+        reserve_transcription(rate_limits)
         try:
             transcript = transcribe_and_log(
                 transcribe, recording, f"sample.{extension}", user_id, "enroll", logger
             )
         except AudioNotUnderstood:
             _log(user_id, "unreadable", sample, similarity, None)
+            track("enroll_sample_refused", user_id, reason="unreadable")
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=UNREADABLE_MESSAGE)
         content = use_prompt(prompts, user_id, transcript)
         if not content.passed:
@@ -142,7 +163,9 @@ def add_enrollment_sample(
 
     _log(user_id, problem or "accepted", sample, similarity, content)
     if problem is not None:
+        track("enroll_sample_refused", user_id, reason=problem)
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=RETRY_MESSAGES[problem])
+    track("enroll_sample_accepted", user_id)
 
     if add_sample(enrollments, user_id, sample.vector) >= config.ENROLL_SAMPLES_REQUIRED:
         samples = take_samples(enrollments, user_id)
@@ -151,6 +174,7 @@ def add_enrollment_sample(
             save_voiceprint(voiceprints, user_id, build_voiceprint(samples))
             discard_prompts(prompts, user_id)
             logger.info("enrolled user=%s samples=%d", user_id, len(samples))
+            track("enrolled", user_id)
     return _status(voiceprints, enrollments, prompts, user_id, True)  # already checked above
 
 
@@ -169,7 +193,13 @@ def start_over(
 
 
 def _may_enroll(users: Collection, claims: dict, user_id: str) -> bool:
-    fields = {"created_at": 1, "signup_session_enrollment": 1}
+    fields = {
+        "created_at": 1,
+        "signup_session_enrollment": 1,
+        "email_verified": 1,
+        "email_verified_at": 1,
+        "email_verified_sid": 1,
+    }
     user = users.find_one({"_id": ObjectId(user_id)}, fields) if ObjectId.is_valid(user_id) else None
     return may_enroll(claims, user)
 

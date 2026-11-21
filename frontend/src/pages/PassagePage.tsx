@@ -79,18 +79,16 @@ export function PassagePage() {
       // Left the screen meanwhile (e.g. signed out): don't move them on.
       if (!shown.current) return;
       if (isPostHogConfigured) {
-        posthog.capture("voice_verification_completed", {
+        // The per-check outcomes are null unless the server is set to show
+        // them (#112); then only the decision is recorded.
+        const outcome = {
           decision: result.decision,
           identity: result.identity,
           liveness: result.liveness,
-          content_passed: result.content.passed,
-        });
-        posthog.logger.info("voice verification completed", {
-          decision: result.decision,
-          identity: result.identity,
-          liveness: result.liveness,
-          content_passed: result.content.passed,
-        });
+          content_passed: result.content?.passed ?? null,
+        };
+        posthog.capture("voice_verification_completed", outcome);
+        posthog.logger.info("voice verification completed", outcome);
       }
       navigate("/result", { state: { result } });
     } catch (err) {

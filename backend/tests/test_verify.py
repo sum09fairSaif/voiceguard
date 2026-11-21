@@ -26,6 +26,12 @@ def signed_in(user_id=USER_ID):
     return {"Authorization": f"Bearer {create_access_token(user_id)}"}
 
 
+@pytest.fixture(autouse=True)
+def _account(new_account):
+    # Tokens are refused once their account is gone (#194).
+    new_account(USER_ID)
+
+
 class FakeTranscriber:
     # Stands in for Whisper: "hears" whatever the test says and remembers
     # what it was sent.
@@ -187,8 +193,8 @@ def test_expired_passage_is_refused(client, challenges, transcriber, attempt):
     assert transcriber.calls == []
 
 
-def test_someone_elses_passage_is_refused(client, challenges, transcriber, attempt):
-    response = submit(client, attempt["id"], headers=signed_in(str(ObjectId())))
+def test_someone_elses_passage_is_refused(client, challenges, transcriber, attempt, new_account):
+    response = submit(client, attempt["id"], headers=signed_in(new_account()))
 
     assert response.status_code == 400
     assert is_unused(challenges, attempt["id"])
@@ -680,8 +686,10 @@ def test_an_outage_doesnt_count(client, challenges, transcriber, embedder, enrol
     assert check(client, challenges, transcriber, embedder, voice=OTHER_VOICE).json()["attempts_left"] == MAX - 1
 
 
-def test_one_users_failures_dont_lock_another(client, challenges, transcriber, embedder, enrolled, voiceprints):
-    other = str(ObjectId())
+def test_one_users_failures_dont_lock_another(
+    client, challenges, transcriber, embedder, enrolled, voiceprints, new_account
+):
+    other = new_account()
     save_voiceprint(voiceprints, other, USERS_VOICE)
     lock(client, challenges, transcriber, embedder)
 
@@ -695,6 +703,47 @@ def test_rejections_are_logged_with_what_is_left(client, challenges, transcriber
         check(client, challenges, transcriber, embedder, voice=OTHER_VOICE)
 
     assert any(f"attempts_left={MAX - 1}" in r.getMessage() for r in caplog.records)
+
+
+# --- Daily speech-to-text budget ---------------------------------------------
+
+
+def test_a_spent_budget_refuses_before_the_paid_call(client, transcriber, attempt, challenges, monkeypatch):
+    monkeypatch.setattr(config, "TRANSCRIPTION_DAILY_BUDGET", 1)
+    transcriber.heard = attempt["passage"]
+    assert submit(client, attempt["id"]).status_code == 200
+    second = create_challenge(challenges, USER_ID)
+
+    response = submit(client, str(second["_id"]))
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "Voice checks are busy right now. Please try again later."
+    assert 0 < int(response.headers["Retry-After"]) <= 24 * 3600
+    assert len(transcriber.calls) == 1
+    # The user keeps their passage for when the budget is back.
+    assert is_unused(challenges, str(second["_id"]))
+
+
+def test_a_failed_passage_lookup_gives_the_budget_slot_back(client, transcriber, attempt, rate_limits, monkeypatch):
+    class Broken:
+        def find_one_and_update(self, *args, **kwargs):
+            raise ServerSelectionTimeoutError("database unreachable")
+
+    monkeypatch.setattr(config, "TRANSCRIPTION_DAILY_BUDGET", 1)
+    app.dependency_overrides[get_challenges_collection] = lambda: Broken()
+
+    assert submit(client, attempt["id"]).status_code == 503
+    budget = rate_limits.find_one({"_id": {"$regex": "^transcription-budget:"}})
+    assert budget["count"] == 0
+
+
+def test_requests_that_fail_before_the_paid_call_dont_use_the_budget(client, transcriber, attempt, monkeypatch):
+    monkeypatch.setattr(config, "TRANSCRIPTION_DAILY_BUDGET", 1)
+    # An unknown passage is refused before any paid call.
+    assert submit(client, str(ObjectId())).status_code == 400
+
+    transcriber.heard = attempt["passage"]
+    assert submit(client, attempt["id"]).status_code == 200
 
 
 # --- The voice-verified token -------------------------------------------------
@@ -737,9 +786,13 @@ def test_anything_but_approval_returns_no_token(client, transcriber, embedder, v
 
 
 def test_a_failed_sign_in_history_write_still_signs_the_user_in(
-    client, transcriber, embedder, enrolled, attempt, caplog
+    client, users, transcriber, embedder, enrolled, attempt, caplog
 ):
     class BrokenUsers:
+        def find_one(self, *args, **kwargs):
+            # Reads still work (the email check, #110); only the write fails.
+            return users.find_one(*args, **kwargs)
+
         def update_one(self, *args, **kwargs):
             raise ServerSelectionTimeoutError("database unreachable")
 
@@ -757,7 +810,7 @@ def test_a_failed_sign_in_history_write_still_signs_the_user_in(
 
 def test_an_approval_moves_the_last_sign_in_to_previous(client, users, transcriber, embedder, enrolled, attempt):
     earlier = datetime(2026, 11, 13, 18, 30)
-    users.insert_one({"_id": ObjectId(USER_ID), "full_name": "Sam", "email": "s@example.com", "last_verified_at": earlier})
+    users.update_one({"_id": ObjectId(USER_ID)}, {"$set": {"last_verified_at": earlier}})
     transcriber.heard = attempt["passage"]
 
     submit(client, attempt["id"])
@@ -777,12 +830,142 @@ def test_the_voice_verified_token_belongs_to_the_same_sign_in(client, transcribe
     assert token_claims(verified)["jti"] != token_claims(limited)["jti"]
 
 
+# --- Security events (#167) ----------------------------------------------------
+
+
+def recorded(audit_events):
+    return [(e["event"], e["reason"]) for e in audit_events.find({}, {"_id": 0})]
+
+
+def test_an_approval_is_recorded_without_scores(client, transcriber, embedder, enrolled, attempt, audit_events):
+    transcriber.heard = attempt["passage"]
+    submit(client, attempt["id"])
+
+    assert recorded(audit_events) == [("voice_check_approved", None)]
+    assert "score" not in str(list(audit_events.find()))
+
+
+def test_a_rejection_records_which_check_failed(client, transcriber, embedder, enrolled, attempt, audit_events):
+    transcriber.heard = attempt["passage"]
+    embedder.voice = OTHER_VOICE
+    submit(client, attempt["id"])
+
+    assert recorded(audit_events) == [("voice_check_rejected", "voice")]
+
+
+def test_a_clone_that_fails_both_checks_is_recorded_as_liveness(
+    client, transcriber, embedder, enrolled, attempt, audit_events
+):
+    # Sumehra's review on #168: liveness is the veto, so it's what the user is
+    # told and what the record says.
+    transcriber.heard = attempt["passage"]
+    embedder.voice = OTHER_VOICE
+    embedder.liveness = SPOOFED
+
+    body = submit(client, attempt["id"]).json()
+
+    assert body["reason"] == "The recording didn't sound like a live voice."
+    assert recorded(audit_events) == [("voice_check_rejected", "liveness")]
+
+
+def test_an_unenrolled_check_is_recorded_as_incomplete(client, transcriber, attempt, audit_events):
+    transcriber.heard = attempt["passage"]
+    submit(client, attempt["id"])
+
+    assert recorded(audit_events) == [("voice_check_incomplete", "not_enrolled")]
+
+
+def test_the_pause_after_too_many_rejections_is_recorded(client, challenges, transcriber, audit_events):
+    transcriber.heard = "the quick brown fox jumps over"
+    for _ in range(config.VOICE_MAX_FAILURES):
+        challenge = create_challenge(challenges, USER_ID)
+        submit(client, str(challenge["_id"]))
+
+    names = [event for event, _ in recorded(audit_events)]
+    assert names.count("voice_check_rejected") == config.VOICE_MAX_FAILURES
+    assert names[-1] == "voice_checks_paused"
+
+
+# --- Daily cap per account (Sumehra's review on #152) --------------------------
+
+
+def test_one_account_hits_its_daily_cap_while_the_shared_budget_has_room(
+    client, challenges, transcriber, rate_limits, monkeypatch
+):
+    monkeypatch.setattr(config, "VERIFY_RATE_LIMIT", 100)  # past the hourly limit
+    monkeypatch.setattr(config, "VERIFY_DAILY_LIMIT", 2)
+    monkeypatch.setattr(config, "TRANSCRIPTION_DAILY_BUDGET", 300)
+    transcriber.heard = "the quick brown fox jumps over"
+
+    statuses = []
+    for _ in range(3):
+        challenge = create_challenge(challenges, USER_ID)
+        statuses.append(submit(client, str(challenge["_id"])).status_code)
+
+    assert statuses[:2] == [200, 200]
+    assert statuses[2] == 429
+    # The refused check never reserved a slot of the shared budget.
+    budget = rate_limits.find_one({"_id": {"$regex": "^transcription-budget:"}})
+    assert budget["count"] == 2
+    assert len(transcriber.calls) == 2
+
+
+def test_the_daily_cap_is_per_account(client, challenges, transcriber, monkeypatch, new_account):
+    monkeypatch.setattr(config, "VERIFY_DAILY_LIMIT", 1)
+    transcriber.heard = "the quick brown fox jumps over"
+    other = new_account()
+
+    first = create_challenge(challenges, USER_ID)
+    assert submit(client, str(first["_id"])).status_code == 200
+    second = create_challenge(challenges, other)
+
+    response = submit(client, str(second["_id"]), headers=signed_in(other))
+
+    assert response.status_code == 200
+
+
+def test_the_daily_cap_resets_each_day(rate_limits):
+    from datetime import UTC, datetime, timedelta
+
+    from rate_limit import RateLimited, count_request
+
+    # Noon today: a fixed past date would have expired under the TTL index.
+    day = datetime.now(UTC).replace(hour=12, minute=0, second=0, microsecond=0)
+    count_request(rate_limits, "verify-day", "u1", 1, 24 * 3600, now=day)
+    with pytest.raises(RateLimited):
+        count_request(rate_limits, "verify-day", "u1", 1, 24 * 3600, now=day)
+
+    count_request(rate_limits, "verify-day", "u1", 1, 24 * 3600, now=day + timedelta(hours=12, seconds=1))
+
+
 # --- Hiding which check failed (#112) ----------------------------------------
 
 
 @pytest.fixture
 def details_hidden(monkeypatch):
     monkeypatch.setattr(config, "VERIFY_CHECK_DETAILS", False)
+
+
+def test_details_are_hidden_unless_switched_on():
+    # A fresh interpreter without the setting: the live server hides them
+    # unless VERIFY_CHECK_DETAILS=true is set on purpose.
+    import os
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    env = {k: v for k, v in os.environ.items() if k != "VERIFY_CHECK_DETAILS"}
+    backend = Path(__file__).resolve().parent.parent
+    shown = subprocess.run(
+        [sys.executable, "-c", "import config; print(config.VERIFY_CHECK_DETAILS)"],
+        cwd=backend,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+
+    assert shown == "False"
 
 
 HIDDEN_FIELDS = ("content", "identity", "liveness")

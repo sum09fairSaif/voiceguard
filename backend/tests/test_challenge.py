@@ -19,6 +19,12 @@ def signed_in(user_id=USER_ID):
     return {"Authorization": f"Bearer {create_access_token(user_id)}"}
 
 
+@pytest.fixture(autouse=True)
+def _account(new_account):
+    # Tokens are refused once their account is gone (#194).
+    new_account(USER_ID)
+
+
 def in_one_hour():
     return datetime.now(UTC) + timedelta(hours=1)
 
@@ -197,10 +203,10 @@ def test_too_many_passages_are_refused(client, challenges, monkeypatch):
     assert challenges.count_documents({}) == 2
 
 
-def test_rate_limit_is_per_user(client, monkeypatch):
+def test_rate_limit_is_per_user(client, monkeypatch, new_account):
     monkeypatch.setattr(config, "CHALLENGE_RATE_LIMIT", 1)
     client.post(CHALLENGE_URL, headers=signed_in())
 
-    response = client.post(CHALLENGE_URL, headers=signed_in(str(ObjectId())))
+    response = client.post(CHALLENGE_URL, headers=signed_in(new_account()))
 
     assert response.status_code == 201

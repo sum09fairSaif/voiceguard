@@ -8,6 +8,14 @@ export const MESSAGES = {
   unknown: "Something went wrong. Please try again.",
 };
 
+// Parts of VoiceGuard can be paused for a while (backend/switches.py); the
+// server names which, and we say it in our own words.
+export const PAUSED_MESSAGES: Record<string, string> = {
+  signups: "Creating new accounts is paused for now. Please try again later.",
+  voice_checks: "Voice checks are paused for now. Please try again later.",
+  enrollment: "Setting up a Voice ID is paused for now. Please try again later.",
+};
+
 function tooManyAttempts(retryAfterSeconds: number | undefined): string {
   if (!retryAfterSeconds || retryAfterSeconds <= 0) {
     return "Too many attempts. Please wait a while and try again.";
@@ -38,8 +46,10 @@ export function describeApiError(
       return MESSAGES.invalid;
     case 429:
       return tooManyAttempts(Number(headers["retry-after"]));
-    case 503:
-      return MESSAGES.unavailable;
+    case 503: {
+      const paused = error.response.data?.paused;
+      return (typeof paused === "string" && PAUSED_MESSAGES[paused]) || MESSAGES.unavailable;
+    }
     default:
       return MESSAGES.unknown;
   }
