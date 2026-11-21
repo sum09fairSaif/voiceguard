@@ -70,6 +70,12 @@ as soon as the voiceprint is built or the checks have run.
   data (user ids hashed with a server key, no emails, addresses or scores), and also sent to
   PostHog when `POSTHOG_API_KEY` is set. A scheduled check opens an
   "API is down" issue when `/health` stops answering.
+- **Browser analytics (#170):** PostHog records page views, a fixed list of
+  named steps and front-end errors, under the same keyed stand-in id, never the
+  account id. No click capture, recordings, form contents or scores, nothing
+  loaded from PostHog, and nothing at all when the browser sends Do Not Track
+  or Global Privacy Control. The app's privacy note (`/privacy`) says what's
+  kept and for how long.
 - **Abuse limits:** limits per client and per account on every route, so one
   sender is stopped without affecting anyone else. 5 wrong passwords within
   15 minutes lock that client out of the account for 30 minutes (20 from

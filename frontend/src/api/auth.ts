@@ -14,6 +14,7 @@ export type SignupResponse = {
     full_name: string;
     email: string;
     created_at: string;
+    analytics_id?: string;
   };
   access_token: string;
   token_type: string;

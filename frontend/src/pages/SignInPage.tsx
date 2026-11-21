@@ -4,7 +4,7 @@ import { describeLoginError, logIn } from "../api/auth";
 import { getEnrollment } from "../api/enroll";
 import { invalidFields } from "../api/errors";
 import { clearToken, saveToken } from "../api/session";
-import posthog, { isPostHogConfigured } from "../posthog";
+import { track } from "../posthog";
 import { Button } from "../components/Button";
 import { Logo } from "../components/Logo";
 import { Page } from "../components/Page";
@@ -48,7 +48,7 @@ export function SignInPage() {
       // The user may have gone to Create account while this was running.
       if (!shown.current) return;
       saveToken(result.access_token, result.user);
-      if (isPostHogConfigured) posthog.capture("signed_in");
+      track("signed_in");
       // People without a Voice ID set one up first (#10). If the status can't
       // be read, the enrollment page explains, retries, and shows enrolled
       // users the way on.

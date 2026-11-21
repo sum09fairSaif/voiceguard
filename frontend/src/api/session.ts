@@ -7,6 +7,9 @@ export type AuthenticatedUser = {
   id: string;
   full_name: string;
   email: string;
+  // The keyed stand-in analytics knows this person by (#170). Missing from
+  // a sign-in saved before the backend sent it.
+  analytics_id?: string;
 };
 
 // The token and the identity needed to restore analytics live in sessionStorage,
@@ -34,9 +37,9 @@ function getStoredUser(): AuthenticatedUser | null {
 }
 
 function identify(user: AuthenticatedUser): void {
-  if (!isPostHogConfigured) return;
-  // The opaque account id only: no email or name goes to analytics.
-  posthog.identify(user.id);
+  // The server's keyed stand-in only, never the account id, email or name.
+  if (!isPostHogConfigured || !user.analytics_id) return;
+  posthog.identify(user.analytics_id);
 }
 
 export function saveToken(token: string, user?: AuthenticatedUser): void {
@@ -55,7 +58,6 @@ export function saveToken(token: string, user?: AuthenticatedUser): void {
   if (user) {
     if (previousUser && previousUser.id !== user.id && isPostHogConfigured) posthog.reset();
     identify(user);
-    if (isPostHogConfigured) posthog.logger.info("authenticated session established");
   }
 }
 
@@ -68,7 +70,7 @@ export function getToken(): string | null {
 }
 
 // Call once when the browser starts so a session that survives a page refresh
-// remains associated with the stable account id.
+// remains associated with the same stand-in id.
 export function restorePostHogIdentity(): void {
   if (getToken()) {
     const user = getStoredUser();
