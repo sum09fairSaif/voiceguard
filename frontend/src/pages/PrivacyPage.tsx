@@ -4,10 +4,6 @@ import { Page } from "../components/Page";
 import { PageHeading } from "../components/PageHeading";
 import styles from "./PrivacyPage.module.css";
 
-// Where to ask for an account to be deleted, until the app can do it.
-// Forwarded on Name.com (our domain, #193).
-export const PRIVACY_CONTACT = "privacy@get-voiceguard.tech";
-
 // The short privacy note linked from sign-up (#170): what's collected, why,
 // and for how long. Keep it in step with the backend and posthog.ts.
 export function PrivacyPage() {
@@ -26,10 +22,8 @@ export function PrivacyPage() {
         <h2 id="privacy-account">Your account</h2>
         <p>
           Your name, email address and password. The password is stored only as a one-way hash, never as you typed it.
-          We keep these until you ask us to delete your account. The app can’t do that yet, so email{" "}
-          <a href={`mailto:${PRIVACY_CONTACT}`}>{PRIVACY_CONTACT}</a> from the address you signed up with, and we’ll
-          delete it along with your voiceprint. An account whose email address is never confirmed is deleted after 24
-          hours.
+          We keep these, and your voiceprint, for as long as your account exists. Deleting an account isn’t available
+          yet. An account whose email address is never confirmed is deleted after 24 hours.
         </p>
       </section>
 

@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it } from "vitest";
-import { PRIVACY_CONTACT, PrivacyPage } from "./PrivacyPage";
+import { PrivacyPage } from "./PrivacyPage";
 
 // The note is a promise to users, so what it says is checked here (#170).
 function renderPage() {
@@ -26,11 +26,10 @@ describe("Privacy note", () => {
     expect(screen.getByText(/deleted from our database after 30 days/)).toHaveTextContent(/copy also goes to PostHog/);
   });
 
-  it("says how to ask for the account to be deleted", () => {
+  it("says deleting an account isn't available yet, and gives no address that might not be read", () => {
     renderPage();
 
-    const contact = screen.getByRole("link", { name: PRIVACY_CONTACT });
-    expect(contact).toHaveAttribute("href", `mailto:${PRIVACY_CONTACT}`);
-    expect(screen.getByText(/until you ask us to delete your account/)).toBeInTheDocument();
+    expect(screen.getByText(/Deleting an account isn’t available yet/)).toBeInTheDocument();
+    expect(screen.queryByText(/@/)).not.toBeInTheDocument();
   });
 });
