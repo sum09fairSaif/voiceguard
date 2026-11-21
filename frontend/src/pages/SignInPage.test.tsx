@@ -33,6 +33,11 @@ function ForgotPasswordStandIn() {
   return <p>forgot password screen for {email || "no email"}</p>;
 }
 
+function ConfirmEmailStandIn() {
+  const email = (useLocation().state as { email?: string } | null)?.email;
+  return <p>confirm email screen for {email || "no email"}</p>;
+}
+
 function renderApp(state?: unknown) {
   render(
     <MemoryRouter initialEntries={[{ pathname: "/signin", state }]}>
@@ -40,6 +45,7 @@ function renderApp(state?: unknown) {
         <Route path="/signin" element={<SignInPage />} />
         <Route path="/signup" element={<p>signup screen</p>} />
         <Route path="/forgot-password" element={<ForgotPasswordStandIn />} />
+        <Route path="/confirm-email" element={<ConfirmEmailStandIn />} />
         <Route path="/enroll" element={<p>enroll screen</p>} />
         <Route
           path="/verify"
@@ -133,6 +139,32 @@ describe("SignInPage", () => {
     await fillAndSubmit();
 
     expect(await screen.findByRole("alert")).toHaveTextContent("try again in 30 minutes");
+  });
+
+  // An unconfirmed account gets the same answers as a wrong password (#111),
+  // so the way back to confirming comes with every one of them.
+  it.each([
+    ["a wrong password", apiError(401)],
+    ["a lockout", apiError(423, {}, { "retry-after": "1800" })],
+  ])("after %s, offers the way to confirm an email, carrying the email typed", async (_, error) => {
+    mockLogIn.mockRejectedValue(error);
+    renderApp();
+    const user = await fillAndSubmit();
+
+    await user.click(await screen.findByRole("link", { name: "Enter your code" }));
+
+    expect(screen.getByText("confirm email screen for sam@example.com")).toBeInTheDocument();
+  });
+
+  it("doesn't offer it before trying, or for other problems", async () => {
+    mockLogIn.mockRejectedValue(networkError());
+    renderApp();
+    expect(screen.queryByRole("link", { name: "Enter your code" })).not.toBeInTheDocument();
+
+    await fillAndSubmit();
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(MESSAGES.network);
+    expect(screen.queryByRole("link", { name: "Enter your code" })).not.toBeInTheDocument();
   });
 
   it("points at the field the server rejected", async () => {

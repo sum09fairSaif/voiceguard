@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { signup } from "../api/auth";
 import { getToken } from "../api/session";
@@ -9,8 +9,17 @@ import { apiError, networkError } from "../test/apiError";
 import { SignupPage } from "./SignupPage";
 
 // Never talk to a real server in tests.
-vi.mock("../api/auth", () => ({ signup: vi.fn() }));
+vi.mock("../api/auth", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../api/auth")>()),
+  signup: vi.fn(),
+}));
 const mockSignup = vi.mocked(signup);
+
+// Stands in for the confirm screen and shows the address it was given.
+function ConfirmProbe() {
+  const state = useLocation().state as { email?: string } | null;
+  return <p>confirm email screen for {state?.email ?? "nobody"}</p>;
+}
 
 function renderApp(start = "/signup") {
   render(
@@ -18,6 +27,7 @@ function renderApp(start = "/signup") {
       <Routes>
         <Route path="/signup" element={<SignupPage />} />
         <Route path="/enroll" element={<p>enroll screen</p>} />
+        <Route path="/confirm-email" element={<ConfirmProbe />} />
         <Route path="/signin" element={<p>sign-in screen</p>} />
         <Route
           path="/verify"
@@ -73,6 +83,16 @@ describe("Create account screen", () => {
       password: "correct-horse-battery",
     });
     expect(getToken()).toBe("token-abc");
+  });
+
+  it("with email confirmation on, goes to confirm the address, without a sign-in", async () => {
+    // The same answer whether or not the address already has an account (#111).
+    mockSignup.mockResolvedValue({ detail: "Check your email." });
+    renderApp();
+    await fillAndSubmit(" alex@example.com ");
+
+    expect(await screen.findByText("confirm email screen for alex@example.com")).toBeInTheDocument();
+    expect(getToken()).toBeNull();
   });
 
   it("shows a taken email under the email field", async () => {
