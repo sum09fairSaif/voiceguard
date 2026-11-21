@@ -4,6 +4,10 @@ import { Page } from "../components/Page";
 import { PageHeading } from "../components/PageHeading";
 import styles from "./PrivacyPage.module.css";
 
+// Where to ask for an account to be deleted, until the app can do it.
+// Forwarded on Name.com (our domain, #193).
+export const PRIVACY_CONTACT = "privacy@get-voiceguard.tech";
+
 // The short privacy note linked from sign-up (#170): what's collected, why,
 // and for how long. Keep it in step with the backend and posthog.ts.
 export function PrivacyPage() {
@@ -22,7 +26,10 @@ export function PrivacyPage() {
         <h2 id="privacy-account">Your account</h2>
         <p>
           Your name, email address and password. The password is stored only as a one-way hash, never as you typed it.
-          We keep these until the account is deleted.
+          We keep these until you ask us to delete your account. The app can’t do that yet, so email{" "}
+          <a href={`mailto:${PRIVACY_CONTACT}`}>{PRIVACY_CONTACT}</a> from the address you signed up with, and we’ll
+          delete it along with your voiceprint. An account whose email address is never confirmed is deleted after 24
+          hours.
         </p>
       </section>
 
@@ -30,7 +37,9 @@ export function PrivacyPage() {
         <h2 id="privacy-voice">Your voice</h2>
         <p>
           Recordings are used once, to set up your Voice ID or to run a voice check, and then deleted. We keep only an
-          encrypted voiceprint. To check the words you read, the recording is sent to OpenAI for transcription.
+          encrypted voiceprint. To check the words you read, the recording is sent to OpenAI for transcription. To
+          make your voiceprint and check that the voice is live, it is also sent to our voice model service, which
+          runs on Hugging Face.
         </p>
       </section>
 
@@ -38,7 +47,8 @@ export function PrivacyPage() {
         <h2 id="privacy-security">Security records</h2>
         <p>
           Sign-ins, lockouts and voice-check results, so we can spot and stop attacks. They hold a coded id instead of
-          your account id, never your email or IP address, and are deleted after 30 days.
+          your account id, never your email or IP address, and are deleted from our database after 30 days. A copy
+          also goes to PostHog, under the same coded id, and is kept as long as the usage information below.
         </p>
       </section>
 
