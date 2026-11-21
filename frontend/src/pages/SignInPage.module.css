@@ -60,3 +60,18 @@
   line-height: 20px;
   color: var(--color-muted);
 }
+
+/* Under a wrong-password or locked answer: the way back to confirming an
+   email for someone who signed up and left before entering the code (#111). */
+.confirmHint {
+  margin-top: -8px;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--color-muted);
+}
+
+.confirmHint a {
+  color: var(--color-primary);
+  font-weight: 600;
+  text-decoration: underline;
+}

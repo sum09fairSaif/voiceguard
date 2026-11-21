@@ -14,14 +14,25 @@ export type SignupResponse = {
     full_name: string;
     email: string;
     created_at: string;
+    // False until the emailed code is entered (#110); missing on older servers.
+    email_verified?: boolean;
   };
   access_token: string;
   token_type: string;
 };
 
-export async function signup(body: SignupRequest): Promise<SignupResponse> {
-  const { data } = await api.post<SignupResponse>("/api/auth/signup", body);
+// While email confirmation is on, signup answers only "check your email"
+// (202), whether or not the address already has an account (#111). There's
+// no sign-in until the emailed code is entered.
+export type SignupAccepted = { detail: string };
+
+export async function signup(body: SignupRequest): Promise<SignupResponse | SignupAccepted> {
+  const { data } = await api.post<SignupResponse | SignupAccepted>("/api/auth/signup", body);
   return data;
+}
+
+export function isSignedIn(result: SignupResponse | SignupAccepted): result is SignupResponse {
+  return "user" in result && "access_token" in result;
 }
 
 export type LoginRequest = {
