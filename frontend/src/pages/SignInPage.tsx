@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import { isAxiosError } from "axios";
 import { describeLoginError, logIn } from "../api/auth";
 import { getEnrollment } from "../api/enroll";
 import { invalidFields } from "../api/errors";
@@ -12,6 +13,7 @@ import { PageHeading } from "../components/PageHeading";
 import { TextField } from "../components/TextField";
 import type { SignOutState } from "../hooks/useSignOut";
 import { useStillShown } from "../hooks/useStillShown";
+import type { ConfirmEmailState } from "./ConfirmEmailPage";
 import type { ForgotPasswordState } from "./ForgotPasswordPage";
 import type { PasswordChangedState } from "./ResetPasswordPage";
 import styles from "./SignInPage.module.css";
@@ -27,6 +29,7 @@ export function SignInPage() {
   const [form, setForm] = useState<SignInForm>({ email: "", password: "" });
   const [errors, setErrors] = useState<SignInErrors>({});
   const [formError, setFormError] = useState("");
+  const [offerConfirm, setOfferConfirm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const shown = useStillShown();
 
@@ -75,6 +78,10 @@ export function SignInPage() {
       // Wrong credentials and lockouts are about the whole form, never one
       // field, so they don't hint at which part was wrong.
       setFormError(describeLoginError(error));
+      // An account that never confirmed its email is answered exactly like a
+      // wrong password, and locked the same way (#111). So the way back to
+      // confirming comes with every such answer: it gives nothing away.
+      setOfferConfirm(isAxiosError(error) && (error.response?.status === 401 || error.response?.status === 423));
       setSubmitting(false);
     }
   }
@@ -140,6 +147,14 @@ export function SignInPage() {
         {formError && (
           <p className={styles.formError} role="alert">
             {formError}
+          </p>
+        )}
+        {formError && offerConfirm && (
+          <p className={styles.confirmHint}>
+            Signed up but haven’t confirmed your email yet?{" "}
+            <Link to="/confirm-email" state={{ email: form.email.trim() } satisfies ConfirmEmailState}>
+              Enter your code
+            </Link>
           </p>
         )}
 
