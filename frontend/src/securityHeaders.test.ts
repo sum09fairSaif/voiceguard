@@ -59,6 +59,8 @@ describe("security headers in vercel.json", () => {
     expect(csp["media-src"]).toEqual(["'self'"]);
     expect(csp["connect-src"]).toEqual([
       "'self'",
+      // Our own domain (#193), and Render's address until the app has moved.
+      "https://api.get-voiceguard.tech",
       "https://voiceguard-83cj.onrender.com",
       POSTHOG_API,
       POSTHOG_ASSETS,

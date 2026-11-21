@@ -17,13 +17,16 @@ MONGO_URI = os.getenv("MONGO_URI", "")
 MONGO_DB_NAME = os.getenv("MONGO_DB_NAME", "voiceguard")
 
 # Websites allowed to call this API from a browser (CORS), comma-separated.
-# The default covers local development and the live frontend.
+# The default covers the live frontend: our own domain (#193) and, until
+# everyone has moved to it, the Vercel address.
 ALLOWED_ORIGINS = [
     origin.strip().rstrip("/")
     # Production only by default; local development adds http://localhost:5173
     # in its .env (see .env.example). An allowed origin can send requests
     # that carry the sign-in cookie, so the list is kept to our own pages.
-    for origin in os.getenv("ALLOWED_ORIGINS", "https://voiceguard-nu.vercel.app").split(",")
+    for origin in os.getenv(
+        "ALLOWED_ORIGINS", "https://app.get-voiceguard.tech,https://voiceguard-nu.vercel.app"
+    ).split(",")
     if origin.strip()
 ]
 # Also allowed: Vercel's preview deployments of the frontend (one per

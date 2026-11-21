@@ -154,10 +154,18 @@ describe("Passage screen", () => {
     // the clock can pass before the timer exists, and it never fires.
     await act(async () => {});
 
+    // The pause timer is set in an effect that runs just after the message
+    // shows, and the clock also moves with real time (shouldAdvanceTime), so
+    // it's due a few milliseconds after 60 s. Check either side with room to
+    // spare rather than at exactly 60 s, which failed on slower runs.
     await act(async () => {
-      vi.advanceTimersByTime(60_000);
+      vi.advanceTimersByTime(59_000);
     });
+    expect(screen.getByRole("alert")).toHaveTextContent(/Voice checks are paused after/);
 
+    await act(async () => {
+      vi.advanceTimersByTime(2_000);
+    });
     expect(screen.getByRole("alert")).toHaveTextContent("Voice checks are available again.");
     await userEvent.setup({ advanceTimers: vi.advanceTimersByTime }).click(
       screen.getByRole("button", { name: /try again/i }),

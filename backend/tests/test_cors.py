@@ -9,7 +9,7 @@ client = TestClient(app)
 
 @pytest.fixture(autouse=True)
 def production_origins(monkeypatch):
-    origins = ["https://voiceguard-nu.vercel.app"]
+    origins = ["https://app.get-voiceguard.tech", "https://voiceguard-nu.vercel.app"]
     monkeypatch.setattr(config, "ALLOWED_ORIGINS", origins)
     for middleware in app.user_middleware:
         if middleware.cls.__name__ == "CORSMiddleware":
@@ -28,6 +28,7 @@ def preflight(origin: str):
 @pytest.mark.parametrize(
     "origin",
     [
+        "https://app.get-voiceguard.tech",
         "https://voiceguard-nu.vercel.app",
         # Vercel preview deployments, per branch and per commit.
         "https://voiceguard-git-feat-19-result-screen-voice-guard2.vercel.app",
@@ -48,6 +49,10 @@ def test_our_frontends_may_call_the_api(origin):
     [
         "https://evil.example",
         "https://voiceguard-nu.vercel.app.evil.example",
+        "https://app.get-voiceguard.tech.evil.example",
+        "http://app.get-voiceguard.tech",
+        # Only the app itself, not any address on our domain.
+        "https://other.get-voiceguard.tech",
         "https://voiceguard-git-main-someone-else.vercel.app",
         "http://voiceguard-git-main-voice-guard2.vercel.app",
         # Local development adds itself in its own .env, never in production:
