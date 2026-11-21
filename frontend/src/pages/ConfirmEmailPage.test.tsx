@@ -4,7 +4,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { confirmEmail, sendEmailCode } from "../api/emailVerification";
 import { MESSAGES } from "../api/errors";
-import { getToken } from "../api/session";
+import { isSignedIn } from "../api/session";
 import { apiError, networkError } from "../test/apiError";
 import {
   CODE_FORMAT,
@@ -76,7 +76,7 @@ describe("Confirm email screen", () => {
   it("needs no session: confirming is what starts it", () => {
     renderApp();
 
-    expect(getToken()).toBeNull();
+    expect(isSignedIn()).toBe(false);
     expect(screen.getByRole("button", { name: /confirm email/i })).toBeEnabled();
   });
 
@@ -95,7 +95,7 @@ describe("Confirm email screen", () => {
 
     expect(await screen.findByText("enroll screen")).toBeInTheDocument();
     expect(mockConfirm).toHaveBeenCalledWith("sam@example.com", "123456");
-    expect(getToken()).toBe("token-1");
+    expect(isSignedIn()).toBe(true);
   });
 
   it("says a code didn't work, in our words", async () => {
@@ -105,7 +105,7 @@ describe("Confirm email screen", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent(CODE_NOT_ACCEPTED);
     expect(screen.queryByText("server words")).not.toBeInTheDocument();
-    expect(getToken()).toBeNull();
+    expect(isSignedIn()).toBe(false);
     // The field can be used again.
     expect(screen.getByLabelText("Confirmation code")).toBeEnabled();
   });

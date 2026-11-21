@@ -1,7 +1,19 @@
 import posthog, { isPostHogConfigured } from "../posthog";
 
-const TOKEN_KEY = "voiceguard.token";
+// The sign-in token lives in an HttpOnly cookie the API sets (#102): no
+// script on the page can read it, so a cross-site scripting bug can't steal
+// it. The browser sends it with every request (see client.ts).
+//
+// What the page keeps is only a note that this tab signed in, and who, so
+// screens know where to go without asking the server first, and analytics can
+// stay tied to the account. Neither is a secret: the server checks the
+// cookie on every request and answers 401 when there's no valid one, and the
+// screens then come here to forget the note and send the person to sign in.
+const SIGNED_IN_KEY = "voiceguard.signedIn";
 const USER_KEY = "voiceguard.user";
+// Where the token was kept before #102. Removed on sight, so an old tab
+// doesn't leave one behind.
+const OLD_TOKEN_KEY = "voiceguard.token";
 
 export type AuthenticatedUser = {
   id: string;
@@ -9,11 +21,9 @@ export type AuthenticatedUser = {
   email: string;
 };
 
-// The token and the identity needed to restore analytics live in sessionStorage,
-// so they're gone when the tab closes. Storage can be unavailable (e.g. some
-// private-browsing modes), so we keep in-memory copies too and never let storage
-// errors crash the app.
-let memoryToken: string | null = null;
+// Storage can be unavailable (e.g. some private-browsing modes), so we keep
+// in-memory copies too and never let storage errors crash the app.
+let memorySignedIn = false;
 let memoryUser: AuthenticatedUser | null = null;
 
 function isAuthenticatedUser(value: unknown): value is AuthenticatedUser {
@@ -39,50 +49,60 @@ function identify(user: AuthenticatedUser): void {
   posthog.identify(user.id);
 }
 
-export function saveToken(token: string, user?: AuthenticatedUser): void {
+// After signup or sign-in: the API has set the cookie.
+export function startSession(user: AuthenticatedUser): void {
   const previousUser = getStoredUser();
-  memoryToken = token;
-  if (user) memoryUser = user;
+  memorySignedIn = true;
+  memoryUser = user;
   try {
-    // User first: if the token write then fails, nothing restores a session
-    // for the wrong account.
-    if (user) sessionStorage.setItem(USER_KEY, JSON.stringify(user));
-    sessionStorage.setItem(TOKEN_KEY, token);
+    // User first: if the second write then fails, nothing restores a
+    // session for the wrong account.
+    sessionStorage.setItem(USER_KEY, JSON.stringify(user));
+    sessionStorage.setItem(SIGNED_IN_KEY, "1");
+    sessionStorage.removeItem(OLD_TOKEN_KEY);
   } catch {
     // The in-memory copies still work for this page load.
   }
 
-  if (user) {
-    if (previousUser && previousUser.id !== user.id && isPostHogConfigured) posthog.reset();
-    identify(user);
-    if (isPostHogConfigured) posthog.logger.info("authenticated session established");
-  }
+  if (previousUser && previousUser.id !== user.id && isPostHogConfigured) posthog.reset();
+  identify(user);
+  if (isPostHogConfigured) posthog.logger.info("authenticated session established");
 }
 
-export function getToken(): string | null {
+// Whether this tab signed in. A hint for choosing screens, not proof: the
+// cookie may have expired, which the next request finds out.
+export function isSignedIn(): boolean {
   try {
-    return sessionStorage.getItem(TOKEN_KEY) ?? memoryToken;
+    return sessionStorage.getItem(SIGNED_IN_KEY) === "1" || memorySignedIn;
   } catch {
-    return memoryToken;
+    return memorySignedIn;
   }
 }
 
 // Call once when the browser starts so a session that survives a page refresh
 // remains associated with the stable account id.
 export function restorePostHogIdentity(): void {
-  if (getToken()) {
+  try {
+    sessionStorage.removeItem(OLD_TOKEN_KEY);
+  } catch {
+    // Nothing stored.
+  }
+  if (isSignedIn()) {
     const user = getStoredUser();
     if (user) identify(user);
   }
 }
 
-export function clearToken(): void {
-  const hadSession = getToken() !== null;
-  memoryToken = null;
+// After sign-out, or when the server says the session has ended. Only the
+// API can clear the cookie (POST /api/auth/logout); this forgets the note.
+export function endSession(): void {
+  const hadSession = isSignedIn();
+  memorySignedIn = false;
   memoryUser = null;
   try {
-    sessionStorage.removeItem(TOKEN_KEY);
+    sessionStorage.removeItem(SIGNED_IN_KEY);
     sessionStorage.removeItem(USER_KEY);
+    sessionStorage.removeItem(OLD_TOKEN_KEY);
   } catch {
     // Nothing stored, nothing to clear.
   }

@@ -18,8 +18,9 @@ export type VerifyResult = {
   attempts_left?: number;
   // True when this rejection used the last attempt, so checks are paused now.
   fallback_required?: boolean;
-  // Only when approved: the voice-verified token that opens the account.
-  // It replaces the password's limited token.
+  // Not used: on approval the API sets the voice-verified token as a
+  // cookie the page can't read (#102). Sent in the body too only while the
+  // backend's TOKEN_IN_RESPONSE_BODY is on, for the change-over.
   access_token?: string | null;
 };
 

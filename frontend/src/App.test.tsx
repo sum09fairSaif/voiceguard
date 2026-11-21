@@ -1,7 +1,8 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { clearToken, saveToken } from "./api/session";
+import { endSession } from "./api/session";
+import { signInForTest } from "./test/session";
 import App from "./App";
 
 vi.mock("./api/enroll", async (importOriginal) => ({
@@ -15,7 +16,7 @@ vi.mock("./api/enroll", async (importOriginal) => ({
 }));
 
 afterEach(() => {
-  clearToken();
+  endSession();
   window.history.pushState({}, "", "/");
 });
 
@@ -48,7 +49,7 @@ describe("App routes", () => {
   });
 
   it("skips the welcome screen for someone already signed in", async () => {
-    saveToken("a-token");
+    signInForTest();
     window.history.pushState({}, "", "/");
     render(<App />);
     expect(window.location.pathname).toBe("/enroll");
@@ -57,7 +58,7 @@ describe("App routes", () => {
   });
 
   it("sends someone already signed in from an unknown address to enrollment", async () => {
-    saveToken("a-token");
+    signInForTest();
     window.history.pushState({}, "", "/no-such-page");
     render(<App />);
     expect(window.location.pathname).toBe("/enroll");

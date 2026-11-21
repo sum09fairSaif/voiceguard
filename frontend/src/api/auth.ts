@@ -17,7 +17,10 @@ export type SignupResponse = {
     // False until the emailed code is entered (#110); missing on older servers.
     email_verified?: boolean;
   };
-  access_token: string;
+  // Not used: the token is set as a cookie the page can't read (#102).
+  // Sent in the body too only while the backend's TOKEN_IN_RESPONSE_BODY is
+  // on, for the change-over; null after that.
+  access_token?: string | null;
   token_type: string;
 };
 
@@ -31,8 +34,10 @@ export async function signup(body: SignupRequest): Promise<SignupResponse | Sign
   return data;
 }
 
+// Signed in when the answer carries the account. Not by the token: that's a
+// cookie now (#102), and the body's copy is going away.
 export function isSignedIn(result: SignupResponse | SignupAccepted): result is SignupResponse {
-  return "user" in result && "access_token" in result;
+  return "user" in result;
 }
 
 export type LoginRequest = {

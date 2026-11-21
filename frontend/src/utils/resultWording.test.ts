@@ -25,10 +25,10 @@ describe("describeResult", () => {
     expect(view.checks.map((check) => check.state)).toEqual(["passed", "passed", "passed"]);
   });
 
-  it("finishes as before when an approval comes without a token (older backend)", () => {
+  it("opens the account after an approval even with no token in the answer (#102: it's a cookie)", () => {
     const view = describeResult(result({ decision: "approved", identity: "passed", liveness: "passed" }));
 
-    expect(view).toMatchObject({ title: "You’re in. Securely.", action: "done", actionLabel: "Done" });
+    expect(view).toMatchObject({ title: "You’re in. Securely.", action: "home", actionLabel: "Continue to home" });
   });
 
   it("says the words were wrong when the phrase didn't match", () => {
