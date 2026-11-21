@@ -10,7 +10,7 @@ from main import app
 
 client = TestClient(app)
 
-ORIGIN = "https://voiceguard-nu.vercel.app"
+ORIGIN = "https://app.get-voiceguard.tech"
 
 
 def chunks(total: int, size: int = 4096):

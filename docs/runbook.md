@@ -6,7 +6,7 @@ Who is watching, and when, is in the team's own rota (not in this repo).
 
 ## Where to look
 
-- **Is it up?** `curl -sI https://voiceguard-83cj.onrender.com/health` should say
+- **Is it up?** `curl -sI https://api.get-voiceguard.tech/health` should say
   `200`. The free Render instance sleeps when idle: the first request after a
   quiet spell can take about a minute.
 - **Backend logs:** the Render dashboard (needs the Render account owner). Lines to look for:

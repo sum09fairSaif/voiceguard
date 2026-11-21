@@ -4,8 +4,9 @@
 
 Voice-biometric multi-factor authentication with anti-spoofing and deepfake detection.
 
-- **Live app:** https://voiceguard-nu.vercel.app/
-- **Live API:** https://voiceguard-83cj.onrender.com/ (health check at [`/health`](https://voiceguard-83cj.onrender.com/health); the interactive docs are only on a local server, see [Backend](#2-backend))
+- **Live app:** https://app.get-voiceguard.tech/
+- **Live API:** https://api.get-voiceguard.tech/ (health check at [`/health`](https://api.get-voiceguard.tech/health); the interactive docs are only on a local server, see [Backend](#2-backend))
+- Our own domain, `get-voiceguard.tech` (#193), so the app and API share a site for the sign-in cookie (#102) and email can come from our own address. The earlier addresses, https://voiceguard-nu.vercel.app/ and https://voiceguard-83cj.onrender.com/, still work for now.
 
 > The free hosting tiers sleep when idle, so the first request after a
 > while can take up to a minute.
@@ -119,14 +120,14 @@ link it creates on its own line here. GitHub shows that as a video player. -->
 
 ## How to use it
 
-1. Open the [live app](https://voiceguard-nu.vercel.app/) and create an account (or sign in, if you already have one).
+1. Open the [live app](https://app.get-voiceguard.tech/) and create an account (or sign in, if you already have one).
 2. Read the sentence on screen aloud (for example "The sleepy tiger polished the rusty lantern near the bridge."): tap the microphone, read, tap again to stop, then **Submit**.
 3. The result screen shows whether the words and voice matched. Each phrase can be used once and expires after two minutes; **New phrase** gets another.
 
 You can also call the API directly. For example, with `curl`:
 
 ```bash
-API=https://voiceguard-83cj.onrender.com
+API=https://api.get-voiceguard.tech
 
 # Create an account. The response includes an access token.
 curl -X POST $API/api/auth/signup -H "Content-Type: application/json" \
