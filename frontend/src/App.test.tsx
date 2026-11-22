@@ -65,6 +65,15 @@ describe("App routes", () => {
     expect(await screen.findByRole("heading", { name: "Meet your new key." })).toBeInTheDocument();
   });
 
+  it("links the privacy note from signup (#170)", async () => {
+    window.history.pushState({}, "", "/signup");
+    render(<App />);
+    await userEvent.click(screen.getByRole("link", { name: "Privacy note" }));
+    expect(window.location.pathname).toBe("/privacy");
+    expect(screen.getByRole("heading", { name: "What we keep, and why." })).toBeInTheDocument();
+    expect(screen.getByText(/Do Not Track or Global Privacy Control/)).toBeInTheDocument();
+  });
+
   it("serves Reset password at /forgot-password (#109)", () => {
     window.history.pushState({}, "", "/forgot-password");
     render(<App />);

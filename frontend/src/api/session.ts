@@ -19,6 +19,9 @@ export type AuthenticatedUser = {
   id: string;
   full_name: string;
   email: string;
+  // The keyed stand-in analytics knows this person by (#170). Missing from
+  // a sign-in saved before the backend sent it.
+  analytics_id?: string;
 };
 
 // Storage can be unavailable (e.g. some private-browsing modes), so we keep
@@ -44,9 +47,9 @@ function getStoredUser(): AuthenticatedUser | null {
 }
 
 function identify(user: AuthenticatedUser): void {
-  if (!isPostHogConfigured) return;
-  // The opaque account id only: no email or name goes to analytics.
-  posthog.identify(user.id);
+  // The server's keyed stand-in only, never the account id, email or name.
+  if (!isPostHogConfigured || !user.analytics_id) return;
+  posthog.identify(user.analytics_id);
 }
 
 // After signup or sign-in: the API has set the cookie.
@@ -66,7 +69,6 @@ export function startSession(user: AuthenticatedUser): void {
 
   if (previousUser && previousUser.id !== user.id && isPostHogConfigured) posthog.reset();
   identify(user);
-  if (isPostHogConfigured) posthog.logger.info("authenticated session established");
 }
 
 // Whether this tab signed in. A hint for choosing screens, not proof: the
@@ -80,7 +82,7 @@ export function isSignedIn(): boolean {
 }
 
 // Call once when the browser starts so a session that survives a page refresh
-// remains associated with the stable account id.
+// remains associated with the same stand-in id.
 export function restorePostHogIdentity(): void {
   try {
     sessionStorage.removeItem(OLD_TOKEN_KEY);

@@ -28,6 +28,6 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Check the API
         env:
-          API_URL: https://voiceguard-83cj.onrender.com
+          API_URL: https://api.get-voiceguard.tech
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python3 .github/scripts/check_uptime.py

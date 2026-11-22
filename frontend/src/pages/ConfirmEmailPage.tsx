@@ -11,7 +11,7 @@ import { PageHeading } from "../components/PageHeading";
 import { ProtectedNote } from "../components/ProtectedNote";
 import { TextField } from "../components/TextField";
 import { useStillShown } from "../hooks/useStillShown";
-import posthog, { isPostHogConfigured } from "../posthog";
+import { track } from "../posthog";
 import styles from "./ConfirmEmailPage.module.css";
 import { EMAIL_PATTERN } from "./signupValidation";
 
@@ -72,7 +72,7 @@ export function ConfirmEmailPage() {
       if (!shown.current) return;
       // The session starts here, as after signing in.
       startSession(result.user);
-      if (isPostHogConfigured) posthog.capture("account_created");
+      track("account_created");
       // A new account has no Voice ID yet, so set one up first (#10).
       navigate("/enroll", { replace: true });
     } catch (error) {

@@ -18,7 +18,7 @@ import { StepProgress } from "../components/StepProgress";
 import { useChallenge } from "../hooks/useChallenge";
 import { useRecorder } from "../hooks/useRecorder";
 import { useStillShown } from "../hooks/useStillShown";
-import posthog, { isPostHogConfigured } from "../posthog";
+import { track } from "../posthog";
 import { formatCountdown } from "../utils/countdown";
 import { displayPassage } from "../utils/passage";
 import styles from "./PassagePage.module.css";
@@ -73,23 +73,19 @@ export function PassagePage() {
     if (!challenge || !recorder.recording) return;
     setSubmitting(true);
     setSubmitError("");
-    if (isPostHogConfigured) posthog.capture("voice_verification_submitted");
+    track("voice_verification_submitted");
     try {
       const result = await submitAttempt(recorder.recording, challenge.attempt_id);
       // Left the screen meanwhile (e.g. signed out): don't move them on.
       if (!shown.current) return;
-      if (isPostHogConfigured) {
-        // The per-check outcomes are null unless the server is set to show
-        // them (#112); then only the decision is recorded.
-        const outcome = {
-          decision: result.decision,
-          identity: result.identity,
-          liveness: result.liveness,
-          content_passed: result.content?.passed ?? null,
-        };
-        posthog.capture("voice_verification_completed", outcome);
-        posthog.logger.info("voice verification completed", outcome);
-      }
+      // The per-check outcomes are null unless the server is set to show
+      // them (#112); then only the decision is recorded. Never a score.
+      track("voice_verification_completed", {
+        decision: result.decision,
+        identity: result.identity,
+        liveness: result.liveness,
+        content_passed: result.content?.passed ?? null,
+      });
       navigate("/result", { state: { result } });
     } catch (err) {
       if (!shown.current) return;

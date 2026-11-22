@@ -12,7 +12,7 @@ from session_cookie import cookie_name
 from transcription import get_transcriber
 from voiceprints import save_voiceprint
 
-OURS = "https://voiceguard-nu.vercel.app"
+OURS = "https://app.get-voiceguard.tech"
 EVIL = "https://evil.example"
 EMAIL, PASSWORD = "sam@example.com", "correct-horse-battery"
 SIGNUP = {"full_name": "Sam Doe", "email": EMAIL, "password": PASSWORD}

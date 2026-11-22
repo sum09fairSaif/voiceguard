@@ -4,7 +4,7 @@ import { isSignedIn, signup } from "../api/auth";
 import type { ConfirmEmailState } from "./ConfirmEmailPage";
 import { describeApiError, invalidFieldProblems } from "../api/errors";
 import { startSession } from "../api/session";
-import posthog, { isPostHogConfigured } from "../posthog";
+import { track } from "../posthog";
 import { Button } from "../components/Button";
 import { Logo } from "../components/Logo";
 import { Page } from "../components/Page";
@@ -67,7 +67,7 @@ export function SignupPage() {
         return;
       }
       startSession(result.user);
-      if (isPostHogConfigured) posthog.capture("account_created");
+      track("account_created");
       // A new account has no Voice ID yet, so set one up first (#10).
       navigate("/enroll", { replace: true });
     } catch (error) {
@@ -156,7 +156,9 @@ export function SignupPage() {
       <p className={styles.switch}>
         Already a member? <Link to="/signin">Sign in</Link>
       </p>
-      <p className={styles.terms}>By continuing, you agree to our Terms &amp; Privacy Policy.</p>
+      <p className={styles.terms}>
+        What we keep, and why: <Link to="/privacy">Privacy note</Link>
+      </p>
     </Page>
   );
 }
