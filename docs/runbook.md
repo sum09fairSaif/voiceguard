@@ -79,11 +79,13 @@ ID, so anyone who signs up now would miss that window. Turn it back on after
 midnight UTC. People who signed up or confirmed their email in the 30 minutes
 before the budget ran out can't set up their Voice ID either, and their window may
 close before midnight. Tell the team; if the spend is acceptable, raising
-`TRANSCRIPTION_DAILY_BUDGET` on the server (this redeploys) lets them finish.
+`TRANSCRIPTION_DAILY_BUDGET` on the server (this redeploys) lets those whose 30
+minutes haven't run out yet finish.
 
 **The voice model service failing or overloaded** (`voice_check_unavailable`
-for the voice model). Pause `enrollment` first (it's the heaviest), **together with
-`signups`** (see above); if voice checks fail too, pause `voice_checks`. Check the model service's status page.
+for the voice model). Pause `signups`, then `enrollment` (see above; enrollment is
+the heaviest); if voice checks fail too, pause `voice_checks`. Check the model
+service's status page.
 
 **One client hammering the API.** Per-client limits answer `429` to it on their
 own. If it gets past them, pause the part it's hitting and tell the team; blocking
