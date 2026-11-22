@@ -32,7 +32,7 @@ Three parts of the app can be paused without a code change or redeploy:
 |---|---|
 | `signups` | Creating accounts |
 | `voice_checks` | New passages and voice checks (paid speech-to-text) |
-| `enrollment` | Adding Voice ID samples (the voice model service) |
+| `enrollment` | Adding Voice ID samples (paid speech-to-text and the voice model service) |
 
 Sign-in is never paused. A paused route answers `503` and the app says that part
 is paused for now.
@@ -64,9 +64,16 @@ Backup if the database can't be reached: on the server, set `SIGNUPS_ENABLED`,
 cap already slow this down; the switch stops it outright. Turn it back on once
 the logs are quiet.
 
-**Speech-to-text spend climbing fast.** Pause `voice_checks`. The daily budget
-stops paid calls when it runs out; pausing stops them now. Check the provider's
-usage page.
+**Speech-to-text spend climbing fast.** Pause `voice_checks`, and `enrollment`
+together with `signups` (see above): enrollment samples use the same paid
+speech-to-text and the same daily budget. The daily budget stops paid calls when
+it runs out; pausing stops them now. Check the provider's usage page.
+
+**The daily speech-to-text budget is spent** (`transcription_budget_used_up`).
+Voice checks and enrollment samples answer `503` "try later" until midnight UTC.
+Pause `signups` until then: a new account has only 30 minutes to set up its Voice
+ID, so anyone who signs up now would miss that window. Turn it back on after
+midnight UTC.
 
 **The voice model service failing or overloaded** (`voice_check_unavailable`
 for the voice model). Pause `enrollment` first (it's the heaviest), **together with
