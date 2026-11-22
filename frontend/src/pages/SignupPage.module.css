@@ -40,3 +40,9 @@
   text-align: center;
   color: var(--color-muted);
 }
+
+/* The privacy note (#170), in the same olive as the other links. */
+.terms a {
+  color: var(--color-primary);
+  text-decoration: underline;
+}

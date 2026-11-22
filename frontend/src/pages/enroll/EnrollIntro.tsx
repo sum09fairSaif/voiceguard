@@ -7,7 +7,7 @@ import voiceIdMark from "../../assets/icons/voice-id-mark.svg";
 import { Button } from "../../components/Button";
 import { PageHeading } from "../../components/PageHeading";
 import { StepProgress } from "../../components/StepProgress";
-import posthog, { isPostHogConfigured } from "../../posthog";
+import { track } from "../../posthog";
 import styles from "./EnrollIntro.module.css";
 
 const FEATURES = [
@@ -22,7 +22,7 @@ export function EnrollIntro({ onStart }: { onStart: () => void }) {
   const [agreed, setAgreed] = useState(false);
 
   function handleStart() {
-    if (isPostHogConfigured) posthog.capture("voice_id_enrollment_started");
+    track("voice_id_enrollment_started");
     onStart();
   }
 
