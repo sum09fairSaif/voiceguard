@@ -3,9 +3,7 @@ import { normalizeBaseUrl, resolveBaseUrl } from "./client";
 
 describe("normalizeBaseUrl", () => {
   it("drops the trailing slash Vercel's value ends with", () => {
-    expect(normalizeBaseUrl("https://voiceguard-83cj.onrender.com/")).toBe(
-      "https://voiceguard-83cj.onrender.com",
-    );
+    expect(normalizeBaseUrl("https://api.get-voiceguard.tech/")).toBe("https://api.get-voiceguard.tech");
   });
 
   it("drops several trailing slashes and surrounding spaces", () => {
@@ -30,8 +28,8 @@ describe("resolveBaseUrl", () => {
     expect(resolveBaseUrl(undefined, true)).toBe("http://localhost:8000");
   });
 
-  it("falls back to the Render backend in a deployed build", () => {
-    expect(resolveBaseUrl("", false)).toBe("https://voiceguard-83cj.onrender.com");
-    expect(resolveBaseUrl("   ", false)).toBe("https://voiceguard-83cj.onrender.com");
+  it("falls back to the live API on our own domain in a deployed build", () => {
+    expect(resolveBaseUrl("", false)).toBe("https://api.get-voiceguard.tech");
+    expect(resolveBaseUrl("   ", false)).toBe("https://api.get-voiceguard.tech");
   });
 });

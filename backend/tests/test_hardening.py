@@ -9,7 +9,7 @@ from security_headers import SECURITY_HEADERS
 
 client = TestClient(app)
 
-ORIGIN = "https://voiceguard-nu.vercel.app"
+ORIGIN = "https://app.get-voiceguard.tech"
 EXPECTED = {name.decode(): value.decode() for name, value in SECURITY_HEADERS}
 
 

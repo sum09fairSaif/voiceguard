@@ -1,7 +1,8 @@
 # VoiceGuard frontend
 
 The VoiceGuard web app: React + TypeScript, built with Vite. It is deployed
-to Vercel from `main` at https://voiceguard-nu.vercel.app/.
+to Vercel from `main` at https://app.get-voiceguard.tech/ (also still at
+https://voiceguard-nu.vercel.app/).
 
 ## Run locally
 
@@ -21,11 +22,11 @@ the backend first (see [../backend/README.md](../backend/README.md)).
 To use a different backend, create `frontend/.env.local` with:
 
 ```
-VITE_API_BASE_URL=https://voiceguard-83cj.onrender.com
+VITE_API_BASE_URL=https://api.get-voiceguard.tech
 ```
 
-If `VITE_API_BASE_URL` isn't set, a production build falls back to the
-Render backend (see `src/api/client.ts`).
+If `VITE_API_BASE_URL` isn't set, a production build falls back to the live
+API at https://api.get-voiceguard.tech (see `src/api/client.ts`).
 
 ## Scripts
 

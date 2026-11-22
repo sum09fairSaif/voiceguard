@@ -154,7 +154,7 @@ EMAIL_FROM = os.getenv("EMAIL_FROM", "")
 
 # Password reset by email (password_reset.py, #109). The emailed link opens
 # this page of the frontend, with the token after a "#".
-PASSWORD_RESET_URL = os.getenv("PASSWORD_RESET_URL", "https://voiceguard-nu.vercel.app/reset-password").rstrip("/")
+PASSWORD_RESET_URL = os.getenv("PASSWORD_RESET_URL", "https://app.get-voiceguard.tech/reset-password").rstrip("/")
 # How long a reset link works.
 PASSWORD_RESET_MINUTES = int(os.getenv("PASSWORD_RESET_MINUTES", "30"))
 # Reset requests per email address per RATE_LIMIT_WINDOW_SECONDS, counted
