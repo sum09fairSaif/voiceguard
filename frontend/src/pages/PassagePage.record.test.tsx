@@ -9,7 +9,7 @@ import { submitAttempt, type VerifyResult } from "../api/verify";
 import { RECORDER_MESSAGES } from "../hooks/useRecorder";
 import { apiError, networkError } from "../test/apiError";
 import { installFakeMicrophone, removeFakeMicrophone } from "../test/fakeMicrophone";
-import posthog from "../posthog";
+import { track } from "../posthog";
 import { PassagePage } from "./PassagePage";
 import { ResultPage } from "./ResultPage";
 
@@ -26,7 +26,8 @@ vi.mock("../api/auth", async (importOriginal) => ({
 // Analytics off unless a test turns it on.
 const analytics = vi.hoisted(() => ({ on: false }));
 vi.mock("../posthog", () => ({
-  default: { capture: vi.fn(), identify: vi.fn(), reset: vi.fn(), logger: { info: vi.fn() } },
+  default: { capture: vi.fn(), identify: vi.fn(), reset: vi.fn() },
+  track: vi.fn(),
   get isPostHogConfigured() {
     return analytics.on;
   },
@@ -147,7 +148,7 @@ describe("Recording and submitting", () => {
       await user.click(screen.getByRole("button", { name: /submit/i }));
 
       expect(await screen.findByText("That didn’t match.")).toBeInTheDocument();
-      expect(vi.mocked(posthog.capture)).toHaveBeenCalledWith("voice_verification_completed", {
+      expect(vi.mocked(track)).toHaveBeenCalledWith("voice_verification_completed", {
         decision: "rejected",
         identity: null,
         liveness: null,
