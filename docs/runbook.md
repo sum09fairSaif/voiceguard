@@ -37,9 +37,11 @@ Three parts of the app can be paused without a code change or redeploy:
 Sign-in is never paused. A paused route answers `503` and the app says that part
 is paused for now.
 
-**Pause `signups` whenever you pause `enrollment`.** A new account can only set up
-its Voice ID within 30 minutes of signing up, so anyone who signs up while
-enrollment is paused misses that window for good (until account recovery exists).
+**Pause `signups` whenever you pause `enrollment`, and pause it first:** each switch
+takes up to 30 seconds to apply, so wait that long before pausing `enrollment`.
+A new account can only set up its Voice ID within 30 minutes of signing up, so
+anyone who signs up while enrollment is paused misses that window for good
+(until account recovery exists).
 `switch.py` warns when enrollment is off and sign-ups are on.
 
 **Pausing `voice_checks` locks everyone out of their account.** Sign-in still
@@ -67,13 +69,17 @@ the logs are quiet.
 **Speech-to-text spend climbing fast.** Pause `voice_checks`, and `enrollment`
 together with `signups` (see above): enrollment samples use the same paid
 speech-to-text and the same daily budget. The daily budget stops paid calls when
-it runs out; pausing stops them now. Check the provider's usage page.
+it runs out; pausing stops new ones within 30 seconds (calls already under way
+finish). Check the provider's usage page.
 
 **The daily speech-to-text budget is spent** (`transcription_budget_used_up`).
 Voice checks and enrollment samples answer `503` "try later" until midnight UTC.
 Pause `signups` until then: a new account has only 30 minutes to set up its Voice
 ID, so anyone who signs up now would miss that window. Turn it back on after
-midnight UTC.
+midnight UTC. People who signed up or confirmed their email in the 30 minutes
+before the budget ran out can't set up their Voice ID either, and their window may
+close before midnight. Tell the team; if the spend is acceptable, raising
+`TRANSCRIPTION_DAILY_BUDGET` on the server (this redeploys) lets them finish.
 
 **The voice model service failing or overloaded** (`voice_check_unavailable`
 for the voice model). Pause `enrollment` first (it's the heaviest), **together with
