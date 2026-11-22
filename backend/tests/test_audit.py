@@ -221,6 +221,17 @@ def test_signup_and_sign_in_are_recorded(client, audit_events):
     assert "sam@example.com" not in str(events(audit_events))
 
 
+def test_signup_and_sign_in_give_the_browser_the_same_stand_in_as_the_security_events(client, audit_events):
+    # The browser's analytics identifies people by this (#170), so its events
+    # and the server's can be linked without either holding the account id.
+    signed_up = client.post("/api/auth/signup", json=SIGNUP).json()["user"]
+    signed_in = client.post("/api/auth/login", json=LOGIN).json()["user"]
+
+    assert signed_up["analytics_id"] == signed_in["analytics_id"] == hashed(signed_up["id"])
+    assert signed_up["analytics_id"] != signed_up["id"]
+    assert [e["user"] for e in events(audit_events, "signup")] == [signed_up["analytics_id"]]
+
+
 def test_a_lockout_is_recorded(client, audit_events):
     client.post("/api/auth/signup", json=SIGNUP)
     for _ in range(config.LOGIN_MAX_FAILURES + 1):

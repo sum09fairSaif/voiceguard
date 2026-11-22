@@ -62,6 +62,10 @@ class UserPublic(BaseModel):
     # account can't set up Voice ID or run voice checks. Accounts made
     # before verification existed, or while it's switched off, are true.
     email_verified: bool = True
+    # The stand-in the browser's analytics identifies this person by (#170):
+    # the same keyed hash the server's security events use (audit.hashed),
+    # so the two can be linked without either showing the account id.
+    analytics_id: str
 
 
 class SignupResponse(BaseModel):

@@ -13,7 +13,7 @@ from pymongo.errors import DuplicateKeyError
 
 import config
 import switches
-from audit import track
+from audit import hashed, track
 from client_address import client_key
 from db import (
     get_email_codes_collection,
@@ -368,6 +368,7 @@ def _public(user: dict) -> UserPublic:
         email=user["email"],
         created_at=created_at,
         email_verified=not is_unverified(user),
+        analytics_id=hashed(str(user["_id"])),
     )
 
 

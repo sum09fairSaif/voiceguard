@@ -5,6 +5,7 @@ import { ConfirmEmailPage } from "./pages/ConfirmEmailPage";
 import { EnrollPage } from "./pages/enroll/EnrollPage";
 import { ForgotPasswordPage } from "./pages/ForgotPasswordPage";
 import { PassagePage } from "./pages/PassagePage";
+import { PrivacyPage } from "./pages/PrivacyPage";
 import { ResetPasswordPage } from "./pages/ResetPasswordPage";
 import { ResultPage } from "./pages/ResultPage";
 import { SignInPage } from "./pages/SignInPage";
@@ -21,6 +22,7 @@ function App() {
         {/* No session yet: confirming the email starts it (#111). */}
         <Route path="/confirm-email" element={<ConfirmEmailPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/privacy" element={<PrivacyPage />} />
         {/* The emailed link opens this (backend PASSWORD_RESET_URL). */}
         <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route
