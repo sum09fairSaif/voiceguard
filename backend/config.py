@@ -205,8 +205,11 @@ if not -1.0 <= IDENTITY_THRESHOLD <= 1.0:
 # counts as a live person; recordings below it are rejected even when the
 # voice matches. The score is the model's raw "real" output, not a
 # probability, and belongs to one model (the service reports which):
-# retraining means choosing it again. LIVENESS_THRESHOLD_PLACEHOLDER
-LIVENESS_THRESHOLD = float(os.getenv("LIVENESS_THRESHOLD", "0.0"))
+# retraining means choosing it again. LIVENESS_THRESHOLD_PLACEHOLDER: 0.5
+# is a stopgap until it's calibrated on live reads. On 600 held-out clips,
+# 0.0 rejected ~0.7% of real people but passed ~50% of deepfakes and ~39%
+# of replays; 1.0 rejected ~12% of real people. 0.5 sits between the two.
+LIVENESS_THRESHOLD = float(os.getenv("LIVENESS_THRESHOLD", "0.5"))
 if not math.isfinite(LIVENESS_THRESHOLD):
     raise RuntimeError("LIVENESS_THRESHOLD must be a number.")
 
