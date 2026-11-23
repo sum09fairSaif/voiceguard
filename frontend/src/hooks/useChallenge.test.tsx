@@ -3,7 +3,8 @@ import { StrictMode, type ReactNode } from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { requestChallenge, type Challenge } from "../api/challenge";
-import { getToken, saveToken } from "../api/session";
+import { isSignedIn } from "../api/session";
+import { signInForTest } from "../test/session";
 import { apiError, networkError } from "../test/apiError";
 import { useChallenge } from "./useChallenge";
 
@@ -106,12 +107,12 @@ describe("useChallenge", () => {
   });
 
   it("sends a signed-out user back to sign in and clears the session", async () => {
-    saveToken("expired-token");
+    signInForTest();
     mockRequest.mockRejectedValue(apiError(401));
     renderChallenge();
 
     expect(await screen.findByText("sign-in screen")).toBeInTheDocument();
-    expect(getToken()).toBeNull();
+    expect(isSignedIn()).toBe(false);
   });
 
   it.each([

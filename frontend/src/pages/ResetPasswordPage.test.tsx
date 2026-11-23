@@ -4,7 +4,7 @@ import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MESSAGES } from "../api/errors";
 import { confirmPasswordReset, tokenFromHash } from "../api/passwordReset";
-import { getToken, saveToken } from "../api/session";
+import { isSignedIn, startSession } from "../api/session";
 import { forgetResetLinkToken, holdResetLinkToken } from "../resetLinkToken";
 import { apiError, networkError } from "../test/apiError";
 import { ResetPasswordPage } from "./ResetPasswordPage";
@@ -89,14 +89,14 @@ describe("ResetPasswordPage", () => {
   });
 
   it("saves the new password with the link's token, then goes to sign in", async () => {
-    saveToken("old-session");
+    startSession({ id: "u1", full_name: "Sam Doe", email: "sam@example.com" });
     renderPage();
     await save();
 
     expect(mockConfirm).toHaveBeenCalledWith(TOKEN, NEW_PASSWORD);
     expect(await screen.findByText("sign in screen after a change")).toBeInTheDocument();
     // The reset ended every session, so this browser's is forgotten too.
-    expect(getToken()).toBeNull();
+    expect(isSignedIn()).toBe(false);
   });
 
   it("shows how strong the password looks while typing", async () => {
@@ -178,7 +178,7 @@ describe("ResetPasswordPage", () => {
   });
 
   it("forgets this browser's session after a reset even if the person has left the page", async () => {
-    saveToken("old-session");
+    startSession({ id: "u1", full_name: "Sam Doe", email: "sam@example.com" });
     let finish: () => void = () => {};
     mockConfirm.mockReturnValue(new Promise<void>((resolve) => (finish = resolve)));
     renderPage();
@@ -187,7 +187,7 @@ describe("ResetPasswordPage", () => {
 
     await act(async () => finish());
 
-    expect(getToken()).toBeNull();
+    expect(isSignedIn()).toBe(false);
   });
 
   it("suggests signing in when the link is refused on saving, in case an earlier save went through", async () => {

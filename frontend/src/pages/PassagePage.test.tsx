@@ -150,6 +150,9 @@ describe("Passage screen", () => {
       .mockResolvedValueOnce(challenge("quilt tiger ocean"));
     renderPage();
     await screen.findByText(/Voice checks are paused after/);
+    // Let React start the pause timer before moving the clock on; otherwise
+    // the clock can pass before the timer exists, and it never fires.
+    await act(async () => {});
 
     // The pause timer is set in an effect that runs just after the message
     // shows, and the clock also moves with real time (shouldAdvanceTime), so

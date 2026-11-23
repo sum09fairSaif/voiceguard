@@ -2,7 +2,7 @@ import { isAxiosError } from "axios";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { describeEnrollError, getEnrollment, type Enrollment } from "../../api/enroll";
-import { clearToken } from "../../api/session";
+import { endSession } from "../../api/session";
 import { SignedInHeader } from "../../components/SignedInHeader";
 import { Page } from "../../components/Page";
 import { EnrollClosed } from "./EnrollClosed";
@@ -37,7 +37,7 @@ export function EnrollPage() {
       .catch((err) => {
         if (!current) return;
         if (isAxiosError(err) && err.response?.status === 401) {
-          clearToken();
+          endSession();
           navigate("/signin", { replace: true });
           return;
         }
@@ -48,9 +48,9 @@ export function EnrollPage() {
     };
   }, [attempt, navigate]);
 
-  // The session ended on its own (401): just forget the token.
+  // The session ended on its own (401): forget this tab's note of it.
   function sessionEnded() {
-    clearToken();
+    endSession();
     navigate("/signin", { replace: true });
   }
 
