@@ -67,7 +67,7 @@ as soon as the voiceprint is built or the checks have run.
   in seconds without a redeploy (`backend/scripts/switch.py`); see the
   [runbook](docs/runbook.md) for what to do when something goes wrong.
 - **Security events and uptime:** sign-ups, sign-ins, lockouts, enrollment,
-  voice-check decisions and sign-outs are recorded for 30 days without personal
+  voice-check decisions, password resets and sign-outs are recorded for 30 days without personal
   data (user ids hashed with a server key, no emails, addresses or scores), and also sent to
   PostHog when `POSTHOG_API_KEY` is set. A scheduled check opens an
   "API is down" issue when `/health` stops answering.
