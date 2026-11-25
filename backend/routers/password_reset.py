@@ -22,7 +22,7 @@ from login_lockout import clear_failures, login_subjects
 from password_policy import password_problem
 from password_reset import find_token, issue_token, reset_email, use_token
 from rate_limit import count_request
-from schemas import PASSWORD_PROBLEMS, PasswordResetConfirm, PasswordResetRequest
+from schemas import PASSWORD_PROBLEMS, PasswordResetCheck, PasswordResetConfirm, PasswordResetRequest
 from security import hash_password
 from sessions import revoke_all, revoked_sessions
 
@@ -77,6 +77,20 @@ def _send_reset_email(send: EmailSender, email: str, subject: str, text: str, us
         logger.info("password_reset_sent user=%s", user_id)
     except EmailUnavailable as exc:
         logger.warning("password_reset_not_sent user=%s reason=%s", user_id, exc)
+
+
+@router.post("/check", status_code=status.HTTP_204_NO_CONTENT)
+def check_link(
+    body: PasswordResetCheck,
+    users: Collection = Depends(get_users_collection),
+    resets: Collection = Depends(get_password_resets_collection),
+) -> None:
+    """Whether an emailed link still works, without using it up, so the reset
+    screen can say at once that a used or expired link can't be used instead
+    of after a new password is typed. Says nothing about the account."""
+    user_id = find_token(resets, body.token)
+    if not (user_id and ObjectId.is_valid(user_id) and users.count_documents({"_id": ObjectId(user_id)}, limit=1)):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=LINK_NOT_USABLE)
 
 
 @router.post("/confirm", status_code=status.HTTP_204_NO_CONTENT)

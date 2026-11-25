@@ -14,6 +14,7 @@ from sessions import is_revoked, revoke_all
 
 REQUEST_URL = "/api/auth/password-reset"
 CONFIRM_URL = "/api/auth/password-reset/confirm"
+CHECK_URL = "/api/auth/password-reset/check"
 EMAIL, OLD, NEW = "sam@example.com", "correct-horse-battery", "a-brand-new-long-passphrase"
 SENT = "If there's an account with that email, we've sent it a link to reset the password."
 NOT_USABLE = "This reset link has expired or has already been used. Please ask for a new one."
@@ -361,3 +362,65 @@ def test_a_signed_out_session_is_still_refused_with_the_account_given(revoked):
 
     assert is_revoked(revoked, "s1", "u1", datetime.now(UTC).timestamp())
     assert is_revoked(revoked, "s1")
+
+
+# Checking a link when the reset screen opens, without using it up.
+
+
+def check(client, token):
+    return client.post(CHECK_URL, json={"token": token})
+
+
+def test_a_fresh_link_checks_as_usable_and_still_works_afterwards(client, account, outbox):
+    ask(client)
+    token = outbox.token()
+
+    assert check(client, token).status_code == 204
+    assert check(client, token).status_code == 204
+    assert confirm(client, token).status_code == 204
+
+
+def test_a_used_link_checks_as_unusable(client, account, outbox):
+    ask(client)
+    token = outbox.token()
+    confirm(client, token)
+
+    response = check(client, token)
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == NOT_USABLE
+
+
+def test_an_older_link_checks_as_unusable_once_a_newer_one_is_sent(client, account, outbox):
+    ask(client)
+    first = outbox.token()
+    ask(client)
+
+    assert check(client, first).status_code == 400
+    assert check(client, outbox.token()).status_code == 204
+
+
+def test_an_unknown_or_expired_link_checks_as_unusable(client, account, outbox, password_resets):
+    assert check(client, "x" * 43).status_code == 400
+
+    ask(client)
+    token = outbox.token()
+    password_resets.update_many({}, {"$set": {"expires_at": datetime.now(UTC) - timedelta(seconds=1)}})
+    assert check(client, token).status_code == 400
+
+
+def test_a_link_for_a_deleted_account_checks_as_unusable(client, account, outbox, users):
+    ask(client)
+    token = outbox.token()
+    users.delete_many({})
+
+    assert check(client, token).status_code == 400
+
+
+def test_checking_says_nothing_about_the_account(client, account, outbox):
+    ask(client)
+
+    response = check(client, outbox.token())
+
+    assert response.status_code == 204
+    assert response.content == b""
