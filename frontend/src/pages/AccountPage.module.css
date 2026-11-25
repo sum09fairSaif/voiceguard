@@ -1,42 +1,125 @@
-/* No Figma frame for this screen: it reuses the Verified frame's (19:371)
-   details card and the shared heading, logo and button. */
+/* Home, from Figma 19:413. */
 .heading {
-  margin-top: 54px;
+  margin-top: 56px;
 }
 
-.details {
-  margin: 28px 0 0;
-  padding: 7px 18px;
-  border: 1px solid var(--color-brand-border);
-  border-radius: var(--radius-status-card);
-  background: var(--color-brand-soft);
+/* The deep green card: 260px tall, 19px corners. */
+.card {
+  margin-top: 33px;
+  padding: 28px 22px 34px;
+  border-radius: 19px;
+  background: var(--color-brand-deep);
+  color: #ffffff;
 }
 
-.row {
+.cardTop {
   display: flex;
   justify-content: space-between;
-  align-items: baseline;
-  gap: 16px;
-  padding: 14.5px 0;
-  font-size: 14px;
+  align-items: flex-start;
+  padding-left: 4px;
 }
 
-.row dt {
-  color: var(--color-text);
-}
-
-.row dd {
-  margin: 0;
-  min-width: 0;
-  overflow-wrap: anywhere;
-  text-align: right;
+.badge {
+  min-width: 102px;
+  height: 26px;
+  padding: 0 14px;
+  border-radius: 13px;
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  gap: 4px;
+  background: var(--color-highlight);
   font-family: var(--font-heading);
+  font-size: 9px;
   font-weight: 600;
   color: var(--color-text);
 }
 
+.cardTitle {
+  margin: 16px 0 0;
+  font-family: var(--font-heading);
+  font-size: 28px;
+  line-height: 34px;
+  font-weight: 700;
+}
+
+.cardText {
+  margin-top: 19px;
+  max-width: 200px;
+  font-size: 14px;
+  line-height: 18px;
+}
+
+.cardLink {
+  display: inline-block;
+  margin-top: 17px;
+  font-family: var(--font-heading);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-highlight-text);
+  text-decoration: none;
+}
+
+.cardLink:hover,
+.cardLink:focus-visible {
+  text-decoration: underline;
+}
+
+.security {
+  margin-top: 22px;
+}
+
+.sectionTitle {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.rows {
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 72px;
+}
+
+/* Icons centred 20.5px in from the edge; the text starts at 55px. */
+.rowIcon {
+  flex: none;
+  width: 41px;
+  display: grid;
+  place-items: center;
+}
+
+.rowText {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.rowTitle {
+  font-family: var(--font-heading);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.rowDetail {
+  font-size: 14px;
+  color: var(--color-muted);
+  overflow-wrap: anywhere;
+}
+
 .note {
-  margin-top: 12px;
+  margin: 4px 0 24px;
   font-size: 13px;
   line-height: 20px;
   color: var(--color-muted);
@@ -52,9 +135,4 @@
   margin-top: 28px;
   font-size: 14px;
   color: var(--color-error);
-}
-
-.action {
-  margin-top: 30px;
-  width: 100%;
 }

@@ -1,66 +1,37 @@
-import { isAxiosError } from "axios";
-import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { describeApiError } from "../api/errors";
-import { getMe, type Me } from "../api/me";
-import { endSession } from "../api/session";
-import { Button } from "../components/Button";
+import { Link } from "react-router-dom";
+import cardShield from "../assets/icons/home-card-shield.svg";
+import rowMic from "../assets/icons/row-mic.svg";
+import rowPulse from "../assets/icons/row-pulse.svg";
 import { Logo } from "../components/Logo";
-import { useSignOut } from "../hooks/useSignOut";
 import { Page } from "../components/Page";
 import { PageHeading } from "../components/PageHeading";
+import { TabBar } from "../components/TabBar";
+import { useMe } from "../hooks/useMe";
 import styles from "./AccountPage.module.css";
 
-const DAY = new Intl.DateTimeFormat(undefined, { dateStyle: "medium" });
 const MOMENT = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
 
 function firstName(fullName: string): string {
   return fullName.trim().split(/\s+/)[0] ?? "";
 }
 
-// The home screen after a full sign-in (password and an approved voice
-// check). The server decides who may see it: it answers 403 to a password
-// alone and 401 to a missing or expired session, and this page follows that.
+// Home, after a full sign-in (password and an approved voice check), from
+// Figma 19:413. The design's "Recent activity" row shows the last sign-in
+// instead until there's an Activity screen, and the "All systems ready" label
+// is left out: nothing here checks that.
 export function AccountPage() {
-  const navigate = useNavigate();
-  const [me, setMe] = useState<Me | null>(null);
-  const [error, setError] = useState("");
-  // React's development mode mounts screens twice.
-  const started = useRef(false);
-
-  useEffect(() => {
-    if (started.current) return;
-    started.current = true;
-    getMe()
-      .then(setMe)
-      .catch((err) => {
-        const status = isAxiosError(err) ? err.response?.status : undefined;
-        if (status === 401) {
-          endSession();
-          navigate("/signin", { replace: true });
-        } else if (status === 403) {
-          // Signed in with a password, but the voice check isn't done.
-          navigate("/verify", { replace: true });
-        } else {
-          setError(describeApiError(err));
-        }
-      });
-  }, [navigate]);
-
-  const signOut = useSignOut();
-
-  function handleSignOut() {
-    void signOut();
-  }
+  const { me, error } = useMe();
+  const enrolled = Boolean(me?.enrolled_at);
 
   return (
     <Page>
       <Logo />
       <div className={styles.heading}>
         <PageHeading
-          eyebrow="Your account"
-          title={me ? `Welcome back, ${firstName(me.full_name)}.` : "Your account"}
-          subtitle="Signed in with your password and your voice."
+          showBadge={false}
+          eyebrow="Your protected space"
+          title={me ? `Hello, ${firstName(me.full_name)}.` : "Hello."}
+          subtitle="A little more confidence for your everyday."
         />
       </div>
 
@@ -73,33 +44,64 @@ export function AccountPage() {
 
       {me && (
         <>
-          <dl className={styles.details} aria-label="Account details">
-            <div className={styles.row}>
-              <dt>Email</dt>
-              <dd>{me.email}</dd>
+          <section className={styles.card} aria-labelledby="home-card-title">
+            <div className={styles.cardTop}>
+              <img src={cardShield} alt="" width={23.6} height={26.27} />
+              {enrolled && (
+                <span className={styles.badge}>
+                  <span aria-hidden="true">●</span> Protected
+                </span>
+              )}
             </div>
-            <div className={styles.row}>
-              <dt>Member since</dt>
-              <dd>{DAY.format(new Date(me.created_at))}</dd>
-            </div>
-            <div className={styles.row}>
-              <dt>Voice ID</dt>
-              <dd>{me.enrolled_at ? `Set up ${DAY.format(new Date(me.enrolled_at))}` : "Not set up"}</dd>
-            </div>
-            <div className={styles.row}>
-              <dt>Last sign-in</dt>
-              <dd>{me.previous_sign_in_at ? MOMENT.format(new Date(me.previous_sign_in_at)) : "This is your first"}</dd>
-            </div>
-          </dl>
-          <p className={styles.note}>Don’t recognise your last sign-in? Sign out and tell the VoiceGuard team.</p>
+            <h2 id="home-card-title" className={styles.cardTitle}>
+              Your voice.
+              <br />
+              Your peace of mind.
+            </h2>
+            <p className={styles.cardText}>
+              {enrolled
+                ? "Voice ID is active and ready when you need it."
+                : "Set up your Voice ID to protect your account with your voice."}
+            </p>
+            <Link to={enrolled ? "/verify" : "/enroll"} className={styles.cardLink}>
+              {enrolled ? "Try a voice check" : "Set up Voice ID"} <span aria-hidden="true">→</span>
+            </Link>
+          </section>
+
+          <section className={styles.security} aria-labelledby="home-security">
+            <h2 id="home-security" className={styles.sectionTitle}>
+              Your security
+            </h2>
+            <ul className={styles.rows}>
+              <li className={styles.row}>
+                <span className={styles.rowIcon}>
+                  <img src={rowMic} alt="" width={13.13} height={18.88} />
+                </span>
+                <span className={styles.rowText}>
+                  <span className={styles.rowTitle}>My Voice ID</span>
+                  <span className={styles.rowDetail}>{enrolled ? "Enrolled & encrypted" : "Not set up"}</span>
+                </span>
+              </li>
+              <li className={styles.row}>
+                <span className={styles.rowIcon}>
+                  <img src={rowPulse} alt="" width={18.88} height={15.05} />
+                </span>
+                <span className={styles.rowText}>
+                  <span className={styles.rowTitle}>Last sign-in</span>
+                  <span className={styles.rowDetail}>
+                    {me.previous_sign_in_at
+                      ? MOMENT.format(new Date(me.previous_sign_in_at))
+                      : "This is your first"}
+                  </span>
+                </span>
+              </li>
+            </ul>
+            <p className={styles.note}>Don’t recognise your last sign-in? Sign out and tell the VoiceGuard team.</p>
+          </section>
         </>
       )}
 
-      <div className={styles.action}>
-        <Button type="button" variant="secondary" onClick={handleSignOut}>
-          Sign out
-        </Button>
-      </div>
+      <TabBar />
     </Page>
   );
 }
