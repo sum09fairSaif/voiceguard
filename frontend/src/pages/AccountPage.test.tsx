@@ -29,6 +29,7 @@ function renderHome() {
         <Route path="/verify" element={<p>passage screen</p>} />
         <Route path="/enroll" element={<p>enroll screen</p>} />
         <Route path="/settings" element={<p>settings screen</p>} />
+        <Route path="/activity" element={<p>activity screen</p>} />
       </Routes>
     </MemoryRouter>,
   );
@@ -48,7 +49,7 @@ afterEach(() => {
 });
 
 describe("Home", () => {
-  it("greets a voice-verified session and shows its Voice ID and last sign-in", async () => {
+  it("greets a voice-verified session and shows its Voice ID", async () => {
     mockGetMe.mockResolvedValue(ME);
     renderHome();
 
@@ -56,7 +57,15 @@ describe("Home", () => {
     expect(await screen.findByRole("heading", { level: 1, name: "Hello, Sam." })).toBeInTheDocument();
     expect(screen.getByText("Protected")).toBeInTheDocument();
     expect(detail("My Voice ID")).toBe("Enrolled & encrypted");
-    expect(detail("Last sign-in")).toMatch(/2026/);
+  });
+
+  it("links to the recent activity", async () => {
+    mockGetMe.mockResolvedValue(ME);
+    renderHome();
+
+    await userEvent.setup().click(await screen.findByRole("link", { name: /Recent activity/ }));
+
+    expect(await screen.findByText("activity screen")).toBeInTheDocument();
   });
 
   it("offers a voice check once Voice ID is set up", async () => {
@@ -68,13 +77,12 @@ describe("Home", () => {
     expect(await screen.findByText("passage screen")).toBeInTheDocument();
   });
 
-  it("says when it's the first sign-in, and offers to set up a missing Voice ID", async () => {
-    mockGetMe.mockResolvedValue({ ...ME, enrolled_at: null, previous_sign_in_at: null });
+  it("offers to set up a missing Voice ID", async () => {
+    mockGetMe.mockResolvedValue({ ...ME, enrolled_at: null });
     renderHome();
 
     await screen.findByRole("heading", { level: 1, name: "Hello, Sam." });
     expect(detail("My Voice ID")).toBe("Not set up");
-    expect(detail("Last sign-in")).toBe("This is your first");
     expect(screen.queryByText("Protected")).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Set up Voice ID/ })).toHaveAttribute("href", "/enroll");
   });
