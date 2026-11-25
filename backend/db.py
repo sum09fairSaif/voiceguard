@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from pymongo import ASCENDING, MongoClient
+from pymongo import ASCENDING, DESCENDING, MongoClient
 from pymongo.collection import Collection
 
 import config
@@ -29,6 +29,8 @@ def get_audit_events_collection() -> Collection:
     # AUDIT_RETENTION_DAYS. Made once per process: written on many requests.
     events = get_client()[config.MONGO_DB_NAME]["audit_events"]
     events.create_index("expires_at", expireAfterSeconds=0)
+    # A user's own events, newest first (GET /api/activity).
+    events.create_index([("user", ASCENDING), ("at", DESCENDING)])
     return events
 
 
