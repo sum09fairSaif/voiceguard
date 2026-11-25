@@ -1,8 +1,8 @@
 import { isAxiosError } from "axios";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { describeApiError, invalidFieldProblems } from "../api/errors";
-import { confirmPasswordReset, tokenFromHash } from "../api/passwordReset";
+import { checkPasswordResetLink, confirmPasswordReset, tokenFromHash } from "../api/passwordReset";
 import { endSession } from "../api/session";
 import { heldResetLinkToken } from "../resetLinkToken";
 import badgeLock from "../assets/icons/badge-lock.svg";
@@ -35,10 +35,27 @@ export function ResetPasswordPage() {
   const [passwordError, setPasswordError] = useState("");
   const [formError, setFormError] = useState("");
   const [linkUnusable, setLinkUnusable] = useState(!token);
-  // The server refused the link when saving (not just a link with no token).
-  const [refusedOnSave, setRefusedOnSave] = useState(false);
+  // The server refused the link, on opening or saving (not just a link with
+  // no token).
+  const [refusedByServer, setRefusedByServer] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const shown = useStillShown();
+  // React's development mode mounts screens twice.
+  const checked = useRef(false);
+
+  // Check the link as soon as the page opens, so a used, replaced or expired
+  // one says so at once instead of after a new password is typed. The form
+  // shows meanwhile; if the check can't get an answer, saving checks again.
+  useEffect(() => {
+    if (!token || checked.current) return;
+    checked.current = true;
+    checkPasswordResetLink(token).catch((error) => {
+      if (shown.current && isAxiosError(error) && error.response?.status === 400) {
+        setLinkUnusable(true);
+        setRefusedByServer(true);
+      }
+    });
+  }, [token, shown]);
 
   useEffect(() => {
     if (location.hash) navigate({ pathname: location.pathname, search: location.search, hash: "" }, { replace: true });
@@ -65,7 +82,7 @@ export function ResetPasswordPage() {
       setSubmitting(false);
       if (isAxiosError(error) && error.response?.status === 400) {
         setLinkUnusable(true);
-        setRefusedOnSave(true);
+        setRefusedByServer(true);
         return;
       }
       const refused = invalidFieldProblems(error).find((problem) => problem.field === "password");
@@ -96,9 +113,9 @@ export function ResetPasswordPage() {
             Reset links work once, for 30 minutes, and only the newest one works. <Link to="/forgot-password">Ask for a
             new link</Link>.
           </p>
-          {refusedOnSave && (
-            // An earlier save may have gone through even though its answer
-            // never arrived (e.g. the connection dropped), using the link up.
+          {refusedByServer && (
+            // The link may have been used up by an earlier save, including
+            // one whose answer never arrived (e.g. the connection dropped).
             <p>
               If you’ve already set a new password with this link, <Link to="/signin">sign in</Link> with it.
             </p>

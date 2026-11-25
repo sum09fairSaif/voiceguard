@@ -1,9 +1,9 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MESSAGES } from "../api/errors";
-import { confirmPasswordReset, tokenFromHash } from "../api/passwordReset";
+import { checkPasswordResetLink, confirmPasswordReset, tokenFromHash } from "../api/passwordReset";
 import { isSignedIn, startSession } from "../api/session";
 import { forgetResetLinkToken, holdResetLinkToken } from "../resetLinkToken";
 import { apiError, networkError } from "../test/apiError";
@@ -12,8 +12,10 @@ import { ResetPasswordPage } from "./ResetPasswordPage";
 vi.mock("../api/passwordReset", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../api/passwordReset")>()),
   confirmPasswordReset: vi.fn(),
+  checkPasswordResetLink: vi.fn(),
 }));
 const mockConfirm = vi.mocked(confirmPasswordReset);
+const mockCheck = vi.mocked(checkPasswordResetLink);
 
 const TOKEN = "Abc-123_xyzAbc-123_xyzAbc-123_xyzAbc-123_x";
 const NEW_PASSWORD = "lantern orchard pebble";
@@ -58,6 +60,7 @@ async function save(password = NEW_PASSWORD) {
 
 beforeEach(() => {
   mockConfirm.mockReset().mockResolvedValue(undefined);
+  mockCheck.mockReset().mockResolvedValue(undefined);
   sessionStorage.clear();
   forgetResetLinkToken();
 });
@@ -205,5 +208,42 @@ describe("ResetPasswordPage", () => {
     renderPage("");
 
     expect(screen.queryByText(/already set a new password/)).not.toBeInTheDocument();
+    expect(mockCheck).not.toHaveBeenCalled();
+  });
+
+  it("checks the link once on opening, and keeps the form when it works", async () => {
+    renderPage();
+
+    await waitFor(() => expect(mockCheck).toHaveBeenCalledWith(TOKEN));
+    expect(mockCheck).toHaveBeenCalledTimes(1);
+    expect(screen.getByLabelText("New password")).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("says at once that a used link can't be used, before any password is typed", async () => {
+    mockCheck.mockRejectedValue(apiError(400, { detail: "used" }));
+    const user = userEvent.setup();
+    renderPage();
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("This link can’t be used");
+    expect(alert).toHaveTextContent("If you’ve already set a new password with this link, sign in with it.");
+    expect(screen.queryByLabelText("New password")).not.toBeInTheDocument();
+    expect(mockConfirm).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("link", { name: "Ask for a new link" }));
+    expect(screen.getByText("forgot password screen")).toBeInTheDocument();
+  });
+
+  it.each([
+    ["server is unavailable", apiError(503)],
+    ["server can't be reached", networkError()],
+  ])("keeps the form when the %s on opening, and checks the link again on saving", async (_, error) => {
+    mockCheck.mockRejectedValue(error);
+    renderPage();
+    await waitFor(() => expect(mockCheck).toHaveBeenCalled());
+
+    await save();
+
+    expect(mockConfirm).toHaveBeenCalledWith(TOKEN, NEW_PASSWORD);
   });
 });

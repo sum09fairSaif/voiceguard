@@ -6,6 +6,12 @@ export async function requestPasswordReset(email: string): Promise<void> {
   await api.post("/api/auth/password-reset", { email });
 }
 
+// Whether the emailed link still works, without using it up: resolves if
+// it does, and fails with 400 if it's been used, replaced or has expired.
+export async function checkPasswordResetLink(token: string): Promise<void> {
+  await api.post("/api/auth/password-reset/check", { token });
+}
+
 // Sets the new password with the token from the emailed link. On success
 // every session the account had is ended, this one included, so the user
 // signs in again.
