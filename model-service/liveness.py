@@ -2,10 +2,13 @@
 replay or an AI-made voice?
 
 The model is AASIST (aasist.py, copied unchanged from the ASVspoof 5
-baseline), fine-tuned in ml/liveness/ on real and fake speech. Its score is
-the model's "real" output: higher means more likely a live person. It isn't
-a probability; the backend compares it with a threshold chosen from test
-results (see ml/liveness/README.md).
+baseline), fine-tuned in ml/liveness/ on real and fake speech, either as it
+is or with a wav2vec 2.0 XLS-R front end (ssl_aasist.py). The weights file
+says which: load_model() builds whichever model it was trained as. Its score
+is the model's "real" output: higher means more likely a live person. It
+isn't a probability, and each model's scores sit on their own scale, so the
+backend's threshold is chosen for one model on test results (see
+ml/liveness/README.md) and changes with it.
 
 The model only gives meaningful scores on audio prepared exactly the way its
 training clips were, so prepare() repeats ml/liveness/audio.py's steps. Keep
@@ -21,15 +24,18 @@ import os
 
 import numpy as np
 
-# The weights file and a name for it, reported with every score so the
-# backend's logs say which model made it.
-LIVENESS_MODEL = "aasist-first-try"
-# LIVENESS_WEIGHTS can point elsewhere, e.g. a Space variable. Spaces and line
-# breaks around it are dropped: a value pasted into the Space's settings
-# with a trailing newline otherwise names a file that doesn't exist.
+# The weights file. The repo holds the small AASIST one (1.2 MB); the XLS-R
+# one (1.26 GB) is too big for git, so on the Space it's uploaded beside the
+# code and LIVENESS_WEIGHTS points at it. Spaces and line breaks around the
+# value are dropped: pasted into the Space's settings with a trailing
+# newline, it otherwise names a file that doesn't exist.
 WEIGHTS = os.getenv("LIVENESS_WEIGHTS", "").strip() or os.path.join(
     os.path.dirname(__file__), "weights", "liveness-first-try.pth"
 )
+# A name for the model, from the weights file's name ("liveness-xlsr.pth" is
+# "aasist-xlsr"), reported with every score so the backend's logs say which
+# model made it, and so which model a threshold belongs to.
+LIVENESS_MODEL = "aasist-" + os.path.splitext(os.path.basename(WEIGHTS))[0].removeprefix("liveness-")
 
 # From ml/liveness/audio.py (STEPS_VERSION 2). The input arrives already
 # 16 kHz mono from ffmpeg, so its resampling step isn't needed here.
@@ -138,19 +144,36 @@ def load_model() -> None:
     # Imported here so tests can run without PyTorch installed.
     import torch
 
+    # weights_only stops the file running code when it's loaded.
+    state = torch.load(WEIGHTS, map_location="cpu", weights_only=True)
+    _model = build_model(state)
+    _model.load_state_dict(state)
+    _model.eval()
+
+
+def build_model(state: dict):
+    """An untrained model of the kind `state` (a checkpoint's weights) was
+    trained as: AASIST, or XLS-R + AASIST, whose weights start "ssl."."""
+    if any(key.startswith("ssl.") for key in state):
+        # Imported only for XLS-R, so the AASIST model doesn't need transformers.
+        from transformers import Wav2Vec2Config
+
+        from ssl_aasist import SSL_NAME, SslAasist
+
+        # Only XLS-R's shape (a small config file) is downloaded; every
+        # weight comes from the checkpoint.
+        return SslAasist(MODEL_CONFIG, Wav2Vec2Config.from_pretrained(SSL_NAME))
     from aasist import Model
 
-    model = Model(MODEL_CONFIG)
-    # weights_only stops the file running code when it's loaded.
-    model.load_state_dict(torch.load(WEIGHTS, map_location="cpu", weights_only=True))
-    _model = model.eval()
+    return Model(MODEL_CONFIG)
 
 
 def score(samples: np.ndarray, device: str = "cpu") -> float | None:
     """The liveness score for 16 kHz mono samples: the lowest of its
-    windows' scores. None if there's no sound to judge, or too much. Few
-    weights but a lot of arithmetic: about 3 seconds a window on a CPU, a
-    few milliseconds on a GPU."""
+    windows' scores. None if there's no sound to judge, or too much. On a
+    CPU, about 3 seconds a window for AASIST (few weights but a lot of
+    arithmetic) and about 1.2 for XLS-R on 2 threads; a few milliseconds on
+    a GPU."""
     import torch
 
     windows = prepare(samples)

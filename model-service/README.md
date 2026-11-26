@@ -14,10 +14,15 @@ Runs two models on each recording:
 - **Identity:** a speaker embedding (192 numbers that describe a voice) from
   SpeechBrain's ECAPA model, `speechbrain/spkrec-ecapa-voxceleb`.
 - **Liveness:** a score for whether it's a live person rather than a replay
-  or AI voice, from AASIST fine-tuned in `ml/liveness/` (`liveness.py`; the
-  model code in `aasist.py` is copied unchanged from the ASVspoof 5 baseline
-  under the MIT licence in `LICENSE-AASIST`; the weights are
-  `weights/liveness-first-try.pth`, 1.2 MB).
+  or AI voice (`liveness.py`), from a model fine-tuned in `ml/liveness/`.
+  The live app uses **XLS-R + AASIST** (`ssl_aasist.py`, copied from
+  `ml/liveness/models/`; weights `liveness-xlsr.pth`, 1.26 GB, uploaded to
+  the Space, not kept in git), chosen on the team's recordings (#231). The
+  older **AASIST** (`aasist.py`, copied unchanged from the ASVspoof 5
+  baseline under the MIT licence in `LICENSE-AASIST`; weights
+  `weights/liveness-first-try.pth`, 1.2 MB) is the default when
+  `LIVENESS_WEIGHTS` isn't set. `liveness.py` builds whichever model the
+  weights file was trained as.
 
 The VoiceGuard backend calls it for the identity and liveness checks and
 for enrollment. It runs on its own because the models need PyTorch, which
@@ -27,9 +32,9 @@ It runs as a Hugging Face Space on **ZeroGPU**, the free hardware for
 Gradio Spaces. ZeroGPU only works for Gradio apps, so this is a Gradio app
 with one API endpoint and no UI. Both models run in one `@spaces.GPU` call.
 If no GPU is free (or the quota is used up) they fall back to the CPU,
-where the embedding takes about half a second but the liveness score about
-3 seconds per 4-second window, so 6-9 seconds for a passage: AASIST has few
-weights but a lot of arithmetic.
+where the embedding takes about half a second and the XLS-R liveness score
+about 1.2 seconds per 4-second window on 2 threads, so 3-5 seconds for a
+passage (AASIST: about 3 seconds a window).
 
 The liveness model only scores audio prepared exactly like its training
 clips, so `liveness.prepare()` repeats `ml/liveness/audio.py`'s steps
@@ -66,7 +71,9 @@ at most 1 MB and have at least 0.5 s of sound.
      (0 to 1). The backend uses these to turn away poor enrollment samples.
      `liveness` is the model's raw "real" output: higher means more likely
      a live person. It isn't a probability, and the backend's
-     `LIVENESS_THRESHOLD` belongs to the model named in `liveness_model`.
+     `LIVENESS_THRESHOLD` belongs to the model named in `liveness_model`
+     (`aasist-` plus the weights file's name without `liveness-`, e.g.
+     `aasist-xlsr`; 1.7 is for `aasist-xlsr`).
      It's `null` if the recording has no sound to judge.
    - or `{"error": "..."}`: `unauthorized` (wrong token),
      `service_token_not_set`, `unsupported_format`, `too_large` or
@@ -88,14 +95,25 @@ apt packages in `packages.txt` (ffmpeg) and `requirements.txt`, then runs
    `SERVICE_TOKEN` with a long random value, e.g. from
    `python -c "import secrets; print(secrets.token_urlsafe(32))"`.
 3. Upload the files in this folder (`app.py`, `liveness.py`, `aasist.py`,
-   `LICENSE-AASIST`, `weights/liveness-first-try.pth`, `packages.txt`,
-   `requirements.txt`, `README.md`, replacing the Space's own README) to
-   the Space, or push them with git. The first build takes several minutes,
-   and each start downloads the ECAPA model (about 80 MB); the liveness
-   weights come with the files.
-4. Once it shows **Running**, open `https://<your-username>-<space-name>.hf.space`:
+   `ssl_aasist.py`, `LICENSE-AASIST`, `weights/liveness-first-try.pth`,
+   `packages.txt`, `requirements.txt`, `README.md`, replacing the Space's
+   own README) to the Space, or push them with git. The first build takes
+   several minutes, and each start downloads the ECAPA model (about 80 MB)
+   and XLS-R's config (a few KB); the liveness weights come with the files.
+4. Upload the XLS-R weights to the top of the Space as
+   `liveness-xlsr.pth` (from `ml/liveness/data/models/`, kept outside
+   git), e.g. with `hf upload <your-username>/<space-name>
+   liveness-xlsr.pth liveness-xlsr.pth --repo-type space` after `hf auth
+   login` (or the Space's **Files → Add file → Upload files**). In **Settings →
+   Variables and secrets**, add a variable `LIVENESS_WEIGHTS` =
+   `/app/liveness-xlsr.pth`. To go back to the older model, set it to
+   `/app/liveness-first-try.pth` (or delete it), restart the Space, and
+   set the backend's `LIVENESS_THRESHOLD` back to the value for that
+   model (0.5). Change the model before the threshold, never the other way
+   round: 1.7 on the older model rejects about half of real people.
+5. Once it shows **Running**, open `https://<your-username>-<space-name>.hf.space`:
    it shows a one-line page.
-5. In the backend's environment (local `.env` and Render), set
+6. In the backend's environment (local `.env` and Render), set
    `EMBEDDING_SERVICE_URL` to that address and `EMBEDDING_SERVICE_TOKEN` to
    the same value as `SERVICE_TOKEN`. Optionally set
    `EMBEDDING_SERVICE_HF_TOKEN` to a Hugging Face access token (read
@@ -108,8 +126,10 @@ that takes longer while it wakes up.
 ## Run it locally
 
 Needs Python 3.11, ffmpeg on the PATH (or `FFMPEG_BINARY` pointing at it),
-and about 450 MB of free memory. Without the `spaces` package (only on
-Hugging Face) the model runs on the CPU.
+and about 2 GB of free memory with the XLS-R model (450 MB with AASIST).
+Without the `spaces` package (only on Hugging Face) the model runs on the
+CPU. To run the XLS-R model, set `LIVENESS_WEIGHTS` to the path of
+`liveness-xlsr.pth`; without it, the older AASIST model runs.
 
 ```
 pip install --extra-index-url https://download.pytorch.org/whl/cpu -r requirements.txt gradio==6.29.1

@@ -15,3 +15,7 @@
 torch==2.11.0
 torchaudio==2.11.0
 speechbrain==1.1.2
+# The XLS-R liveness model's front end (ssl_aasist.py), at the version it
+# was trained with (ml/liveness/requirements-model.txt). Adds only
+# tokenizers, safetensors and regex; nothing else the Space installs moves.
+transformers==5.21.1
