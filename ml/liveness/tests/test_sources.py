@@ -1,7 +1,7 @@
 import pytest
 
 import manifest
-from sources import asvspoof2019_la, asvspoof2019_pa, common_voice, in_the_wild, team
+from sources import asvspoof2017, asvspoof2019_la, asvspoof2019_pa, common_voice, in_the_wild, team
 
 
 def by_id(rows):
@@ -144,3 +144,47 @@ def test_team_refuses_bad_metadata(tmp_path, line, message):
     (tmp_path / "metadata.csv").write_text("file,speaker_id,label,attack_type,split\n" + line + "\n")
     with pytest.raises(ValueError, match=message):
         team.load(tmp_path)
+
+
+def make_asvspoof2017(root):
+    protocols = root / "protocol_V2"
+    protocols.mkdir(parents=True)
+    (protocols / "ASVspoof2017_V2_train.trn.txt").write_text(
+        "T_1000001.wav genuine M0001 S01 - - -\nT_1000002.wav spoof M0001 S01 E01 P01 R01\n"
+    )
+    (protocols / "ASVspoof2017_V2_dev.trl.txt").write_text("D_1000001.wav genuine M0010 S02 - - -\n")
+    (protocols / "ASVspoof2017_V2_eval.trl.txt").write_text("E_1000001.wav spoof M0020 S03 E02 P02 R02\n")
+    for split in ["train", "dev", "eval"]:
+        (root / f"ASVspoof2017_V2_{split}").mkdir()
+
+
+def test_asvspoof2017_reads_real_replays(tmp_path):
+    make_asvspoof2017(tmp_path)
+
+    rows = by_id(asvspoof2017.load(tmp_path))
+    manifest.check_rows(list(rows.values()), "asvspoof2017")
+
+    assert len(rows) == 4
+    replay = rows["asvspoof2017/T_1000002"]
+    assert (replay["label"], replay["attack_type"], replay["split"]) == ("spoof", "replay", "train")
+    assert replay["path"] == "ASVspoof2017_V2_train/T_1000002.wav"
+    assert replay["speaker_id"] == "asvspoof2017/M0001"
+    assert replay["license"] == "CC-BY-NC-4.0"
+    live = rows["asvspoof2017/T_1000001"]
+    assert (live["label"], live["attack_type"]) == ("bonafide", "")
+    assert rows["asvspoof2017/D_1000001"]["split"] == "dev"
+    # The dataset calls it "eval"; the manifest calls it "test".
+    assert rows["asvspoof2017/E_1000001"]["split"] == "test"
+
+
+def test_asvspoof2017_explains_a_missing_download(tmp_path):
+    with pytest.raises(FileNotFoundError, match="see sources/asvspoof2017.py"):
+        asvspoof2017.load(tmp_path)
+
+
+def test_asvspoof2017_refuses_unknown_labels(tmp_path):
+    make_asvspoof2017(tmp_path)
+    (tmp_path / "protocol_V2" / "ASVspoof2017_V2_dev.trl.txt").write_text("D_1000001.wav maybe M0010\n")
+
+    with pytest.raises(ValueError, match="line 1"):
+        asvspoof2017.load(tmp_path)
