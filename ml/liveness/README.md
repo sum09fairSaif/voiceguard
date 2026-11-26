@@ -9,7 +9,8 @@ needs AASIST's weights. This is for measuring how well it works.
 | Source | What it gives us | Labels | Split | Size | License |
 |---|---|---|---|---|---|
 | `asvspoof2019_la` | The standard benchmark: VCTK speech plus 19 TTS and voice-conversion attacks. AASIST was trained on it. | bonafide + spoof | official train / dev / eval (eval becomes `test`) | ~7 GB | ODC-By 1.0 |
-| `asvspoof2019_pa` | Replay attacks: VCTK speech played back through simulated rooms and replay devices of three quality levels. Our only replay data. | bonafide + spoof | official train / dev / eval | ~18 GB | ODC-By 1.0 |
+| `asvspoof2019_pa` | Replay attacks: VCTK speech played back through simulated rooms and replay devices of three quality levels. | bonafide + spoof | official train / dev / eval | ~18 GB | ODC-By 1.0 |
+| `asvspoof2017` | Real replay attacks: RedDots phrases physically replayed through 26 real speakers and phones and recorded on 25 devices. The closest public data to our team's replays. | bonafide + spoof | official train / dev / eval | ~1.5 GB | **CC BY-NC 4.0: non-commercial only** |
 | `asvspoof5` | The 2024 ASVspoof: ~2,000 crowdsourced speakers in varied conditions, 32 modern and adversarial attacks, most eval clips codec-compressed. | bonafide + spoof | official train / dev / eval | dev + 1 eval part ~29 GB (full: 143 GB) | ODC-By 1.0 |
 | `in_the_wild` | Real deepfakes of public figures, made with unknown tools. Our generalization test. | bonafide + spoof | test only | ~8 GB | research use, see source |
 | `codecfake` | VCTK speech re-synthesized by 15 neural codecs, the technology behind zero-shot voice cloning. Same speakers as ASVspoof 2019. | bonafide + spoof | by speaker, ~80/10/10 | 16 shards ~10 GB (full: 102 GB) | CC-BY-4.0 |
@@ -208,7 +209,10 @@ python train.py --init data/external/asvspoof5/Baseline-AASIST/models/weights/AA
   Opus or MP3 compression at 7-120 kbps (50%). Compression matters most:
   browsers record in Opus, and Common Voice's real clips are MP3, so without
   it "sounds compressed" would pass for "real". Run with `--no-noise` to skip
-  the echo and noise if RIRS_NOISES isn't downloaded.
+  the echo and noise if RIRS_NOISES isn't downloaded. With `--rawboost`, half
+  the clips first get RawBoost (Tak et al., 2022): a made-up device's
+  filtering and distortion, crackle, or filtered hiss, as a speaker and a
+  second microphone would add in a replay.
 - **Checking**: after each epoch, the EER on a fixed dev sample, averaged
   over datasets. The best epoch is kept as `data/runs/<name>/best.pth`, which
   `score_baseline.py` can then score on the test split.
@@ -256,6 +260,21 @@ Kaggle gives about 30 free GPU hours a week, in sessions of up to 9-12 hours.
    uploaded: Kaggle downloads XLS-R (1.2 GB) from Hugging Face, and the run
    installs `transformers`. It trains with batches of 8, the front end at
    1e-5 and the new back end at 1e-4, in mixed precision.
+10. For a dataset added after the data pack was uploaded (ASVspoof 2017):
+    prepare it in its own data folder, because `build_manifest.py` given one
+    source writes a manifest of that source alone, replacing the full one:
+
+    ```
+    python build_manifest.py asvspoof2017 --data-dir data/extra   # audio in data/extra/raw/asvspoof2017/
+    python validate.py --data-dir data/extra
+    python preprocess.py --data-dir data/extra
+    python kaggle_pack.py --user <kaggle-username> --data-dir data/extra --extra-only asvspoof2017
+    ```
+
+    then move `data/extra/kaggle/extra/` to `data/kaggle/extra/` and
+    `kaggle datasets create -p data/kaggle/extra` (about 0.2 GB). Add
+    `--extra` to `kaggle_pack.py --script-only` to train with it, and
+    `--rawboost` for RawBoost.
 
 If `download.py rirs_noises` says openslr.org's certificate isn't valid
 while a browser opens the site fine, Python's certificate list is out of

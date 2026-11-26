@@ -15,10 +15,13 @@ Licence: CC BY-NC 4.0, non-commercial use only, unlike the other training
 sets. VoiceGuard is a non-commercial student project; if that changes, a
 model trained with this dataset has to be retrained without it.
 
-Download DS_10283_3055.zip from https://datashare.ed.ac.uk/handle/10283/3055
-into data/raw/asvspoof2017/ and unzip it there, then unzip the
-ASVspoof2017_V2_*.zip files it holds in the same folder, so that it has
-ASVspoof2017_V2_train/, _dev/, _eval/ and protocol_V2/.
+Download protocol_V2.zip and ASVspoof2017_V2_train.zip, _dev.zip and
+_eval.zip from https://datashare.ed.ac.uk/handle/10283/3055 one by one (the
+site's all-in-one zip can't resume a dropped download) into
+data/raw/asvspoof2017/, and unzip them there, so that it has
+ASVspoof2017_V2_train/, _dev/, _eval/ and protocol_V2/. It was added after
+the Kaggle data pack was made: README.md, "Training on Kaggle's free GPUs",
+step 10, says how to prepare and upload it on its own.
 """
 
 from pathlib import Path
