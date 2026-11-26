@@ -11,8 +11,10 @@ Who is watching, and when, is in the team's own rota (not in this repo).
   quiet spell can take about a minute.
 - **Down alerts (#167):** two checks watch `/health`:
   - **UptimeRobot** (free plan, Sumehra's account) every 5 minutes. It emails
-    its alert contacts when the API stops answering and again when it's back.
-    This is the one to rely on, and it also keeps Render from sleeping.
+    Sumehra when the API stops answering and again when it's back; a Gmail
+    filter on that inbox forwards the alerts to the rest of the team (#229; the free
+    plan has no team members). This is the one to rely on, and it also keeps
+    Render from sleeping.
   - **GitHub's Uptime workflow** (`.github/workflows/uptime.yml`) opens an
     "API is down" issue after two failed tries and closes it when it's back.
     GitHub runs it only every few hours in practice, so treat it as a backup.
