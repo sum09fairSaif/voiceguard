@@ -5,7 +5,7 @@ import rowLock from "../assets/icons/row-lock.svg";
 import rowMic from "../assets/icons/row-mic.svg";
 import rowShield from "../assets/icons/row-shield.svg";
 import { Logo } from "../components/Logo";
-import { Page } from "../components/Page";
+import { Columns, Page } from "../components/Page";
 import { PageHeading } from "../components/PageHeading";
 import { TabBar } from "../components/TabBar";
 import { useSignedInData } from "../hooks/useSignedInData";
@@ -83,77 +83,82 @@ export function ActivityPage() {
   const toLook = events?.filter((event) => EVENTS[event.kind].look).length ?? 0;
 
   return (
-    <Page>
-      <Logo />
-      <div className={styles.heading}>
-        <PageHeading
-          showBadge={false}
-          eyebrow="Your security timeline"
-          title="Nothing goes unnoticed."
-          subtitle="Keep an eye on when and how your identity is used."
-        />
-      </div>
+    <Page header={<Logo />} footer={<TabBar />}>
+      <Columns
+        align="start"
+        aside={
+          <>
+            <div className={styles.heading}>
+              <PageHeading
+                showBadge={false}
+                eyebrow="Your security timeline"
+                title="Nothing goes unnoticed."
+                subtitle="Keep an eye on when and how your identity is used."
+              />
+            </div>
 
-      {error && (
-        <p className={styles.error} role="alert">
-          {error}
-        </p>
-      )}
-      {!events && !error && <p className={styles.status}>Loading your activity…</p>}
+            {error && (
+              <p className={styles.error} role="alert">
+                {error}
+              </p>
+            )}
+            {!events && !error && <p className={styles.status}>Loading your activity…</p>}
+            {events && (
+              <section className={styles.summary} aria-label="The last 30 days">
+                <span className={styles.count}>
+                  {events.length >= MOST_SHOWN ? `${MOST_SHOWN}+` : String(events.length).padStart(2, "0")}
+                </span>
+                <span className={styles.summaryText}>
+                  <span className={styles.summaryTitle}>{toLook ? "Security events" : "Secure events"}</span>
+                  <span className={styles.summaryDetail}>
+                    {events.length === 0
+                      ? "Nothing in the last 30 days"
+                      : toLook
+                        ? `${toLook} worth a look`
+                        : "Everything looks good"}
+                  </span>
+                </span>
+                <img src={summaryShield} alt="" width={19.91} height={22.16} />
+              </section>
+            )}
+          </>
+        }
+      >
+        {events && (
+          <>
+            {byDay(events, now).map((group) => (
+              <section key={group.day} aria-label={group.day}>
+                <h2 className={styles.day}>{group.day}</h2>
+                <ul className={styles.events}>
+                  {group.events.map((event, index) => {
+                    const shown = EVENTS[event.kind];
+                    return (
+                      <li key={`${event.at}-${index}`} className={styles.event}>
+                        <span className={styles.icon}>
+                          <img src={shown.icon.src} alt="" width={shown.icon.width} height={shown.icon.height} />
+                        </span>
+                        <span className={styles.text}>
+                          <span className={styles.title}>{shown.title}</span>
+                          <span className={styles.detail}>{shown.detail}</span>
+                          <time className={styles.detail} dateTime={event.at}>
+                            {timeLabel(new Date(event.at), now)}
+                          </time>
+                        </span>
+                        <span className={shown.look ? styles.lookDot : styles.dot} aria-hidden="true" />
+                      </li>
+                    );
+                  })}
+                </ul>
+              </section>
+            ))}
 
-      {events && (
-        <>
-          <section className={styles.summary} aria-label="The last 30 days">
-            <span className={styles.count}>
-              {events.length >= MOST_SHOWN ? `${MOST_SHOWN}+` : String(events.length).padStart(2, "0")}
-            </span>
-            <span className={styles.summaryText}>
-              <span className={styles.summaryTitle}>{toLook ? "Security events" : "Secure events"}</span>
-              <span className={styles.summaryDetail}>
-                {events.length === 0
-                  ? "Nothing in the last 30 days"
-                  : toLook
-                    ? `${toLook} worth a look`
-                    : "Everything looks good"}
-              </span>
-            </span>
-            <img src={summaryShield} alt="" width={19.91} height={22.16} />
-          </section>
-
-          {byDay(events, now).map((group) => (
-            <section key={group.day} aria-label={group.day}>
-              <h2 className={styles.day}>{group.day}</h2>
-              <ul className={styles.events}>
-                {group.events.map((event, index) => {
-                  const shown = EVENTS[event.kind];
-                  return (
-                    <li key={`${event.at}-${index}`} className={styles.event}>
-                      <span className={styles.icon}>
-                        <img src={shown.icon.src} alt="" width={shown.icon.width} height={shown.icon.height} />
-                      </span>
-                      <span className={styles.text}>
-                        <span className={styles.title}>{shown.title}</span>
-                        <span className={styles.detail}>{shown.detail}</span>
-                        <time className={styles.detail} dateTime={event.at}>
-                          {timeLabel(new Date(event.at), now)}
-                        </time>
-                      </span>
-                      <span className={shown.look ? styles.lookDot : styles.dot} aria-hidden="true" />
-                    </li>
-                  );
-                })}
-              </ul>
-            </section>
-          ))}
-
-          <p className={styles.note}>
-            Don’t recognise something here? <Link to="/forgot-password">Change your password</Link> and tell the
-            VoiceGuard team.
-          </p>
-        </>
-      )}
-
-      <TabBar />
+            <p className={styles.note}>
+              Don’t recognise something here? <Link to="/forgot-password">Change your password</Link> and tell the
+              VoiceGuard team.
+            </p>
+          </>
+        )}
+      </Columns>
     </Page>
   );
 }

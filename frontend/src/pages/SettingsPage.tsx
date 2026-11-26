@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import rowArrow from "../assets/icons/row-arrow.svg";
 import { Logo } from "../components/Logo";
-import { Page } from "../components/Page";
+import { Columns, Page } from "../components/Page";
 import { PageHeading } from "../components/PageHeading";
 import { TabBar } from "../components/TabBar";
 import { useMe } from "../hooks/useMe";
@@ -26,36 +26,41 @@ export function SettingsPage() {
   }
 
   return (
-    <Page>
-      <Logo />
-      <div className={styles.heading}>
-        <PageHeading
-          showBadge={false}
-          eyebrow="You’re in control"
-          title="Make it yours."
-          subtitle="Your account. Your preferences. Your peace of mind."
-        />
-      </div>
+    <Page header={<Logo />} footer={<TabBar />}>
+      <Columns
+        align="start"
+        aside={
+          <>
+            <div className={styles.heading}>
+              <PageHeading
+                showBadge={false}
+                eyebrow="You’re in control"
+                title="Make it yours."
+                subtitle="Your account. Your preferences. Your peace of mind."
+              />
+            </div>
 
-      {error && (
-        <p className={styles.error} role="alert">
-          {error}
-        </p>
-      )}
-      {!me && !error && <p className={styles.status}>Loading your account…</p>}
-
-      {me && (
-        <>
-          <section className={styles.profile} aria-label="Your account">
-            <span className={styles.avatar} aria-hidden="true">
-              {me.full_name.trim().charAt(0).toUpperCase()}
-            </span>
-            <span className={styles.profileText}>
-              <span className={styles.name}>{me.full_name}</span>
-              <span className={styles.email}>{me.email}</span>
-            </span>
-          </section>
-
+            {error && (
+              <p className={styles.error} role="alert">
+                {error}
+              </p>
+            )}
+            {!me && !error && <p className={styles.status}>Loading your account…</p>}
+            {me && (
+              <section className={styles.profile} aria-label="Your account">
+                <span className={styles.avatar} aria-hidden="true">
+                  {me.full_name.trim().charAt(0).toUpperCase()}
+                </span>
+                <span className={styles.profileText}>
+                  <span className={styles.name}>{me.full_name}</span>
+                  <span className={styles.email}>{me.email}</span>
+                </span>
+              </section>
+            )}
+          </>
+        }
+      >
+        {me && (
           <section aria-labelledby="settings-security">
             <h2 id="settings-security" className={styles.sectionTitle}>
               Security
@@ -75,14 +80,12 @@ export function SettingsPage() {
               </li>
             </ul>
           </section>
-        </>
-      )}
+        )}
 
-      <button type="button" className={styles.signOut} onClick={handleSignOut} disabled={leaving}>
-        {leaving ? "Signing out…" : "Sign out"}
-      </button>
-
-      <TabBar />
+        <button type="button" className={styles.signOut} onClick={handleSignOut} disabled={leaving}>
+          {leaving ? "Signing out…" : "Sign out"}
+        </button>
+      </Columns>
     </Page>
   );
 }

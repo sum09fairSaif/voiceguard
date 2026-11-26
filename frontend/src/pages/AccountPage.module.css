@@ -140,3 +140,25 @@ a.row:focus-visible .rowTitle {
   font-size: 14px;
   color: var(--color-error);
 }
+
+/* Tablet (Figma 139:819): "Your security" starts level with the green card,
+   and each row is an outlined card. */
+@media (min-width: 960px) {
+  .security {
+    padding-top: 112px;
+  }
+
+  .rows {
+    margin-top: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 33px;
+  }
+
+  .row {
+    min-height: 66px;
+    padding: 0 19px 0 10px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-status-card);
+  }
+}

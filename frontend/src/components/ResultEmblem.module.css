@@ -67,3 +67,38 @@
   --ring: var(--color-brand-border);
   --dot: var(--color-brand-border);
 }
+
+/* Tablet (Figma 139:701, 139:818): one and a half times the size. The icon
+   in the middle grows a little less, as in the frames. */
+@media (min-width: 960px) {
+  .emblem {
+    width: 330px;
+    height: 330px;
+  }
+
+  .middle {
+    inset: 39px;
+  }
+
+  .core {
+    inset: 75px;
+  }
+
+  .core > * {
+    scale: 1.34;
+  }
+
+  .dotLarge {
+    width: 15px;
+    height: 15px;
+    top: 37.5px;
+    right: 43.5px;
+  }
+
+  .dotSmall {
+    width: 12px;
+    height: 12px;
+    top: 243px;
+    left: 18px;
+  }
+}

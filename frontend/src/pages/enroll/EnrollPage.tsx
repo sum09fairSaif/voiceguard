@@ -60,8 +60,7 @@ export function EnrollPage() {
   }
 
   return (
-    <Page>
-      <SignedInHeader />
+    <Page header={<SignedInHeader />}>
       {step === "loading" &&
         (error ? (
           <div className={styles.problem}>

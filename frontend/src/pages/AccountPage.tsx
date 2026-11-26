@@ -4,7 +4,7 @@ import rowMic from "../assets/icons/row-mic.svg";
 import rowArrow from "../assets/icons/row-arrow.svg";
 import rowPulse from "../assets/icons/row-pulse.svg";
 import { Logo } from "../components/Logo";
-import { Page } from "../components/Page";
+import { Columns, Page } from "../components/Page";
 import { PageHeading } from "../components/PageHeading";
 import { TabBar } from "../components/TabBar";
 import { useMe } from "../hooks/useMe";
@@ -22,50 +22,55 @@ export function AccountPage() {
   const enrolled = Boolean(me?.enrolled_at);
 
   return (
-    <Page>
-      <Logo />
-      <div className={styles.heading}>
-        <PageHeading
-          showBadge={false}
-          eyebrow="Your protected space"
-          title={me ? `Hello, ${firstName(me.full_name)}.` : "Hello."}
-          subtitle="A little more confidence for your everyday."
-        />
-      </div>
-
-      {error && (
-        <p className={styles.error} role="alert">
-          {error}
-        </p>
-      )}
-      {!me && !error && <p className={styles.status}>Loading your account…</p>}
-
-      {me && (
-        <>
-          <section className={styles.card} aria-labelledby="home-card-title">
-            <div className={styles.cardTop}>
-              <img src={cardShield} alt="" width={23.6} height={26.27} />
-              {enrolled && (
-                <span className={styles.badge}>
-                  <span aria-hidden="true">●</span> Protected
-                </span>
-              )}
+    <Page header={<Logo />} footer={<TabBar />}>
+      <Columns
+        align="start"
+        aside={
+          <>
+            <div className={styles.heading}>
+              <PageHeading
+                showBadge={false}
+                eyebrow="Your protected space"
+                title={me ? `Hello, ${firstName(me.full_name)}.` : "Hello."}
+                subtitle="A little more confidence for your everyday."
+              />
             </div>
-            <h2 id="home-card-title" className={styles.cardTitle}>
-              Your voice.
-              <br />
-              Your peace of mind.
-            </h2>
-            <p className={styles.cardText}>
-              {enrolled
-                ? "Voice ID is active and ready when you need it."
-                : "Set up your Voice ID to protect your account with your voice."}
-            </p>
-            <Link to={enrolled ? "/verify" : "/enroll"} className={styles.cardLink}>
-              {enrolled ? "Try a voice check" : "Set up Voice ID"} <span aria-hidden="true">→</span>
-            </Link>
-          </section>
 
+            {error && (
+              <p className={styles.error} role="alert">
+                {error}
+              </p>
+            )}
+            {!me && !error && <p className={styles.status}>Loading your account…</p>}
+            {me && (
+              <section className={styles.card} aria-labelledby="home-card-title">
+                <div className={styles.cardTop}>
+                  <img src={cardShield} alt="" width={23.6} height={26.27} />
+                  {enrolled && (
+                    <span className={styles.badge}>
+                      <span aria-hidden="true">●</span> Protected
+                    </span>
+                  )}
+                </div>
+                <h2 id="home-card-title" className={styles.cardTitle}>
+                  Your voice.
+                  <br />
+                  Your peace of mind.
+                </h2>
+                <p className={styles.cardText}>
+                  {enrolled
+                    ? "Voice ID is active and ready when you need it."
+                    : "Set up your Voice ID to protect your account with your voice."}
+                </p>
+                <Link to={enrolled ? "/verify" : "/enroll"} className={styles.cardLink}>
+                  {enrolled ? "Try a voice check" : "Set up Voice ID"} <span aria-hidden="true">→</span>
+                </Link>
+              </section>
+            )}
+          </>
+        }
+      >
+        {me && (
           <section className={styles.security} aria-labelledby="home-security">
             <h2 id="home-security" className={styles.sectionTitle}>
               Your security
@@ -94,10 +99,8 @@ export function AccountPage() {
               </li>
             </ul>
           </section>
-        </>
-      )}
-
-      <TabBar />
+        )}
+      </Columns>
     </Page>
   );
 }

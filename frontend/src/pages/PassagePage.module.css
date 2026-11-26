@@ -141,3 +141,22 @@
 .problem .error {
   margin-top: 0;
 }
+
+/* Tablet (Figma 139:700, 139:703): the steps, heading and phrase card on the
+   left, the recorder on the right. The card is taller, with its label at the
+   top and "New phrase" at the foot. */
+@media (min-width: 960px) {
+  .card,
+  .tightCard {
+    margin-top: 37px;
+    min-height: 230px;
+    padding: 24px 16px 30px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+
+  .passage {
+    font-size: 24px;
+  }
+}

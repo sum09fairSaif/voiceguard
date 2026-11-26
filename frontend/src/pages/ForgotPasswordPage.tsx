@@ -5,7 +5,7 @@ import { requestPasswordReset } from "../api/passwordReset";
 import badgeLock from "../assets/icons/badge-lock.svg";
 import { Button } from "../components/Button";
 import { Logo } from "../components/Logo";
-import { Page } from "../components/Page";
+import { Columns, Page } from "../components/Page";
 import { PageHeading } from "../components/PageHeading";
 import { ProtectedNote } from "../components/ProtectedNote";
 import { TextField } from "../components/TextField";
@@ -54,65 +54,68 @@ export function ForgotPasswordPage() {
   }
 
   return (
-    <Page>
-      <Logo />
-      <div className={styles.heading}>
-        <PageHeading
-          badgeIcon={BADGE}
-          eyebrow="We’ve got you"
-          title="A fresh start."
-          subtitle="It happens. Enter your email and we’ll help you get back into your account."
-        />
-      </div>
-
-      {sentTo ? (
-        <div className={styles.sent} role="status">
-          <p className={styles.sentTitle}>Check your email</p>
-          <p>
-            If there’s an account for <strong>{sentTo}</strong>, we’ve sent it a link to reset your password. The link
-            works once, for 30 minutes.
-          </p>
-          <p>Not there after a few minutes? Check your spam folder, or send it again.</p>
-          <button type="button" className={styles.again} onClick={() => setSentTo("")}>
-            Send it again
-          </button>
-        </div>
-      ) : (
-        <form className={styles.form} onSubmit={handleSubmit} noValidate>
-          <TextField
-            id="email"
-            label="Email address"
-            type="email"
-            placeholder="you@example.com"
-            autoComplete="email"
-            value={email}
-            onChange={(event) => {
-              setEmail(event.target.value);
-              setEmailError("");
-            }}
-            error={emailError}
-            disabled={submitting}
-          />
-
-          {formError && (
-            <p className={styles.formError} role="alert">
-              {formError}
-            </p>
-          )}
-
-          <div className={styles.submit}>
-            <Button type="submit" showArrow={!submitting} disabled={submitting}>
-              {submitting ? "Sending…" : "Send reset link"}
-            </Button>
+    <Page header={<Logo />}>
+      <Columns
+        aside={
+          <div className={styles.heading}>
+            <PageHeading
+              badgeIcon={BADGE}
+              eyebrow="We’ve got you"
+              title="A fresh start."
+              subtitle="It happens. Enter your email and we’ll help you get back into your account."
+            />
           </div>
-        </form>
-      )}
+        }
+      >
+        {sentTo ? (
+          <div className={styles.sent} role="status">
+            <p className={styles.sentTitle}>Check your email</p>
+            <p>
+              If there’s an account for <strong>{sentTo}</strong>, we’ve sent it a link to reset your password. The link
+              works once, for 30 minutes.
+            </p>
+            <p>Not there after a few minutes? Check your spam folder, or send it again.</p>
+            <button type="button" className={styles.again} onClick={() => setSentTo("")}>
+              Send it again
+            </button>
+          </div>
+        ) : (
+          <form className={styles.form} onSubmit={handleSubmit} noValidate>
+            <TextField
+              id="email"
+              label="Email address"
+              type="email"
+              placeholder="you@example.com"
+              autoComplete="email"
+              value={email}
+              onChange={(event) => {
+                setEmail(event.target.value);
+                setEmailError("");
+              }}
+              error={emailError}
+              disabled={submitting}
+            />
 
-      <Link to="/signin" className={styles.back}>
-        Back to sign in
-      </Link>
+            {formError && (
+              <p className={styles.formError} role="alert">
+                {formError}
+              </p>
+            )}
 
-      <ProtectedNote>Your account stays protected throughout the reset process</ProtectedNote>
+            <div className={styles.submit}>
+              <Button type="submit" showArrow={!submitting} disabled={submitting}>
+                {submitting ? "Sending…" : "Send reset link"}
+              </Button>
+            </div>
+          </form>
+        )}
+
+        <Link to="/signin" className={styles.back}>
+          Back to sign in
+        </Link>
+
+        <ProtectedNote>Your account stays protected throughout the reset process</ProtectedNote>
+      </Columns>
     </Page>
   );
 }

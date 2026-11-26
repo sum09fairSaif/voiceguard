@@ -5,6 +5,7 @@ import featureMic from "../../assets/icons/feature-mic.svg";
 import featureShield from "../../assets/icons/feature-shield.svg";
 import voiceIdMark from "../../assets/icons/voice-id-mark.svg";
 import { Button } from "../../components/Button";
+import { Columns } from "../../components/Page";
 import { PageHeading } from "../../components/PageHeading";
 import { StepProgress } from "../../components/StepProgress";
 import { track } from "../../posthog";
@@ -27,23 +28,27 @@ export function EnrollIntro({ onStart }: { onStart: () => void }) {
   }
 
   return (
-    <>
-      <div className={styles.progress}>
-        <StepProgress current={1} total={3} />
-      </div>
-      <div className={styles.heading}>
-        <PageHeading
-          showBadge={false}
-          eyebrow="Voice ID / 01"
-          title="Meet your new key."
-          subtitle="No two voices are alike. Set up your Voice ID in just a few seconds."
-        />
-      </div>
+    <Columns
+      aside={
+        <>
+          <div className={styles.progress}>
+            <StepProgress current={1} total={3} />
+          </div>
+          <div className={styles.heading}>
+            <PageHeading
+              showBadge={false}
+              eyebrow="Voice ID / 01"
+              title="Meet your new key."
+              subtitle="No two voices are alike. Set up your Voice ID in just a few seconds."
+            />
+          </div>
 
-      <div className={styles.mark}>
-        <img src={voiceIdMark} alt="" width={96.6} height={63} />
-      </div>
-
+          <div className={styles.mark}>
+            <img src={voiceIdMark} alt="" width={96.6} height={63} />
+          </div>
+        </>
+      }
+    >
       <ul className={styles.features}>
         {FEATURES.map((feature) => (
           <li key={feature.title} className={styles.feature}>
@@ -76,6 +81,6 @@ export function EnrollIntro({ onStart }: { onStart: () => void }) {
           Set up my Voice ID
         </Button>
       </div>
-    </>
+    </Columns>
   );
 }

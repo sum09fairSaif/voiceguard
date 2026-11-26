@@ -102,3 +102,24 @@
 .action {
   margin-top: 28px;
 }
+
+/* Tablet (Figma 139:698): the steps, heading and V-wave card on the left,
+   the three points, the agreement and the button on the right. */
+@media (min-width: 960px) {
+  .mark {
+    margin-top: 40px;
+    height: 256px;
+  }
+
+  .features {
+    gap: 40px;
+  }
+
+  .consent {
+    margin-top: 40px;
+  }
+
+  .action {
+    margin-top: 36px;
+  }
+}

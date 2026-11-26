@@ -6,7 +6,7 @@ import { startSession } from "../api/session";
 import badgeLock from "../assets/icons/badge-lock.svg";
 import { Button } from "../components/Button";
 import { Logo } from "../components/Logo";
-import { Page } from "../components/Page";
+import { Columns, Page } from "../components/Page";
 import { PageHeading } from "../components/PageHeading";
 import { ProtectedNote } from "../components/ProtectedNote";
 import { TextField } from "../components/TextField";
@@ -103,83 +103,86 @@ export function ConfirmEmailPage() {
   }
 
   return (
-    <Page>
-      <Logo />
-      <div className={styles.heading}>
-        <PageHeading
-          badgeIcon={BADGE}
-          eyebrow="One last step"
-          title="Check your email."
-          subtitle={
-            askForEmail
-              ? "Enter your email address and the 6-digit code we sent to it, to confirm the address is yours."
-              : `We’ve sent an email to ${passedEmail}. Enter the 6-digit code from it to confirm the address is yours.`
-          }
-        />
-      </div>
-
-      {/* Fields lock while sending, so an error always matches what was sent. */}
-      <form className={styles.form} onSubmit={handleSubmit} noValidate>
-        {askForEmail && (
+    <Page header={<Logo />}>
+      <Columns
+        aside={
+          <div className={styles.heading}>
+            <PageHeading
+              badgeIcon={BADGE}
+              eyebrow="One last step"
+              title="Check your email."
+              subtitle={
+                askForEmail
+                  ? "Enter your email address and the 6-digit code we sent to it, to confirm the address is yours."
+                  : `We’ve sent an email to ${passedEmail}. Enter the 6-digit code from it to confirm the address is yours.`
+              }
+            />
+          </div>
+        }
+      >
+        {/* Fields lock while sending, so an error always matches what was sent. */}
+        <form className={styles.form} onSubmit={handleSubmit} noValidate>
+          {askForEmail && (
+            <TextField
+              id="email"
+              label="Email address"
+              type="email"
+              placeholder="you@example.com"
+              autoComplete="email"
+              value={email}
+              onChange={(event) => {
+                setEmail(event.target.value);
+                setEmailError("");
+              }}
+              error={emailError}
+              disabled={busy !== ""}
+            />
+          )}
           <TextField
-            id="email"
-            label="Email address"
-            type="email"
-            placeholder="you@example.com"
-            autoComplete="email"
-            value={email}
+            id="code"
+            label="Confirmation code"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            placeholder="123456"
+            maxLength={20}
+            value={code}
             onChange={(event) => {
-              setEmail(event.target.value);
-              setEmailError("");
+              setCode(event.target.value);
+              setCodeError("");
             }}
-            error={emailError}
+            error={codeError}
             disabled={busy !== ""}
           />
-        )}
-        <TextField
-          id="code"
-          label="Confirmation code"
-          inputMode="numeric"
-          autoComplete="one-time-code"
-          placeholder="123456"
-          maxLength={20}
-          value={code}
-          onChange={(event) => {
-            setCode(event.target.value);
-            setCodeError("");
-          }}
-          error={codeError}
-          disabled={busy !== ""}
-        />
 
-        {formError && (
-          <p className={styles.formError} role="alert">
-            {formError}
-          </p>
-        )}
-        {notice && (
-          <p className={styles.notice} role="status">
-            {notice}
-          </p>
-        )}
+          {formError && (
+            <p className={styles.formError} role="alert">
+              {formError}
+            </p>
+          )}
+          {notice && (
+            <p className={styles.notice} role="status">
+              {notice}
+            </p>
+          )}
 
-        <div className={styles.submit}>
-          <Button type="submit" showArrow={busy !== "confirming"} disabled={busy !== ""}>
-            {busy === "confirming" ? "Confirming…" : "Confirm email"}
-          </Button>
-        </div>
-      </form>
+          <div className={styles.submit}>
+            <Button type="submit" showArrow={busy !== "confirming"} disabled={busy !== ""}>
+              {busy === "confirming" ? "Confirming…" : "Confirm email"}
+            </Button>
+          </div>
+        </form>
 
-      <button type="button" className={styles.link} onClick={sendAgain} disabled={busy !== ""}>
-        {busy === "sending" ? "Sending…" : "Send a new code"}
-      </button>
-      {/* Signing up again with the right address starts over; an unconfirmed
-          account doesn't hold on to the address. */}
-      <Link to="/signup" replace className={styles.secondaryLink}>
-        Wrong address? Sign up again
-      </Link>
+        <button type="button" className={styles.link} onClick={sendAgain} disabled={busy !== ""}>
+          {busy === "sending" ? "Sending…" : "Send a new code"}
+        </button>
+        {/* Signing up again with the right address starts over; an unconfirmed
+            account doesn't hold on to the address. */}
+        <Link to="/signup" replace className={styles.secondaryLink}>
+          Wrong address? Sign up again
+        </Link>
 
-      <ProtectedNote>Only someone with access to this inbox can confirm it</ProtectedNote>
+        <ProtectedNote>Only someone with access to this inbox can confirm it</ProtectedNote>
+      </Columns>
     </Page>
   );
 }

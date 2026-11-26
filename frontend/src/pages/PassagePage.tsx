@@ -11,7 +11,7 @@ import {
 } from "../api/verify";
 import { Button } from "../components/Button";
 import { SignedInHeader } from "../components/SignedInHeader";
-import { Page } from "../components/Page";
+import { Columns, Page } from "../components/Page";
 import { PageHeading } from "../components/PageHeading";
 import { RecordButton } from "../components/RecordButton";
 import { StepProgress } from "../components/StepProgress";
@@ -107,131 +107,136 @@ export function PassagePage() {
   const recorded = recorder.status === "recorded" && recorder.recording !== null;
 
   return (
-    <Page>
-      <SignedInHeader />
-      <div className={styles.progress}>
-        <StepProgress current={2} total={3} />
-      </div>
-      <div className={styles.heading}>
-        <PageHeading
-          showBadge={false}
-          eyebrow="Secure sign in"
-          title="Just say the phrase."
-          subtitle="Find a quiet spot and read the phrase below in your natural voice."
-        />
-      </div>
-
-      <section className={`${styles.card} ${styles.tightCard}`} aria-labelledby="phrase-label">
-        <p id="phrase-label" className={styles.cardLabel}>
-          Your secure phrase
-        </p>
-
-        {challenge ? (
-          <p
-            className={expired || loading || needsNewPhrase ? `${styles.passage} ${styles.faded}` : styles.passage}
-            aria-live="polite"
-          >
-            “{displayPassage(challenge.passage)}”
-          </p>
-        ) : error ? (
-          <p className={styles.error} role="alert">
-            {error}
-          </p>
-        ) : (
-          <p className={styles.status}>Getting your phrase…</p>
-        )}
-
-        <div className={styles.footer}>
-          {loading && challenge && <span className={styles.status}>Getting a new phrase…</span>}
-          {!loading && challenge && !expired && !submitting && !paused && (
-            <>
-              <span className={styles.countdown}>Expires in {formatCountdown(secondsRemaining)}</span>
-              <span aria-hidden="true">·</span>
-              <button type="button" className={styles.link} onClick={handleNewPhrase} disabled={microphoneBusy}>
-                ↻ New phrase
-              </button>
-            </>
-          )}
-          {!loading && challenge && expired && !paused && (
-            <>
-              <span className={styles.countdown}>This phrase has expired.</span>
-              <button type="button" className={styles.link} onClick={handleNewPhrase} disabled={microphoneBusy}>
-                ↻ Get a new phrase
-              </button>
-            </>
-          )}
-          {!loading && !challenge && error && !paused && (
-            <button type="button" className={styles.link} onClick={handleNewPhrase}>
-              ↻ Try again
-            </button>
-          )}
-        </div>
-      </section>
-
-      <section className={styles.recorder} aria-label="Record your voice">
-        {recorded && !submitError && !paused ? (
+    <Page header={<SignedInHeader />}>
+      <Columns
+        aside={
           <>
-            <p className={styles.recorderTitle}>Recording ready</p>
-            <p className={styles.recorderHint}>Send it to check your voice, or record it again.</p>
-            <div className={styles.actions}>
-              <Button type="button" showArrow={!submitting} disabled={submitting || !passageUsable} onClick={handleSubmit}>
-                {submitting ? "Checking your voice…" : "Submit"}
-              </Button>
-              {!submitting && (
+            <div className={styles.progress}>
+              <StepProgress current={2} total={3} />
+            </div>
+            <div className={styles.heading}>
+              <PageHeading
+                showBadge={false}
+                eyebrow="Secure sign in"
+                title="Just say the phrase."
+                subtitle="Find a quiet spot and read the phrase below in your natural voice."
+              />
+            </div>
+
+            <section className={`${styles.card} ${styles.tightCard}`} aria-labelledby="phrase-label">
+              <p id="phrase-label" className={styles.cardLabel}>
+                Your secure phrase
+              </p>
+
+              {challenge ? (
+                <p
+                  className={expired || loading || needsNewPhrase ? `${styles.passage} ${styles.faded}` : styles.passage}
+                  aria-live="polite"
+                >
+                  “{displayPassage(challenge.passage)}”
+                </p>
+              ) : error ? (
+                <p className={styles.error} role="alert">
+                  {error}
+                </p>
+              ) : (
+                <p className={styles.status}>Getting your phrase…</p>
+              )}
+
+              <div className={styles.footer}>
+                {loading && challenge && <span className={styles.status}>Getting a new phrase…</span>}
+                {!loading && challenge && !expired && !submitting && !paused && (
+                  <>
+                    <span className={styles.countdown}>Expires in {formatCountdown(secondsRemaining)}</span>
+                    <span aria-hidden="true">·</span>
+                    <button type="button" className={styles.link} onClick={handleNewPhrase} disabled={microphoneBusy}>
+                      ↻ New phrase
+                    </button>
+                  </>
+                )}
+                {!loading && challenge && expired && !paused && (
+                  <>
+                    <span className={styles.countdown}>This phrase has expired.</span>
+                    <button type="button" className={styles.link} onClick={handleNewPhrase} disabled={microphoneBusy}>
+                      ↻ Get a new phrase
+                    </button>
+                  </>
+                )}
+                {!loading && !challenge && error && !paused && (
+                  <button type="button" className={styles.link} onClick={handleNewPhrase}>
+                    ↻ Try again
+                  </button>
+                )}
+              </div>
+            </section>
+          </>
+        }
+      >
+        <section className={styles.recorder} aria-label="Record your voice">
+          {recorded && !submitError && !paused ? (
+            <>
+              <p className={styles.recorderTitle}>Recording ready</p>
+              <p className={styles.recorderHint}>Send it to check your voice, or record it again.</p>
+              <div className={styles.actions}>
+                <Button type="button" showArrow={!submitting} disabled={submitting || !passageUsable} onClick={handleSubmit}>
+                  {submitting ? "Checking your voice…" : "Submit"}
+                </Button>
+                {!submitting && (
+                  <button type="button" className={styles.link} onClick={handleRecordAgain}>
+                    ↻ Record again
+                  </button>
+                )}
+              </div>
+            </>
+          ) : (
+            <>
+              <RecordButton
+                recording={recording}
+                disabled={!passageUsable || recorder.status === "requesting" || submitting}
+                onClick={recording ? recorder.stop : recorder.start}
+              />
+              {recording ? (
+                <>
+                  <p className={styles.recorderTitle}>Listening… {formatCountdown(recorder.elapsed)}</p>
+                  <p className={styles.recorderHint}>Tap to stop when you’ve read the phrase.</p>
+                </>
+              ) : paused ? (
+                <>
+                  <p className={styles.recorderTitle}>Voice checks are paused</p>
+                  <p className={styles.recorderHint}>You can try again once the wait is over.</p>
+                </>
+              ) : recorder.status === "requesting" ? (
+                <>
+                  <p className={styles.recorderTitle}>Waiting for your microphone…</p>
+                  <p className={styles.recorderHint}>Allow microphone access when your browser asks.</p>
+                </>
+              ) : (
+                <>
+                  <p className={styles.recorderTitle}>Tap to start recording</p>
+                  <p className={styles.recorderHint}>A few seconds. A little more security.</p>
+                </>
+              )}
+            </>
+          )}
+
+          {(recorder.error || submitError) && (
+            <div className={styles.problem}>
+              <p className={styles.error} role="alert">
+                {submitError || recorder.error}
+              </p>
+              {paused ? null : submitError && needsNewPhrase ? (
+                <button type="button" className={styles.link} onClick={handleNewPhrase}>
+                  ↻ Get a new phrase
+                </button>
+              ) : (
                 <button type="button" className={styles.link} onClick={handleRecordAgain}>
-                  ↻ Record again
+                  ↻ Try again
                 </button>
               )}
             </div>
-          </>
-        ) : (
-          <>
-            <RecordButton
-              recording={recording}
-              disabled={!passageUsable || recorder.status === "requesting" || submitting}
-              onClick={recording ? recorder.stop : recorder.start}
-            />
-            {recording ? (
-              <>
-                <p className={styles.recorderTitle}>Listening… {formatCountdown(recorder.elapsed)}</p>
-                <p className={styles.recorderHint}>Tap to stop when you’ve read the phrase.</p>
-              </>
-            ) : paused ? (
-              <>
-                <p className={styles.recorderTitle}>Voice checks are paused</p>
-                <p className={styles.recorderHint}>You can try again once the wait is over.</p>
-              </>
-            ) : recorder.status === "requesting" ? (
-              <>
-                <p className={styles.recorderTitle}>Waiting for your microphone…</p>
-                <p className={styles.recorderHint}>Allow microphone access when your browser asks.</p>
-              </>
-            ) : (
-              <>
-                <p className={styles.recorderTitle}>Tap to start recording</p>
-                <p className={styles.recorderHint}>A few seconds. A little more security.</p>
-              </>
-            )}
-          </>
-        )}
-
-        {(recorder.error || submitError) && (
-          <div className={styles.problem}>
-            <p className={styles.error} role="alert">
-              {submitError || recorder.error}
-            </p>
-            {paused ? null : submitError && needsNewPhrase ? (
-              <button type="button" className={styles.link} onClick={handleNewPhrase}>
-                ↻ Get a new phrase
-              </button>
-            ) : (
-              <button type="button" className={styles.link} onClick={handleRecordAgain}>
-                ↻ Try again
-              </button>
-            )}
-          </div>
-        )}
-      </section>
+          )}
+        </section>
+      </Columns>
     </Page>
   );
 }
