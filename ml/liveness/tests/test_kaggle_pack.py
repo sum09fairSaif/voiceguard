@@ -79,7 +79,7 @@ def test_the_script_carries_the_code_and_the_settings(processed, tmp_path):
                              resume=True)
     script = (out / "run.py").read_text(encoding="utf-8")
     compile(script, "run.py", "exec")
-    assert "NAME, EPOCHS, MAX_HOURS, RESUME, NOISE = 'run1', 3, 7.5, True, False" in script
+    assert "NAME, EPOCHS, MAX_HOURS, RESUME, NOISE, EXTRA = 'run1', 3, 7.5, True, False, False" in script
     assert "elif RESUME:" in script and "sys.exit(" in script
     assert 'f"runs/{NAME}/last.pth"' in script
 
@@ -99,7 +99,7 @@ def test_a_noise_run_attaches_the_noise_dataset_and_insists_on_it(tmp_path):
                              resume=False, noise=True)
     script = (out / "run.py").read_text(encoding="utf-8")
     compile(script, "run.py", "exec")
-    assert "NAME, EPOCHS, MAX_HOURS, RESUME, NOISE = 'run1', 3, 7.5, False, True" in script
+    assert "NAME, EPOCHS, MAX_HOURS, RESUME, NOISE, EXTRA = 'run1', 3, 7.5, False, True, False" in script
     assert "if NOISE and not noise:" in script
     meta = json.loads((out / "kernel-metadata.json").read_text())
     assert meta["dataset_sources"] == [f"someone/{kaggle_pack.DATASET}", f"someone/{kaggle_pack.NOISE_DATASET}"]
@@ -252,3 +252,49 @@ def test_an_aasist_run_is_unchanged_by_the_ssl_option(tmp_path):
                              resume=False)
     script = (out / "run.py").read_text(encoding="utf-8")
     assert "TRAIN_ARGS, EXTRA_PACKAGES = [], []" in script
+
+
+def test_an_extra_pack_holds_only_its_datasets(processed):
+    out = processed / "kaggle" / "extra"
+    kaggle_pack.write_data(processed, out, workers=1, sources=["small"])
+    kaggle_pack.write_extra_metadata(out, "someone", ["small"])
+
+    index = pd.read_parquet(out / kaggle_pack.EXTRA_INDEX)
+    assert set(index["source"]) == {"small"}
+    assert set(index["split"]) == {"train", "dev"}
+    assert not (out / kaggle_pack.WEIGHTS).exists()
+    assert json.loads((out / "dataset-metadata.json").read_text())["id"] == f"someone/{kaggle_pack.EXTRA_DATASET}"
+
+
+def test_an_extra_pack_needs_its_datasets_in_the_manifest(processed):
+    with pytest.raises(SystemExit, match="nothing_here"):
+        kaggle_pack.write_data(processed, processed / "extra", workers=1, sources=["nothing_here"])
+
+
+def test_extra_clips_read_back_from_their_own_folder_after_joining(processed, tmp_path_factory):
+    # What run.py does on Kaggle: both packs' shards by full path in one index,
+    # read from a third folder.
+    main_dir, extra_dir = processed / "kaggle" / "data", processed / "kaggle" / "extra"
+    kaggle_pack.write_data(processed, main_dir, workers=1)
+    kaggle_pack.write_data(processed, extra_dir, workers=1, sources=["small"])
+    main = pd.read_parquet(main_dir / kaggle_pack.INDEX)
+    main = main[main["source"] == "big"].assign(shard=lambda d: [str(main_dir / s) for s in d["shard"]])
+    more = pd.read_parquet(extra_dir / kaggle_pack.EXTRA_INDEX)
+    more = more.assign(shard=[str(extra_dir / s) for s in more["shard"]])
+    joined = pd.concat([main, more], ignore_index=True)
+
+    packed = ClipDataset(joined, tmp_path_factory.mktemp("elsewhere"))
+
+    assert all(len(packed.read(i)) > 0 for i in range(len(joined)))
+
+
+def test_a_rawboost_run_with_extra_data_attaches_it_and_asks_for_rawboost(tmp_path):
+    out = tmp_path / "script"
+    kaggle_pack.write_script(kaggle_pack.Path(kaggle_pack.__file__).parent, out, "someone", "xlsr2", 8, 8.0,
+                             resume=False, noise=True, arch="ssl", extra=True, rawboost=True)
+    script = (out / "run.py").read_text(encoding="utf-8")
+    compile(script, "run.py", "exec")
+    assert "NAME, EPOCHS, MAX_HOURS, RESUME, NOISE, EXTRA = 'xlsr2', 8, 8.0, False, True, True" in script
+    assert repr(kaggle_pack.SSL_TRAIN_ARGS + ["--rawboost"]) in script
+    meta = json.loads((out / "kernel-metadata.json").read_text())
+    assert f"someone/{kaggle_pack.EXTRA_DATASET}" in meta["dataset_sources"]
