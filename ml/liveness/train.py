@@ -82,6 +82,7 @@ def main() -> None:
     parser.add_argument("--workers", type=int, default=8, help="DataLoader processes")
     parser.add_argument("--noise-dir", type=Path, help=f"default: <data-dir>/{NOISE_DIR}")
     parser.add_argument("--no-noise", action="store_true", help="skip reverb and noise (codecs still apply)")
+    parser.add_argument("--rawboost", action="store_true", help="add RawBoost device distortions (augment.py)")
     parser.add_argument("--out-dir", type=Path, help="where runs go; default: <data-dir>/runs")
     parser.add_argument("--max-hours", type=float, help="stop after the last epoch that fits in this time")
     parser.add_argument("--seed", type=int, default=0)
@@ -131,9 +132,9 @@ def main() -> None:
 
     train = load_split(args.data_dir, "train")
     dev = even_sample(load_split(args.data_dir, "dev"), args.dev_per_group)
-    augment = Augmenter(None if args.no_noise else args.noise_dir or args.data_dir / NOISE_DIR)
+    augment = Augmenter(None if args.no_noise else args.noise_dir or args.data_dir / NOISE_DIR, rawboost=args.rawboost)
     print(f"{device}; {len(train)} train clips; {len(dev)} dev clips; "
-          f"{len(augment.rirs)} room echoes, {len(augment.noises)} noises")
+          f"{len(augment.rirs)} room echoes, {len(augment.noises)} noises, RawBoost {'on' if args.rawboost else 'off'}")
     dev_loader = DataLoader(ClipDataset(dev, args.data_dir), batch_size=args.batch, num_workers=args.workers)
     loss_fn = torch.nn.CrossEntropyLoss()
 

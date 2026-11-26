@@ -174,3 +174,45 @@ def test_every_effect_can_be_applied(noise_dir, monkeypatch, applied):
 def test_a_missing_noise_folder_is_an_error(tmp_path):
     with pytest.raises(FileNotFoundError):
         augment.Augmenter(tmp_path / "nothing")
+
+
+def test_a_notch_filter_cuts_some_frequencies_and_peaks_at_its_gain():
+    b = augment.notch_filter(np.random.default_rng(0))
+    response = np.abs(np.fft.rfft(b, 4096))
+    assert response.max() == pytest.approx(1.0, abs=1e-3)
+    assert response.min() < 0.3  # at least one band is notched out
+
+
+@pytest.mark.parametrize("effect", ["rb_device", "rb_crackle", "rb_hiss"])
+def test_each_rawboost_effect_changes_the_clip_but_keeps_its_timing(effect):
+    clean = speech()
+    out = getattr(augment, effect)(clean, np.random.default_rng(3))
+    assert out.shape == clean.shape and np.isfinite(out).all()
+    assert np.abs(out).max() <= 1.0 + 1e-6
+    assert not np.allclose(out, clean)
+    # Still the same speech in the same place: zero-phase filtering doesn't shift it.
+    best_lag = max(range(-200, 201, 5), key=lambda lag: np.dot(np.roll(out, -lag), clean))
+    assert best_lag == 0
+
+
+def test_rawboost_hiss_goes_in_10_to_40_db_below_the_speech():
+    clean = speech()
+    for seed in range(5):
+        out = augment.rb_hiss(clean, np.random.default_rng(seed))
+        assert 9.9 < snr_db(clean, out) < 40.1
+
+
+def test_rawboost_is_only_applied_when_asked(monkeypatch):
+    monkeypatch.setattr(augment, "RAWBOOST_CHANCE", 1.0)
+    monkeypatch.setattr(augment, "CODEC_CHANCE", 0.0)
+    used = []
+    real = augment.rawboost
+    monkeypatch.setattr(augment, "rawboost", lambda x, rng: used.append(1) or real(x, rng))
+    clean = speech()
+
+    augment.Augmenter()(clean, np.random.default_rng(0))
+    assert used == []
+
+    out = augment.Augmenter(rawboost=True)(clean, np.random.default_rng(0))
+    assert used == [1]
+    assert out.shape == clean.shape and out.dtype == np.float32
