@@ -39,3 +39,11 @@
   text-wrap: balance;
   color: var(--color-muted);
 }
+
+/* Tablet: the frames break the intro line at about this width, rather than
+   running it across the whole column. */
+@media (min-width: 960px) {
+  .subtitle {
+    max-width: 290px;
+  }
+}

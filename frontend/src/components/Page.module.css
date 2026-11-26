@@ -15,6 +15,15 @@
   background: var(--color-surface);
 }
 
+/* On a phone these wrappers take no part in the layout: what's inside them
+   lays out in the column exactly as if they weren't there. */
+.body,
+.columns,
+.aside,
+.main {
+  display: contents;
+}
+
 /* Wider than a phone: grey backdrop with the app as a white phone-sized card,
    so it doesn't look like a form floating in an empty page. */
 @media (min-width: 480px) {
@@ -29,5 +38,77 @@
     box-shadow:
       0 1px 2px rgba(41, 45, 46, 0.06),
       0 12px 32px rgba(41, 45, 46, 0.08);
+  }
+}
+
+/* A tablet in landscape and wider: the Figma "Tablet screens" frames (iPad
+   Pro 11", 1194 x 834). The app fills the window, the logo sits at the top
+   left, and a screen's Columns are two 390px columns 96px apart. A tablet
+   in portrait keeps the phone layout above. */
+@media (min-width: 960px) {
+  .viewport {
+    padding: 0;
+    background: var(--color-surface);
+  }
+
+  .column {
+    --page-padding-x: 64px;
+    max-width: none;
+    min-height: 100dvh;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .body {
+    flex: 1 0 auto;
+    padding-block: 48px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+  }
+
+  /* A screen, or a step, without Columns: one column in the middle. */
+  .body > * {
+    width: 100%;
+    max-width: 390px;
+  }
+
+  .body > .columns {
+    max-width: calc(2 * 390px + 96px);
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 96px;
+    align-items: center;
+  }
+
+  /* Home, Activity and Settings (139:819, 139:821, 139:823): the columns
+     start near the top instead of in the middle. */
+  .body:has(> .alignStart) {
+    justify-content: flex-start;
+    padding-top: 72px;
+  }
+
+  .body > .alignStart {
+    align-items: start;
+  }
+
+  /* In those frames the right column starts 40px below the heading's label. */
+  .alignStart > .main {
+    padding-top: 40px;
+  }
+
+  .aside,
+  .main {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  /* The space a phone leaves above the first thing under the logo isn't
+     needed beside another column. */
+  .aside > :first-child,
+  .main > :first-child {
+    margin-top: 0;
   }
 }
