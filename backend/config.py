@@ -205,8 +205,12 @@ if not -1.0 <= IDENTITY_THRESHOLD <= 1.0:
 # counts as a live person; recordings below it are rejected even when the
 # voice matches. The score is the model's raw "real" output, not a
 # probability, and belongs to one model (the service reports which):
-# retraining means choosing it again. LIVENESS_THRESHOLD_PLACEHOLDER
-LIVENESS_THRESHOLD = float(os.getenv("LIVENESS_THRESHOLD", "0.0"))
+# retraining means choosing it again. 1.7 is for "aasist-xlsr" (#231),
+# chosen on the team's recordings: on the two speakers it was chosen on, 3
+# of 20 live reads rejected and 0 of 6 replays passing; on the other two, 1
+# of 20 and 1 of 6 (ml/liveness/README.md). On the older "aasist-first-try"
+# it would reject about half of real people: switch the model service first.
+LIVENESS_THRESHOLD = float(os.getenv("LIVENESS_THRESHOLD", "1.7"))
 if not math.isfinite(LIVENESS_THRESHOLD):
     raise RuntimeError("LIVENESS_THRESHOLD must be a number.")
 
