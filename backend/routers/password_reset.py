@@ -10,6 +10,7 @@ from fastapi.exceptions import RequestValidationError
 from pymongo.collection import Collection
 
 import config
+from audit import track
 from client_address import client_key
 from db import (
     get_login_failures_collection,
@@ -62,6 +63,10 @@ def request_reset(
     )
 
     user = users.find_one({"email": email}, {"_id": 1})
+    # Recorded either way, so both answers take the same time; with the
+    # account's stand-in only when there is one, so a reset nobody asked for
+    # shows in that account's record.
+    track("password_reset_requested", str(user["_id"]) if user else None)
     if user is not None:
         user_id = str(user["_id"])
         subject, text = reset_email(issue_token(resets, user_id))
@@ -132,4 +137,5 @@ def confirm_reset(
     # owns the email). Other clients' counts stay: they may be a guesser's.
     for subject in login_subjects(client_key(request), user["email"]):
         clear_failures(login_failures, subject)
+    track("password_reset", user_id)
     logger.info("password_reset user=%s", user_id)
