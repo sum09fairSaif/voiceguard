@@ -69,8 +69,10 @@ as soon as the voiceprint is built or the checks have run.
 - **Security events and uptime:** sign-ups, sign-ins, lockouts, enrollment,
   voice-check decisions and sign-outs are recorded for 30 days without personal
   data (user ids hashed with a server key, no emails, addresses or scores), and also sent to
-  PostHog when `POSTHOG_API_KEY` is set. A scheduled check opens an
-  "API is down" issue when `/health` stops answering.
+  PostHog when `POSTHOG_API_KEY` is set. An outside monitor (UptimeRobot)
+  checks `/health` every 5 minutes and emails an alert when it stops
+  answering; a scheduled GitHub check also opens an "API is down" issue (see
+  the [runbook](docs/runbook.md)).
 - **Browser analytics (#170):** PostHog records page views, a fixed list of
   named steps and front-end errors, under the same keyed stand-in id, never the
   account id. No click capture, recordings, form contents or scores, nothing
