@@ -4,7 +4,8 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { logOut } from "../api/auth";
 import { getMe, type Me } from "../api/me";
-import { getToken, saveToken } from "../api/session";
+import { isSignedIn } from "../api/session";
+import { signInForTest } from "../test/session";
 import { apiError, networkError } from "../test/apiError";
 import { AccountPage } from "./AccountPage";
 
@@ -41,7 +42,7 @@ function detail(label: string) {
 }
 
 beforeEach(() => {
-  saveToken("voice-verified");
+  signInForTest();
   mockGetMe.mockReset();
 });
 
@@ -75,7 +76,7 @@ describe("Account page", () => {
     renderAccount();
 
     expect(await screen.findByText("passage screen")).toBeInTheDocument();
-    expect(getToken()).toBe("voice-verified");
+    expect(isSignedIn()).toBe(true);
   });
 
   it("sends an expired or bad session to sign in and forgets it", async () => {
@@ -83,7 +84,7 @@ describe("Account page", () => {
     renderAccount();
 
     expect(await screen.findByText("sign-in screen")).toBeInTheDocument();
-    expect(getToken()).toBeNull();
+    expect(isSignedIn()).toBe(false);
   });
 
   it("explains other failures in our own words", async () => {
@@ -102,6 +103,6 @@ describe("Account page", () => {
 
     expect(await screen.findByText("sign-in screen")).toBeInTheDocument();
     expect(vi.mocked(logOut)).toHaveBeenCalledTimes(1);
-    expect(getToken()).toBeNull();
+    expect(isSignedIn()).toBe(false);
   });
 });

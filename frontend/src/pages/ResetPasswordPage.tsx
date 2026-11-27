@@ -3,7 +3,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { describeApiError, invalidFieldProblems } from "../api/errors";
 import { confirmPasswordReset, tokenFromHash } from "../api/passwordReset";
-import { clearToken } from "../api/session";
+import { endSession } from "../api/session";
 import { heldResetLinkToken } from "../resetLinkToken";
 import badgeLock from "../assets/icons/badge-lock.svg";
 import { Button } from "../components/Button";
@@ -56,7 +56,7 @@ export function ResetPasswordPage() {
       await confirmPasswordReset(token, password);
       // The reset ended every session, this browser's included: forgotten
       // even if the person has already left this page.
-      clearToken();
+      endSession();
       if (!shown.current) return;
       const state: PasswordChangedState = { passwordChanged: true };
       navigate("/signin", { replace: true, state });

@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { isSignedIn, signup } from "../api/auth";
 import type { ConfirmEmailState } from "./ConfirmEmailPage";
 import { describeApiError, invalidFieldProblems } from "../api/errors";
-import { saveToken } from "../api/session";
+import { startSession } from "../api/session";
 import { track } from "../posthog";
 import { Button } from "../components/Button";
 import { Logo } from "../components/Logo";
@@ -66,7 +66,7 @@ export function SignupPage() {
         navigate("/confirm-email", { replace: true, state });
         return;
       }
-      saveToken(result.access_token, result.user);
+      startSession(result.user);
       track("account_created");
       // A new account has no Voice ID yet, so set one up first (#10).
       navigate("/enroll", { replace: true });

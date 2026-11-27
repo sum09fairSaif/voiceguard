@@ -61,6 +61,24 @@
   color: var(--color-muted);
 }
 
+/* "Try signing out again", under the notice. */
+.retry {
+  margin-top: 6px;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-weight: 600;
+  color: var(--color-gold);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.retry:disabled {
+  color: var(--color-muted);
+  cursor: default;
+}
+
 /* Under a wrong-password or locked answer: the way back to confirming an
    email for someone who signed up and left before entering the code (#111). */
 .confirmHint {

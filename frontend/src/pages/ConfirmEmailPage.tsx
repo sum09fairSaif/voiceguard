@@ -1,8 +1,8 @@
 import { useState, type FormEvent } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { confirmEmail, isWellFormedCode, normalizeCode, sendEmailCode } from "../api/emailVerification";
-import { describeApiError, MESSAGES } from "../api/errors";
-import { saveToken } from "../api/session";
+import { describeApiError } from "../api/errors";
+import { startSession } from "../api/session";
 import badgeLock from "../assets/icons/badge-lock.svg";
 import { Button } from "../components/Button";
 import { Logo } from "../components/Logo";
@@ -71,7 +71,7 @@ export function ConfirmEmailPage() {
       const result = await confirmEmail(address, cleaned);
       if (!shown.current) return;
       // The session starts here, as after signing in.
-      saveToken(result.access_token, result.user);
+      startSession(result.user);
       track("account_created");
       // A new account has no Voice ID yet, so set one up first (#10).
       navigate("/enroll", { replace: true });
@@ -97,7 +97,7 @@ export function ConfirmEmailPage() {
       setNotice(NEW_CODE_SENT);
     } catch (error) {
       if (!shown.current) return;
-      setFormError(describeApiError(error, { 503: MESSAGES.unavailable }));
+      setFormError(describeApiError(error));
     }
     setBusy("");
   }

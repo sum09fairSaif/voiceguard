@@ -48,6 +48,14 @@ anyone who signs up while enrollment is paused misses that window for good
 works, but the account only opens after a passed voice check, so pause it only
 for a real emergency (for example, speech-to-text spend running away).
 
+**Pausing `signups` also pauses confirming an email and sending a new code**
+(#217). Confirming opens the 30 minutes in which a new account can set up its
+Voice ID, so it waits until sign-ups are back. People waiting to confirm are
+told sign-ups are paused; a code they already have keeps working until it
+expires (15 minutes), and after that they ask for a new one. An account that
+never confirms is deleted after 24 hours, so in a pause longer than that, some
+people will need to sign up again.
+
 From `backend/`, with the virtual environment active and the team `.env`:
 
 ```
