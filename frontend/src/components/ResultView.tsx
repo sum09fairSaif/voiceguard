@@ -1,5 +1,4 @@
 import type { ResultView as View } from "../utils/resultWording";
-import { SHOW_CHECK_DETAILS } from "../utils/resultWording";
 import { Button } from "./Button";
 import { CheckStatusIcon } from "./CheckStatusIcon";
 import { ResultEmblem } from "./ResultEmblem";
@@ -17,7 +16,8 @@ export function ResultView({ view, onAction }: { view: View; onAction: () => voi
       <p className={styles.subtitle}>{view.subtitle}</p>
       {view.note && <p className={styles.note}>{view.note}</p>}
 
-      {SHOW_CHECK_DETAILS && (
+      {/* Only when the server sent each check's outcome (#112). */}
+      {view.checks.length > 0 && (
         <ul className={styles.checks} aria-label="Checks">
           {view.checks.map((check) => (
             <li key={check.label} className={styles.check}>

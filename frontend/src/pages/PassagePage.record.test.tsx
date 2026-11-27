@@ -3,11 +3,14 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { requestChallenge, type Challenge } from "../api/challenge";
-import { getToken, saveToken } from "../api/session";
+import { logOut } from "../api/auth";
+import { isSignedIn } from "../api/session";
+import { signInForTest } from "../test/session";
 import { submitAttempt, type VerifyResult } from "../api/verify";
 import { RECORDER_MESSAGES } from "../hooks/useRecorder";
 import { apiError, networkError } from "../test/apiError";
 import { installFakeMicrophone, removeFakeMicrophone } from "../test/fakeMicrophone";
+import { track } from "../posthog";
 import { PassagePage } from "./PassagePage";
 import { ResultPage } from "./ResultPage";
 
@@ -16,6 +19,19 @@ vi.mock("../api/challenge", () => ({ requestChallenge: vi.fn() }));
 vi.mock("../api/verify", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../api/verify")>()),
   submitAttempt: vi.fn(),
+}));
+vi.mock("../api/auth", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../api/auth")>()),
+  logOut: vi.fn(),
+}));
+// Analytics off unless a test turns it on.
+const analytics = vi.hoisted(() => ({ on: false }));
+vi.mock("../posthog", () => ({
+  default: { capture: vi.fn(), identify: vi.fn(), reset: vi.fn() },
+  track: vi.fn(),
+  get isPostHogConfigured() {
+    return analytics.on;
+  },
 }));
 const mockChallenge = vi.mocked(requestChallenge);
 const mockSubmit = vi.mocked(submitAttempt);
@@ -93,6 +109,88 @@ describe("Recording and submitting", () => {
     reply.resolve(INCOMPLETE);
     expect(await screen.findByText("Almost there.")).toBeInTheDocument();
     expect(screen.getByText("Not set up yet")).toBeInTheDocument();
+  });
+
+  it("swaps in the voice-verified token from an approved check", async () => {
+    signInForTest();
+    mockSubmit.mockResolvedValue({
+      ...INCOMPLETE,
+      decision: "approved",
+      identity: "passed",
+      liveness: "passed",
+      access_token: "voice-verified",
+    });
+    const user = userEvent.setup();
+    renderFlow();
+    await recordClip(user);
+
+    await user.click(screen.getByRole("button", { name: /submit/i }));
+
+    expect(await screen.findByText("You’re in. Securely.")).toBeInTheDocument();
+    expect(isSignedIn()).toBe(true);
+  });
+
+  it("records the outcome and shows the result when the check details are hidden", async () => {
+    analytics.on = true;
+    mockSubmit.mockResolvedValue({
+      ...INCOMPLETE,
+      decision: "rejected",
+      reason: "We couldn't verify you. Please try again with a new passage.",
+      content: null,
+      identity: null,
+      liveness: null,
+      attempts_left: 2,
+    });
+    const user = userEvent.setup();
+    renderFlow();
+    await recordClip(user);
+
+    try {
+      await user.click(screen.getByRole("button", { name: /submit/i }));
+
+      expect(await screen.findByText("That didn’t match.")).toBeInTheDocument();
+      expect(vi.mocked(track)).toHaveBeenCalledWith("voice_verification_completed", {
+        decision: "rejected",
+        identity: null,
+        liveness: null,
+        content_passed: null,
+      });
+    } finally {
+      analytics.on = false;
+    }
+  });
+
+  it("keeps the password's token when the check isn't approved", async () => {
+    signInForTest();
+    mockSubmit.mockResolvedValue({ ...INCOMPLETE, access_token: null });
+    const user = userEvent.setup();
+    renderFlow();
+    await recordClip(user);
+
+    await user.click(screen.getByRole("button", { name: /submit/i }));
+
+    expect(await screen.findByText("Almost there.")).toBeInTheDocument();
+    expect(isSignedIn()).toBe(true);
+  });
+
+  it("ignores a voice-check answer that arrives after the screen was left", async () => {
+    signInForTest();
+    const reply = deferred<VerifyResult>();
+    mockSubmit.mockReturnValue(reply.promise);
+    const user = userEvent.setup();
+    renderFlow();
+    await recordClip(user);
+    await user.click(screen.getByRole("button", { name: /submit/i }));
+
+    // Signing out (or anything else) takes the user off the screen meanwhile.
+    vi.mocked(logOut).mockResolvedValue();
+    await user.click(screen.getByRole("button", { name: "Sign out" }));
+    await screen.findByText("sign-in screen");
+    reply.resolve({ ...INCOMPLETE, decision: "approved", access_token: "late-token" });
+    await Promise.resolve();
+
+    expect(screen.getByText("sign-in screen")).toBeInTheDocument();
+    expect(isSignedIn()).toBe(false);
   });
 
   it("lets you record again before submitting", async () => {
@@ -200,7 +298,7 @@ describe("Recording and submitting", () => {
   });
 
   it("sends a signed-out user back to sign in", async () => {
-    saveToken("expired");
+    signInForTest();
     mockSubmit.mockRejectedValue(apiError(401));
     const user = userEvent.setup();
     renderFlow();
@@ -209,7 +307,7 @@ describe("Recording and submitting", () => {
     await user.click(screen.getByRole("button", { name: /submit/i }));
 
     expect(await screen.findByText("sign-in screen")).toBeInTheDocument();
-    expect(getToken()).toBeNull();
+    expect(isSignedIn()).toBe(false);
   });
 
   it("explains a blocked microphone", async () => {

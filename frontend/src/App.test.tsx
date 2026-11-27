@@ -1,7 +1,8 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { clearToken, saveToken } from "./api/session";
+import { endSession } from "./api/session";
+import { signInForTest } from "./test/session";
 import App from "./App";
 
 vi.mock("./api/enroll", async (importOriginal) => ({
@@ -15,7 +16,7 @@ vi.mock("./api/enroll", async (importOriginal) => ({
 }));
 
 afterEach(() => {
-  clearToken();
+  endSession();
   window.history.pushState({}, "", "/");
 });
 
@@ -48,7 +49,7 @@ describe("App routes", () => {
   });
 
   it("skips the welcome screen for someone already signed in", async () => {
-    saveToken("a-token");
+    signInForTest();
     window.history.pushState({}, "", "/");
     render(<App />);
     expect(window.location.pathname).toBe("/enroll");
@@ -57,11 +58,34 @@ describe("App routes", () => {
   });
 
   it("sends someone already signed in from an unknown address to enrollment", async () => {
-    saveToken("a-token");
+    signInForTest();
     window.history.pushState({}, "", "/no-such-page");
     render(<App />);
     expect(window.location.pathname).toBe("/enroll");
     expect(await screen.findByRole("heading", { name: "Meet your new key." })).toBeInTheDocument();
+  });
+
+  it("links the privacy note from signup (#170)", async () => {
+    window.history.pushState({}, "", "/signup");
+    render(<App />);
+    await userEvent.click(screen.getByRole("link", { name: "Privacy note" }));
+    expect(window.location.pathname).toBe("/privacy");
+    expect(screen.getByRole("heading", { name: "What we keep, and why." })).toBeInTheDocument();
+    expect(screen.getByText(/Do Not Track or Global Privacy Control/)).toBeInTheDocument();
+  });
+
+  it("serves Reset password at /forgot-password (#109)", () => {
+    window.history.pushState({}, "", "/forgot-password");
+    render(<App />);
+    expect(screen.getByRole("heading", { name: "A fresh start." })).toBeInTheDocument();
+  });
+
+  it("serves the new-password page at /reset-password, the address the emailed link uses (#109)", () => {
+    window.history.pushState({}, "", "/reset-password#token=Abc-123_xyzAbc-123_xyzAbc-123_xyzAbc-123_x");
+    render(<App />);
+    expect(screen.getByRole("heading", { name: "A new password." })).toBeInTheDocument();
+    expect(screen.getByLabelText("New password")).toBeInTheDocument();
+    expect(window.location.hash).toBe("");
   });
 
   it("still serves signup at /signup", () => {

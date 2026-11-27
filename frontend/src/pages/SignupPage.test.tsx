@@ -1,16 +1,25 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { signup } from "../api/auth";
-import { getToken } from "../api/session";
+import { isSignedIn } from "../api/session";
 import { RequireSession } from "../components/RequireSession";
 import { apiError, networkError } from "../test/apiError";
 import { SignupPage } from "./SignupPage";
 
 // Never talk to a real server in tests.
-vi.mock("../api/auth", () => ({ signup: vi.fn() }));
+vi.mock("../api/auth", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../api/auth")>()),
+  signup: vi.fn(),
+}));
 const mockSignup = vi.mocked(signup);
+
+// Stands in for the confirm screen and shows the address it was given.
+function ConfirmProbe() {
+  const state = useLocation().state as { email?: string } | null;
+  return <p>confirm email screen for {state?.email ?? "nobody"}</p>;
+}
 
 function renderApp(start = "/signup") {
   render(
@@ -18,6 +27,7 @@ function renderApp(start = "/signup") {
       <Routes>
         <Route path="/signup" element={<SignupPage />} />
         <Route path="/enroll" element={<p>enroll screen</p>} />
+        <Route path="/confirm-email" element={<ConfirmProbe />} />
         <Route path="/signin" element={<p>sign-in screen</p>} />
         <Route
           path="/verify"
@@ -36,7 +46,7 @@ async function fillAndSubmit(email = "alex@example.com") {
   const user = userEvent.setup();
   await user.type(screen.getByLabelText("Full name"), "  Alex Morgan ");
   await user.type(screen.getByLabelText("Email address"), email);
-  await user.type(screen.getByLabelText("Password"), "correct-horse");
+  await user.type(screen.getByLabelText("Password"), "correct-horse-battery");
   await user.click(screen.getByRole("button", { name: /create account/i }));
 }
 
@@ -57,7 +67,7 @@ describe("Create account screen", () => {
 
     expect(screen.getByText("Enter your full name.")).toBeInTheDocument();
     expect(screen.getByText("Enter a valid email address.")).toBeInTheDocument();
-    expect(screen.getByText("Use at least 8 characters.")).toBeInTheDocument();
+    expect(screen.getByText("Use at least 15 characters.")).toBeInTheDocument();
     expect(mockSignup).not.toHaveBeenCalled();
   });
 
@@ -70,9 +80,19 @@ describe("Create account screen", () => {
     expect(mockSignup).toHaveBeenCalledWith({
       full_name: "Alex Morgan",
       email: "alex@example.com",
-      password: "correct-horse",
+      password: "correct-horse-battery",
     });
-    expect(getToken()).toBe("token-abc");
+    expect(isSignedIn()).toBe(true);
+  });
+
+  it("with email confirmation on, goes to confirm the address, without a sign-in", async () => {
+    // The same answer whether or not the address already has an account (#111).
+    mockSignup.mockResolvedValue({ detail: "Check your email." });
+    renderApp();
+    await fillAndSubmit(" alex@example.com ");
+
+    expect(await screen.findByText("confirm email screen for alex@example.com")).toBeInTheDocument();
+    expect(isSignedIn()).toBe(false);
   });
 
   it("shows a taken email under the email field", async () => {
@@ -82,7 +102,7 @@ describe("Create account screen", () => {
 
     expect(await screen.findByText("An account with this email already exists.")).toBeInTheDocument();
     expect(screen.getByLabelText("Email address")).toHaveAttribute("aria-invalid", "true");
-    expect(getToken()).toBeNull();
+    expect(isSignedIn()).toBe(false);
   });
 
   it.each([
@@ -106,6 +126,43 @@ describe("Create account screen", () => {
     await fillAndSubmit();
 
     expect(await screen.findByText("Check this field and try again.")).toBeInTheDocument();
+  });
+
+  it.each([
+    ["password_common", "too common or has appeared in a data breach"],
+    ["password_personal", "too close to your email or to VoiceGuard"],
+    ["password_repetitive", "repeats the same characters or words"],
+    ["password_sequential", "simple sequence"],
+  ])("says why the server refused a password (%s)", async (type, reason) => {
+    mockSignup.mockRejectedValue(
+      apiError(422, { detail: [{ type, loc: ["body", "password"], msg: "server text that must not be shown" }] }),
+    );
+    renderApp();
+
+    await fillAndSubmit();
+
+    expect(await screen.findByText(new RegExp(reason))).toBeInTheDocument();
+    expect(screen.queryByText(/server text/)).not.toBeInTheDocument();
+  });
+
+  it("shows a strength guide while typing the password", async () => {
+    renderApp();
+    const user = userEvent.setup();
+
+    await user.type(screen.getByLabelText("Password"), "short");
+    expect(screen.getByText("Password strength: 10 more characters")).toBeInTheDocument();
+
+    await user.clear(screen.getByLabelText("Password"));
+    await user.type(screen.getByLabelText("Password"), "lantern orchid tide river");
+    expect(screen.getByText("Password strength: Strong")).toBeInTheDocument();
+  });
+
+  it("says when creating accounts is paused", async () => {
+    mockSignup.mockRejectedValue(apiError(503, { detail: "server text", paused: "signups" }));
+    renderApp();
+    await fillAndSubmit();
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Creating new accounts is paused for now.");
   });
 
   it("can't be sent twice while waiting", async () => {
@@ -167,6 +224,6 @@ describe("Leaving while the account is being created", () => {
     await new Promise((r) => setTimeout(r, 0));
 
     expect(screen.getByText("sign-in screen")).toBeInTheDocument();
-    expect(getToken()).toBeNull();
+    expect(isSignedIn()).toBe(false);
   });
 });

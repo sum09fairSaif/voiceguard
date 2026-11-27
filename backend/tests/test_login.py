@@ -14,12 +14,12 @@ WRONG = "The email or password is incorrect."
 @pytest.fixture
 def account(client):
     response = client.post(
-        SIGNUP_URL, json={"full_name": "Sam Lee", "email": "sam@example.com", "password": "correct-horse"}
+        SIGNUP_URL, json={"full_name": "Sam Lee", "email": "sam@example.com", "password": "correct-horse-battery"}
     )
     return response.json()["user"]
 
 
-def login(client, email="sam@example.com", password="correct-horse"):
+def login(client, email="sam@example.com", password="correct-horse-battery"):
     return client.post(LOGIN_URL, json={"email": email, "password": password})
 
 
@@ -34,7 +34,10 @@ def test_right_password_logs_in_with_a_token(client, account):
     assert body["user"]["created_at"].endswith("Z")
     assert body["user"]["created_at"][:23] == account["created_at"][:23]
     assert body["token_type"] == "bearer"
-    claims = jwt.decode(body["access_token"], config.JWT_SECRET, algorithms=[config.JWT_ALGORITHM])
+    claims = jwt.decode(
+        body["access_token"], config.JWT_SECRET, algorithms=[config.JWT_ALGORITHM],
+        audience=config.JWT_AUDIENCE, issuer=config.JWT_ISSUER
+    )
     assert claims["sub"] == account["id"]
 
 
@@ -54,7 +57,7 @@ def test_email_case_does_not_matter(client, account):
     "email, password",
     [
         ("sam@example.com", "wrong-horse"),
-        ("nobody@example.com", "correct-horse"),
+        ("nobody@example.com", "correct-horse-battery"),
         ("sam@example.com", "c" * 73),
     ],
 )
@@ -118,11 +121,11 @@ def test_right_password_resets_the_count(client, account):
 
 
 def test_one_account_locked_leaves_others_alone(client, account):
-    client.post(SIGNUP_URL, json={"full_name": "Alex Kim", "email": "alex@example.com", "password": "alex-password"})
+    client.post(SIGNUP_URL, json={"full_name": "Alex Kim", "email": "alex@example.com", "password": "alex-long-password"})
     for _ in range(config.LOGIN_MAX_FAILURES):
         login(client, password="wrong-horse")
 
-    assert login(client, email="alex@example.com", password="alex-password").status_code == 200
+    assert login(client, email="alex@example.com", password="alex-long-password").status_code == 200
 
 
 class UnreachableDatabase:
@@ -136,3 +139,53 @@ def test_database_outage_returns_503(client, account):
     response = login(client)
 
     assert response.status_code == 503
+
+
+# --- Lockout per client, with a ceiling per account -------------------------
+
+
+def login_from(client, address, email="sam@example.com", password="correct-horse-battery"):
+    return client.post(LOGIN_URL, json={"email": email, "password": password}, headers={"CF-Connecting-IP": address})
+
+
+@pytest.fixture
+def per_client(monkeypatch):
+    monkeypatch.setattr(config, "CLIENT_IP_SOURCE", "cf-connecting-ip")
+
+
+def test_a_strangers_guesses_dont_lock_the_owner_out(client, account, per_client):
+    for _ in range(config.LOGIN_MAX_FAILURES):
+        login_from(client, "203.0.113.66", password="wrong-horse")
+
+    assert login_from(client, "203.0.113.66").status_code == 423
+    assert login_from(client, "198.51.100.7").status_code == 200
+
+
+def test_guessing_spread_across_clients_hits_the_ceiling(client, account, per_client, monkeypatch):
+    monkeypatch.setattr(config, "LOGIN_ACCOUNT_MAX_FAILURES", 6)
+    # Three clients, two wrong guesses each: none reaches its own limit of 5.
+    for n in range(3):
+        for _ in range(2):
+            assert login_from(client, f"203.0.113.{n + 1}", password="wrong-horse").status_code in (401, 423)
+
+    response = login_from(client, "198.51.100.7")
+
+    assert response.status_code == 423
+    assert "access_token" not in response.text
+
+
+def test_owner_signing_in_doesnt_reset_the_ceiling(client, account, per_client, monkeypatch):
+    monkeypatch.setattr(config, "LOGIN_ACCOUNT_MAX_FAILURES", 6)
+    for n in range(5):
+        login_from(client, f"203.0.113.{n + 1}", password="wrong-horse")
+    assert login_from(client, "198.51.100.7").status_code == 200
+
+    assert login_from(client, "203.0.113.99", password="wrong-horse").status_code == 423
+
+
+def test_lockout_store_keeps_no_emails_or_addresses(client, account, per_client, login_failures):
+    login_from(client, "203.0.113.66", password="wrong-horse")
+
+    stored = " ".join(str(doc) for doc in login_failures.find())
+    assert "sam@example.com" not in stored
+    assert "203.0.113.66" not in stored

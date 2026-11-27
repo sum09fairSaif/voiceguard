@@ -14,14 +14,31 @@ export type SignupResponse = {
     full_name: string;
     email: string;
     created_at: string;
+    analytics_id?: string;
+    // False until the emailed code is entered (#110); missing on older servers.
+    email_verified?: boolean;
   };
-  access_token: string;
+  // Not used: the token is set as a cookie the page can't read (#102).
+  // Sent in the body too only while the backend's TOKEN_IN_RESPONSE_BODY is
+  // on, for the change-over; null after that.
+  access_token?: string | null;
   token_type: string;
 };
 
-export async function signup(body: SignupRequest): Promise<SignupResponse> {
-  const { data } = await api.post<SignupResponse>("/api/auth/signup", body);
+// While email confirmation is on, signup answers only "check your email"
+// (202), whether or not the address already has an account (#111). There's
+// no sign-in until the emailed code is entered.
+export type SignupAccepted = { detail: string };
+
+export async function signup(body: SignupRequest): Promise<SignupResponse | SignupAccepted> {
+  const { data } = await api.post<SignupResponse | SignupAccepted>("/api/auth/signup", body);
   return data;
+}
+
+// Signed in when the answer carries the account. Not by the token: that's a
+// cookie now (#102), and the body's copy is going away.
+export function isSignedIn(result: SignupResponse | SignupAccepted): result is SignupResponse {
+  return "user" in result;
 }
 
 export type LoginRequest = {
@@ -35,6 +52,12 @@ export type LoginResponse = SignupResponse;
 export async function logIn(body: LoginRequest): Promise<LoginResponse> {
   const { data } = await api.post<LoginResponse>("/api/auth/login", body);
   return data;
+}
+
+// Ends this sign-in on the server: its tokens (limited and voice-verified)
+// stop working everywhere, not just in this tab.
+export async function logOut(): Promise<void> {
+  await api.post("/api/auth/logout");
 }
 
 // The same words whether the email or the password was wrong, as the

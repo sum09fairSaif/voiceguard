@@ -8,6 +8,14 @@ export const MESSAGES = {
   unknown: "Something went wrong. Please try again.",
 };
 
+// Parts of VoiceGuard can be paused for a while (backend/switches.py); the
+// server names which, and we say it in our own words.
+export const PAUSED_MESSAGES: Record<string, string> = {
+  signups: "Creating new accounts is paused for now. Please try again later.",
+  voice_checks: "Voice checks are paused for now. Please try again later.",
+  enrollment: "Setting up a Voice ID is paused for now. Please try again later.",
+};
+
 function tooManyAttempts(retryAfterSeconds: number | undefined): string {
   if (!retryAfterSeconds || retryAfterSeconds <= 0) {
     return "Too many attempts. Please wait a while and try again.";
@@ -38,11 +46,27 @@ export function describeApiError(
       return MESSAGES.invalid;
     case 429:
       return tooManyAttempts(Number(headers["retry-after"]));
-    case 503:
-      return MESSAGES.unavailable;
+    case 503: {
+      const paused = error.response.data?.paused;
+      return (typeof paused === "string" && PAUSED_MESSAGES[paused]) || MESSAGES.unavailable;
+    }
     default:
       return MESSAGES.unknown;
   }
+}
+
+// For a 422, each rejected form field with the kind of problem (the backend
+// says which field and why, never echoing the value back).
+export function invalidFieldProblems(error: unknown): { field: string; type: string }[] {
+  if (!isAxiosError(error) || error.response?.status !== 422) return [];
+  const detail = error.response.data?.detail;
+  if (!Array.isArray(detail)) return [];
+  return detail
+    .map((item) => ({
+      field: Array.isArray(item?.loc) ? item.loc[item.loc.length - 1] : undefined,
+      type: typeof item?.type === "string" ? item.type : "",
+    }))
+    .filter((problem): problem is { field: string; type: string } => typeof problem.field === "string");
 }
 
 // For a 422, the names of the form fields the server rejected (the backend

@@ -8,11 +8,16 @@ from fastapi.responses import JSONResponse
 from pymongo.errors import PyMongoError
 
 import config
+import switches
+from body_limit import BodyLimitMiddleware
 from email_sender import EmailUnavailable
 from identity_check import IdentityUnavailable
 from rate_limit import RateLimited
-from routers import auth, challenge, enroll, verify
+from routers import account, auth, challenge, enroll, password_reset, verify
+from security_headers import SecurityHeadersMiddleware
+from session_cookie import OriginCheckMiddleware
 from transcription import AudioNotUnderstood, TranscriptionUnavailable
+from transcription_budget import BudgetUsedUp
 from voice_attempts import VoiceLockedOut
 
 # uvicorn only sets up its own loggers, so without this our info lines
@@ -21,14 +26,40 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 
 logger = logging.getLogger("voiceguard")
 
-app = FastAPI(title="VoiceGuard API", version="0.1.0")
+
+def docs_settings(enabled: bool) -> dict:
+    """Where FastAPI serves its docs; None turns each one off (404)."""
+    if enabled:
+        return {"docs_url": "/docs", "redoc_url": "/redoc", "openapi_url": "/openapi.json"}
+    return {"docs_url": None, "redoc_url": None, "openapi_url": None}
+
+
+class VoiceGuardAPI(FastAPI):
+    def build_middleware_stack(self):
+        # Security headers go outside everything, Starlette's own error
+        # handler included, so even an unexpected 500 carries them.
+        return SecurityHeadersMiddleware(super().build_middleware_stack())
+
+
+app = VoiceGuardAPI(title="VoiceGuard API", version="0.1.0", **docs_settings(config.DOCS_ENABLED))
+
+# Refuses oversized request bodies before anything reads them. Added before
+# CORS so CORS wraps it: the frontend can read the 413 like any other error.
+app.add_middleware(BodyLimitMiddleware)
+
+# Requests that change something must come from our own pages
+# (session_cookie.py): the cross-site request forgery check. Added before
+# CORS, so CORS wraps it.
+app.add_middleware(OriginCheckMiddleware)
 
 # CORS lets the frontend (a different address) call this API from the
-# browser. Only our own frontends are allowed (see config.ALLOWED_ORIGINS).
+# browser. Only our own frontends are allowed (see config.ALLOWED_ORIGINS),
+# and they may send the sign-in cookie (allow_credentials).
 app.add_middleware(
     CORSMiddleware,
     allow_origins=config.ALLOWED_ORIGINS,
     allow_origin_regex=config.ALLOWED_ORIGIN_REGEX,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
     # Browsers hide most response headers from another site's code. The
@@ -37,9 +68,11 @@ app.add_middleware(
 )
 
 app.include_router(auth.router)
+app.include_router(password_reset.router)
 app.include_router(challenge.router)
 app.include_router(enroll.router)
 app.include_router(verify.router)
+app.include_router(account.router)
 
 
 @app.exception_handler(RequestValidationError)
@@ -111,6 +144,28 @@ def voice_locked_out(request: Request, exc: VoiceLockedOut) -> JSONResponse:
     )
 
 
+@app.exception_handler(switches.Paused)
+def paused(request: Request, exc: switches.Paused) -> JSONResponse:
+    # "paused" names the switch, so the frontend can say it in its own words.
+    return JSONResponse(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        content={"detail": switches.PAUSED_MESSAGES[exc.name], "paused": exc.name},
+    )
+
+
+@app.exception_handler(BudgetUsedUp)
+def budget_used_up(request: Request, exc: BudgetUsedUp) -> JSONResponse:
+    # Logged so someone can raise the budget if real users hit it.
+    logger.warning("transcription_budget_used_up path=%s", request.url.path)
+    # Enrollment shares the budget (#151), so name what the person was doing.
+    what = "Voice ID setup is" if request.url.path.startswith("/api/enroll") else "Voice checks are"
+    return JSONResponse(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        content={"detail": f"{what} busy right now. Please try again later."},
+        headers={"Retry-After": str(exc.retry_after)},
+    )
+
+
 @app.exception_handler(RateLimited)
 def rate_limited(request: Request, exc: RateLimited) -> JSONResponse:
     minutes = math.ceil(exc.retry_after / 60)
@@ -122,6 +177,7 @@ def rate_limited(request: Request, exc: RateLimited) -> JSONResponse:
     )
 
 
-@app.get("/health")
+# HEAD too: uptime monitors often check with HEAD.
+@app.api_route("/health", methods=["GET", "HEAD"])
 def health():
     return {"status": "ok", "service": "voiceguard-api"}

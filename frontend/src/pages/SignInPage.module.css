@@ -21,7 +21,13 @@
   font-size: 11px;
   font-weight: 600;
   color: var(--color-gold);
+  text-decoration: none;
   cursor: pointer;
+}
+
+.forgot:hover,
+.forgot:focus-visible {
+  text-decoration: underline;
 }
 
 .formError {
@@ -44,5 +50,46 @@
 /* Olive and underlined so the link stands out from the sentence (#118). */
 .switch a {
   color: var(--color-primary);
+  text-decoration: underline;
+}
+
+/* Shown after a sign-out the server couldn't confirm. */
+.notice {
+  margin-top: 20px;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--color-muted);
+}
+
+/* "Try signing out again", under the notice. */
+.retry {
+  margin-top: 6px;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-weight: 600;
+  color: var(--color-gold);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.retry:disabled {
+  color: var(--color-muted);
+  cursor: default;
+}
+
+/* Under a wrong-password or locked answer: the way back to confirming an
+   email for someone who signed up and left before entering the code (#111). */
+.confirmHint {
+  margin-top: -8px;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--color-muted);
+}
+
+.confirmHint a {
+  color: var(--color-primary);
+  font-weight: 600;
   text-decoration: underline;
 }

@@ -1,10 +1,17 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { describe, expect, it } from "vitest";
-import { getToken, saveToken } from "../api/session";
+import { describe, expect, it, vi } from "vitest";
+import { logOut } from "../api/auth";
+import { isSignedIn } from "../api/session";
+import { signInForTest } from "../test/session";
 import type { VerifyResult } from "../api/verify";
 import { ResultPage } from "./ResultPage";
+
+vi.mock("../api/auth", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../api/auth")>()),
+  logOut: vi.fn().mockResolvedValue(undefined),
+}));
 
 function result(overrides: Partial<VerifyResult> = {}): VerifyResult {
   return {
@@ -25,6 +32,7 @@ function renderResult(state?: { result: VerifyResult }) {
       <Routes>
         <Route path="/result" element={<ResultPage />} />
         <Route path="/verify" element={<p>passage screen</p>} />
+        <Route path="/account" element={<p>account screen</p>} />
         <Route path="/signin" element={<p>sign-in screen</p>} />
       </Routes>
     </MemoryRouter>,
@@ -74,23 +82,25 @@ describe("Result page", () => {
   });
 
   it("goes back for a new passage on Try again", async () => {
-    saveToken("token");
+    signInForTest();
     renderResult({ result: result() });
 
     await userEvent.setup().click(screen.getByRole("button", { name: /try again/i }));
 
     expect(screen.getByText("passage screen")).toBeInTheDocument();
-    expect(getToken()).toBe("token");
+    expect(isSignedIn()).toBe(true);
   });
 
-  it("finishes the session on Done", async () => {
-    saveToken("token");
-    renderResult({ result: result({ decision: "approved", identity: "passed", liveness: "passed" }) });
+  it("continues to the account after an approved check, keeping the session", async () => {
+    signInForTest();
+    renderResult({
+      result: result({ decision: "approved", identity: "passed", liveness: "passed", access_token: "voice-verified" }),
+    });
 
-    await userEvent.setup().click(screen.getByRole("button", { name: /done/i }));
+    await userEvent.setup().click(screen.getByRole("button", { name: /continue to home/i }));
 
-    expect(screen.getByText("sign-in screen")).toBeInTheDocument();
-    expect(getToken()).toBeNull();
+    expect(screen.getByText("account screen")).toBeInTheDocument();
+    expect(isSignedIn()).toBe(true);
   });
 
   it("shows the attempts left after a rejection", () => {
@@ -101,7 +111,7 @@ describe("Result page", () => {
   });
 
   it("offers no retry once voice checks are paused", async () => {
-    saveToken("token");
+    signInForTest();
     renderResult({
       result: result({ decision: "rejected", identity: "failed", attempts_left: 0, fallback_required: true }),
     });
@@ -111,12 +121,42 @@ describe("Result page", () => {
 
     await userEvent.setup().click(screen.getByRole("button", { name: /done/i }));
     expect(screen.getByText("sign-in screen")).toBeInTheDocument();
-    expect(getToken()).toBeNull();
+    expect(isSignedIn()).toBe(false);
   });
 
   it("goes back to the passage screen when there's no result to show", () => {
     renderResult();
 
     expect(screen.getByText("passage screen")).toBeInTheDocument();
+  });
+
+  it("ends the session on the server when finishing with Done, which clears the cookie", async () => {
+    signInForTest();
+    renderResult({
+      result: result({ decision: "rejected", identity: "failed", attempts_left: 0, fallback_required: true }),
+    });
+
+    await userEvent.setup().click(screen.getByRole("button", { name: /^done$/i }));
+
+    expect(await screen.findByText("sign-in screen")).toBeInTheDocument();
+    expect(vi.mocked(logOut)).toHaveBeenCalled();
+    expect(isSignedIn()).toBe(false);
+  });
+
+  it("offers sign-out on the result screen", () => {
+    renderResult({ result: result() });
+
+    expect(screen.getByRole("button", { name: "Sign out" })).toBeInTheDocument();
+  });
+  it("shows only the outcome when the server hides the check details (#112)", () => {
+    renderResult({
+      result: result({ decision: "rejected", content: null, identity: null, liveness: null, attempts_left: 2 }),
+    });
+
+    expect(screen.getByRole("heading", { name: "That didn’t match." })).toBeInTheDocument();
+    expect(screen.getByText("We couldn’t verify you this time. Please try again.")).toBeInTheDocument();
+    expect(screen.getByText("2 attempts left.")).toBeInTheDocument();
+    expect(screen.queryByRole("list", { name: "Checks" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /try again/i })).toBeInTheDocument();
   });
 });

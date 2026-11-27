@@ -17,10 +17,18 @@ function result(overrides: Partial<VerifyResult> = {}): VerifyResult {
 
 describe("describeResult", () => {
   it("confirms access for an approved check", () => {
+    const view = describeResult(
+      result({ decision: "approved", identity: "passed", liveness: "passed", access_token: "voice-verified" }),
+    );
+
+    expect(view).toMatchObject({ tone: "success", title: "You’re in. Securely.", action: "home", actionLabel: "Continue to home" });
+    expect(view.checks.map((check) => check.state)).toEqual(["passed", "passed", "passed"]);
+  });
+
+  it("opens the account after an approval even with no token in the answer (#102: it's a cookie)", () => {
     const view = describeResult(result({ decision: "approved", identity: "passed", liveness: "passed" }));
 
-    expect(view).toMatchObject({ tone: "success", title: "You’re in. Securely.", action: "done", actionLabel: "Done" });
-    expect(view.checks.map((check) => check.state)).toEqual(["passed", "passed", "passed"]);
+    expect(view).toMatchObject({ title: "You’re in. Securely.", action: "home", actionLabel: "Continue to home" });
   });
 
   it("says the words were wrong when the phrase didn't match", () => {
@@ -87,7 +95,8 @@ describe("describeResult", () => {
     const view = describeResult(result());
 
     expect(view).toMatchObject({ tone: "partial", title: "Almost there.", action: "retry" });
-    expect(view.subtitle).toMatch(/once your voice is set up/);
+    expect(view.subtitle).toMatch(/Voice ID isn’t set up yet/);
+    expect(view.subtitle).not.toMatch(/coming soon/);
     expect(view.checks).toEqual([
       { label: "Words", state: "passed", detail: "6/6 words" },
       { label: "Voice", state: "pending", detail: "Not set up yet" },
@@ -95,11 +104,47 @@ describe("describeResult", () => {
     ]);
   });
 
-  it("explains a partly verified result when the voice matched", () => {
-    const view = describeResult(result({ identity: "passed" }));
+  describe("with the check details hidden by the server (#112)", () => {
+    const HIDDEN = { content: null, identity: null, liveness: null } as const;
+    // Words that would say which check decided it.
+    const NAMES_A_CHECK = /words|phrase|voice didn|voice match|live speaker|live-speaker|speaking directly/i;
 
-    expect(view.subtitle).toMatch(/words and voice both matched/);
-    expect(view.checks[1]).toEqual({ label: "Voice", state: "passed", detail: "Matched" });
+    function hidden(overrides: Partial<VerifyResult> = {}) {
+      return describeResult(result({ ...HIDDEN, ...overrides }));
+    }
+
+    it("confirms an approval without a breakdown", () => {
+      const view = hidden({ decision: "approved", access_token: "voice-verified" });
+
+      expect(view).toMatchObject({ tone: "success", action: "home", actionLabel: "Continue to home", checks: [] });
+    });
+
+    it("gives a rejection the general line, with the attempts left", () => {
+      const view = hidden({ decision: "rejected", attempts_left: 2 });
+
+      expect(view).toMatchObject({ tone: "failure", title: "That didn’t match.", action: "retry", checks: [] });
+      expect(view.subtitle).toBe("We couldn’t verify you this time. Please try again.");
+      expect(view.note).toBe("2 attempts left.");
+    });
+
+    it("still says when the last attempt paused voice checks", () => {
+      const view = hidden({ decision: "rejected", attempts_left: 0, fallback_required: true });
+
+      expect(view).toMatchObject({ title: "Voice checks are paused.", action: "done", checks: [] });
+    });
+
+    it("tells an account without Voice ID to set it up", () => {
+      const view = hidden({ decision: "incomplete" });
+
+      expect(view).toMatchObject({ tone: "partial", action: "retry", checks: [] });
+      expect(view.subtitle).toMatch(/Voice ID isn’t set up yet/);
+    });
+
+    it.each(["approved", "rejected", "incomplete"] as const)("never names a check (%s)", (decision) => {
+      const view = hidden({ decision, fallback_required: false });
+
+      expect(`${view.title} ${view.subtitle} ${view.note ?? ""}`).not.toMatch(NAMES_A_CHECK);
+    });
   });
 
   it.each(["approved", "rejected", "incomplete"] as const)("never shows the server's own text (%s)", (decision) => {

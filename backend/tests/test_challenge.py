@@ -19,6 +19,12 @@ def signed_in(user_id=USER_ID):
     return {"Authorization": f"Bearer {create_access_token(user_id)}"}
 
 
+@pytest.fixture(autouse=True)
+def _account(new_account):
+    # Tokens are refused once their account is gone (#194).
+    new_account(USER_ID)
+
+
 def in_one_hour():
     return datetime.now(UTC) + timedelta(hours=1)
 
@@ -55,7 +61,7 @@ def test_each_request_gets_a_new_passage(client, challenges):
 def test_token_from_signup_works(client, challenges):
     signup = client.post(
         "/api/auth/signup",
-        json={"full_name": "Sam Lee", "email": "sam@example.com", "password": "correct-horse"},
+        json={"full_name": "Sam Lee", "email": "sam@example.com", "password": "correct-horse-battery"},
     ).json()
     headers = {"Authorization": f"Bearer {signup['access_token']}"}
     response = client.post(CHALLENGE_URL, headers=headers)
@@ -98,7 +104,18 @@ def test_invalid_token_is_refused(client, challenges, make_token):
 
 def test_expired_token_is_refused(client, challenges):
     an_hour_ago = datetime.now(UTC) - timedelta(hours=1)
-    token = jwt.encode({"sub": USER_ID, "exp": an_hour_ago}, config.JWT_SECRET, algorithm="HS256")
+    token = jwt.encode(
+        {
+            "sub": USER_ID,
+            "sid": "s",
+            "jti": "j",
+            "iss": config.JWT_ISSUER,
+            "aud": config.JWT_AUDIENCE,
+            "exp": an_hour_ago,
+        },
+        config.JWT_SECRET,
+        algorithm="HS256",
+    )
     response = client.post(CHALLENGE_URL, headers={"Authorization": f"Bearer {token}"})
 
     assert response.status_code == 401
@@ -186,10 +203,10 @@ def test_too_many_passages_are_refused(client, challenges, monkeypatch):
     assert challenges.count_documents({}) == 2
 
 
-def test_rate_limit_is_per_user(client, monkeypatch):
+def test_rate_limit_is_per_user(client, monkeypatch, new_account):
     monkeypatch.setattr(config, "CHALLENGE_RATE_LIMIT", 1)
     client.post(CHALLENGE_URL, headers=signed_in())
 
-    response = client.post(CHALLENGE_URL, headers=signed_in(str(ObjectId())))
+    response = client.post(CHALLENGE_URL, headers=signed_in(new_account()))
 
     assert response.status_code == 201

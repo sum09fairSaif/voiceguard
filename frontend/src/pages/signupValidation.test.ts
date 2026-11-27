@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { validateSignup } from "./signupValidation";
+import { PASSWORD_PROBLEMS, passwordStrength, validatePassword, validateSignup } from "./signupValidation";
 
-const VALID = { fullName: "Alex Morgan", email: "alex@example.com", password: "correct-horse" };
+const VALID = { fullName: "Alex Morgan", email: "alex@example.com", password: "correct-horse-battery" };
 
 describe("validateSignup", () => {
   it("accepts a complete form", () => {
@@ -12,7 +12,7 @@ describe("validateSignup", () => {
     expect(validateSignup({ fullName: "", email: "", password: "" })).toEqual({
       fullName: "Enter your full name.",
       email: "Enter a valid email address.",
-      password: "Use at least 8 characters.",
+      password: "Use at least 15 characters.",
     });
   });
 
@@ -30,9 +30,9 @@ describe("validateSignup", () => {
     expect(validateSignup({ ...VALID, email }).email).toBe("Enter a valid email address.");
   });
 
-  it("refuses a 7-character password and accepts 8", () => {
-    expect(validateSignup({ ...VALID, password: "1234567" }).password).toBeDefined();
-    expect(validateSignup({ ...VALID, password: "12345678" }).password).toBeUndefined();
+  it("refuses a 14-character password and accepts 15", () => {
+    expect(validateSignup({ ...VALID, password: "a-good-pass-14" }).password).toBeDefined();
+    expect(validateSignup({ ...VALID, password: "a-good-pass-15!" }).password).toBeUndefined();
   });
 
   it("measures the password limit in bytes, like bcrypt", () => {
@@ -41,5 +41,42 @@ describe("validateSignup", () => {
     expect(validateSignup({ ...VALID, password: "€".repeat(25) }).password).toBe(
       "That password is too long. Try a shorter one.",
     );
+  });
+});
+
+
+describe("passwordStrength", () => {
+  it.each([
+    ["", 0, ""],
+    ["lantern", 0, "8 more characters"],
+    ["mmmmmmmmmmmmmmmmm", 1, "Too predictable"],
+    ["fghijklmnopqrstuvw", 1, "Too predictable"],
+    ["horsebatteryhorsebattery", 1, "Too predictable"],
+    ["lantern-orchid-41", 2, "Good"],
+    ["lantern orchid tide river", 3, "Strong"],
+  ])("rates %j", (password, level, label) => {
+    expect(passwordStrength(password)).toEqual({ level, label });
+  });
+
+  it("never asks for particular kinds of character", () => {
+    // NIST: no composition rules. All lowercase letters and spaces can be Strong.
+    expect(passwordStrength("quiet violet harbour mornings").level).toBe(3);
+  });
+
+  it("counts characters as the server does: an emoji is one, not two", () => {
+    // 8 emoji are 16 in JavaScript's .length but 8 characters to the server.
+    const emoji = "🌙🌊🌲🔥🍀🎈🐚🦉";
+    expect(emoji.length).toBe(16);
+    expect(passwordStrength(emoji)).toEqual({ level: 0, label: "7 more characters" });
+    expect(validatePassword(emoji)).toBe("Use at least 15 characters.");
+    expect(validatePassword(emoji + "lantern")).toBeUndefined();
+  });
+});
+
+describe("PASSWORD_PROBLEMS", () => {
+  it("has our own words for every reason the server gives", () => {
+    for (const type of ["password_common", "password_personal", "password_repetitive", "password_sequential"]) {
+      expect(PASSWORD_PROBLEMS[type]).toMatch(/^That password/);
+    }
   });
 });

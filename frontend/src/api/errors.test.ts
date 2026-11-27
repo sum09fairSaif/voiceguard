@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { apiError, networkError } from "../test/apiError";
-import { MESSAGES, describeApiError, invalidFields } from "./errors";
+import { MESSAGES, PAUSED_MESSAGES, describeApiError, invalidFieldProblems, invalidFields } from "./errors";
 
 describe("describeApiError", () => {
   it("explains a missing connection", () => {
@@ -62,5 +62,39 @@ describe("invalidFields", () => {
   it("is empty for other errors", () => {
     expect(invalidFields(apiError(409))).toEqual([]);
     expect(invalidFields(networkError())).toEqual([]);
+  });
+});
+
+
+describe("invalidFieldProblems", () => {
+  it("says which field and what kind of problem, never the value", () => {
+    const error = apiError(422, {
+      detail: [{ type: "password_common", loc: ["body", "password"], msg: "server text" }],
+    });
+
+    expect(invalidFieldProblems(error)).toEqual([{ field: "password", type: "password_common" }]);
+  });
+
+  it("is empty for other errors", () => {
+    expect(invalidFieldProblems(apiError(409))).toEqual([]);
+    expect(invalidFieldProblems(networkError())).toEqual([]);
+  });
+});
+
+describe("paused parts of VoiceGuard", () => {
+  it.each([
+    ["signups", "Creating new accounts is paused for now."],
+    ["voice_checks", "Voice checks are paused for now."],
+    ["enrollment", "Setting up a Voice ID is paused for now."],
+  ])("says %s is paused in our own words", (paused, start) => {
+    const error = apiError(503, { detail: "server text that must not be shown", paused });
+
+    expect(describeApiError(error)).toBe(PAUSED_MESSAGES[paused]);
+    expect(describeApiError(error)).toMatch(new RegExp(`^${start}`));
+  });
+
+  it("falls back to the usual message for an unknown or missing switch", () => {
+    expect(describeApiError(apiError(503, { paused: "something-new" }))).toBe(MESSAGES.unavailable);
+    expect(describeApiError(apiError(503, {}))).toBe(MESSAGES.unavailable);
   });
 });

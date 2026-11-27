@@ -4,7 +4,8 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ENROLL_MESSAGES, addSample, getEnrollment, startOver, type Enrollment } from "../../api/enroll";
 import { MESSAGES } from "../../api/errors";
-import { getToken, saveToken } from "../../api/session";
+import { isSignedIn } from "../../api/session";
+import { signInForTest } from "../../test/session";
 import { apiError } from "../../test/apiError";
 import { installFakeMicrophone, removeFakeMicrophone } from "../../test/fakeMicrophone";
 import { EnrollPage } from "./EnrollPage";
@@ -54,7 +55,7 @@ async function startFromIntro(user: ReturnType<typeof userEvent.setup>) {
 
 beforeEach(() => {
   installFakeMicrophone();
-  saveToken("token");
+  signInForTest();
   mockGet.mockReset();
   mockAdd.mockReset();
   mockStartOver.mockReset();
@@ -111,7 +112,7 @@ describe("EnrollPage: where it starts", () => {
     renderPage();
 
     expect(await screen.findByText("sign-in screen")).toBeInTheDocument();
-    expect(getToken()).toBeNull();
+    expect(isSignedIn()).toBe(false);
   });
 
   it("explains when it can't load, and tries again", async () => {
@@ -172,6 +173,62 @@ describe("EnrollPage: recording samples", () => {
     await user.click(screen.getByRole("button", { name: /try again/i }));
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(screen.getByText(/sample 2 of 3/i)).toBeInTheDocument();
+  });
+
+  it("explains before anyone records when this session can't set up a Voice ID", async () => {
+    mockGet.mockResolvedValue({ ...status(0), can_enroll: false });
+    renderPage();
+
+    expect(await screen.findByRole("heading", { name: "Voice ID can’t be set up here." })).toBeInTheDocument();
+    expect(screen.getByText(/contact the VoiceGuard team/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /start|record/i })).not.toBeInTheDocument();
+  });
+
+  it("signs out from that explanation", async () => {
+    signInForTest();
+    mockGet.mockResolvedValue({ ...status(1), can_enroll: false });
+    renderPage();
+
+    await userEvent.setup().click(await screen.findByRole("button", { name: "Sign out" }));
+
+    expect(await screen.findByText("sign-in screen")).toBeInTheDocument();
+    expect(isSignedIn()).toBe(false);
+  });
+
+  it("explains a sample refused because the signup session has ended", async () => {
+    mockGet.mockResolvedValue({ ...status(1), can_enroll: true });
+    mockAdd.mockRejectedValue(apiError(403, { detail: "server text that must not be shown" }));
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText("“Amber lantern river 1”");
+
+    await user.click(screen.getByRole("button", { name: "Start recording" }));
+    await user.click(await screen.findByRole("button", { name: "Stop recording" }));
+    await user.click(await screen.findByRole("button", { name: /save sample/i }));
+
+    expect(await screen.findByRole("heading", { name: "Voice ID can’t be set up here." })).toBeInTheDocument();
+    expect(screen.queryByText(/server text/)).not.toBeInTheDocument();
+  });
+
+  it("lets an older backend without the field enroll as before", async () => {
+    mockGet.mockResolvedValue(status(0));
+    renderPage();
+
+    expect(await screen.findByRole("heading", { name: "Meet your new key." })).toBeInTheDocument();
+  });
+
+  it("switches to the explanation when the window ends while recording", async () => {
+    mockGet.mockResolvedValueOnce({ ...status(1), can_enroll: true }).mockResolvedValueOnce({
+      ...status(1, "new phrase"),
+      can_enroll: false,
+    });
+    renderPage();
+    const user = userEvent.setup();
+    await screen.findByText("“Amber lantern river 1”");
+
+    await user.click(screen.getByRole("button", { name: /new phrase/i }));
+
+    expect(await screen.findByRole("heading", { name: "Voice ID can’t be set up here." })).toBeInTheDocument();
   });
 
   it("treats an account that's already enrolled as done", async () => {
@@ -239,6 +296,6 @@ describe("EnrollPage: recording samples", () => {
     await user.click(screen.getByRole("button", { name: /save sample/i }));
 
     expect(await screen.findByText("sign-in screen")).toBeInTheDocument();
-    expect(getToken()).toBeNull();
+    expect(isSignedIn()).toBe(false);
   });
 });

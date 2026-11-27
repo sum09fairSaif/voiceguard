@@ -1,16 +1,25 @@
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { signup } from "../api/auth";
-import { describeApiError, invalidFields } from "../api/errors";
-import { saveToken } from "../api/session";
+import { isSignedIn, signup } from "../api/auth";
+import type { ConfirmEmailState } from "./ConfirmEmailPage";
+import { describeApiError, invalidFieldProblems } from "../api/errors";
+import { startSession } from "../api/session";
+import { track } from "../posthog";
 import { Button } from "../components/Button";
 import { Logo } from "../components/Logo";
 import { Page } from "../components/Page";
 import { PageHeading } from "../components/PageHeading";
+import { PasswordStrength } from "../components/PasswordStrength";
 import { TextField } from "../components/TextField";
 import { useStillShown } from "../hooks/useStillShown";
 import styles from "./SignupPage.module.css";
-import { validateSignup, type SignupErrors, type SignupForm } from "./signupValidation";
+import {
+  MIN_PASSWORD_LENGTH,
+  PASSWORD_PROBLEMS,
+  validateSignup,
+  type SignupErrors,
+  type SignupForm,
+} from "./signupValidation";
 
 const DUPLICATE_EMAIL = "An account with this email already exists.";
 
@@ -50,17 +59,27 @@ export function SignupPage() {
       });
       // The user may have gone to Sign in while this was running.
       if (!shown.current) return;
-      saveToken(result.access_token);
+      if (!isSignedIn(result)) {
+        // Email confirmation is on: no sign-in yet, and the same answer
+        // whether or not the address already has an account (#110, #111).
+        const state: ConfirmEmailState = { email: form.email.trim() };
+        navigate("/confirm-email", { replace: true, state });
+        return;
+      }
+      startSession(result.user);
+      track("account_created");
       // A new account has no Voice ID yet, so set one up first (#10).
       navigate("/enroll", { replace: true });
     } catch (error) {
       if (!shown.current) return;
-      const rejected = invalidFields(error);
+      const rejected = invalidFieldProblems(error);
       if (rejected.length > 0) {
         const fieldErrors: SignupErrors = {};
-        for (const name of rejected) {
+        for (const { field: name, type } of rejected) {
           const field = SERVER_FIELDS[name];
-          if (field) fieldErrors[field] = "Check this field and try again.";
+          if (!field) continue;
+          // A refused password says why; other fields keep the general hint.
+          fieldErrors[field] = (field === "password" && PASSWORD_PROBLEMS[type]) || "Check this field and try again.";
         }
         setErrors(fieldErrors);
       }
@@ -112,13 +131,14 @@ export function SignupPage() {
           id="password"
           label="Password"
           type="password"
-          placeholder="At least 8 characters"
+          placeholder={`At least ${MIN_PASSWORD_LENGTH} characters`}
           autoComplete="new-password"
           value={form.password}
           onChange={(event) => update("password", event.target.value)}
           error={errors.password}
           disabled={submitting}
         />
+        <PasswordStrength password={form.password} />
 
         {formError && (
           <p className={styles.formError} role="alert">
@@ -136,7 +156,9 @@ export function SignupPage() {
       <p className={styles.switch}>
         Already a member? <Link to="/signin">Sign in</Link>
       </p>
-      <p className={styles.terms}>By continuing, you agree to our Terms &amp; Privacy Policy.</p>
+      <p className={styles.terms}>
+        What we keep, and why: <Link to="/privacy">Privacy note</Link>
+      </p>
     </Page>
   );
 }

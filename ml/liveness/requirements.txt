@@ -4,9 +4,9 @@
 # downloads the datasets hosted there (download.py). miniaudio decodes the
 # ASVspoof 2019 PA FLAC files soundfile's libsndfile 1.2.2 can't (validate.py).
 huggingface_hub==0.26.2
-miniaudio==1.71
+miniaudio==1.73
 numpy==1.26.4
-pandas==2.2.3
+pandas==2.3.3
 pyarrow==23.0.1
-soundfile==0.13.1
-soxr==0.5.0.post1
+soundfile==0.14.0
+soxr==1.1.0

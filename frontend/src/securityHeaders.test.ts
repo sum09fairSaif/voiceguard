@@ -38,12 +38,16 @@ function features(policy: string): Record<string, string> {
   return parsed;
 }
 
+// Our PostHog project is in the US region. Only its ingest address: the app
+// loads nothing from PostHog's asset host (#170).
+const POSTHOG_API = "https://us.i.posthog.com";
+
 describe("security headers in vercel.json", () => {
   it("apply to every page", () => {
     expect(everyPage).toBeDefined();
   });
 
-  it("limit what the page may load and run to our own origin and the API", () => {
+  it("limit what the page may load and run to our own origin, the API and PostHog", () => {
     const csp = directives(header("Content-Security-Policy"));
 
     expect(csp["default-src"]).toEqual(["'self'"]);
@@ -52,7 +56,13 @@ describe("security headers in vercel.json", () => {
     expect(csp["img-src"]).toEqual(["'self'", "data:"]);
     expect(csp["font-src"]).toEqual(["'self'"]);
     expect(csp["media-src"]).toEqual(["'self'"]);
-    expect(csp["connect-src"]).toEqual(["'self'", "https://voiceguard-83cj.onrender.com"]);
+    expect(csp["connect-src"]).toEqual([
+      "'self'",
+      // Our own domain (#193), and Render's address until the app has moved.
+      "https://api.get-voiceguard.tech",
+      "https://voiceguard-83cj.onrender.com",
+      POSTHOG_API,
+    ]);
     expect(csp["object-src"]).toEqual(["'none'"]);
     expect(csp["base-uri"]).toEqual(["'self'"]);
     expect(csp["form-action"]).toEqual(["'self'"]);

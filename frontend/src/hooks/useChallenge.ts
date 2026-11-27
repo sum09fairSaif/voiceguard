@@ -2,7 +2,7 @@ import { isAxiosError } from "axios";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { requestChallenge, type Challenge } from "../api/challenge";
-import { clearToken } from "../api/session";
+import { endSession } from "../api/session";
 import { AVAILABLE_AGAIN, describeVoiceCheckError, isVoiceCheckPaused, pauseSeconds } from "../api/verify";
 import { secondsLeft } from "../utils/countdown";
 
@@ -47,7 +47,7 @@ export function useChallenge(): ChallengeState {
     } catch (err) {
       if (requestId !== latestRequest.current) return;
       if (isAxiosError(err) && err.response?.status === 401) {
-        clearToken();
+        endSession();
         navigate("/signin", { replace: true });
         return;
       }

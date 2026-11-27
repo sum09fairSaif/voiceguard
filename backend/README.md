@@ -28,7 +28,12 @@ From the `backend/` folder:
 6. Check it: open http://localhost:8000/health
    You should see: {"status":"ok","service":"voiceguard-api"}
 
-Interactive API docs are at http://localhost:8000/docs
+Interactive API docs are at http://localhost:8000/docs once `DOCS_ENABLED=true`
+is set in `.env` (they're off by default, and must stay off on the live server).
+
+Request bodies are capped before anything reads them (`body_limit.py`): 16 KB
+for JSON routes, and the 1 MB recording limit plus 64 KB of form overhead for
+`/api/verify` and `/api/enroll/samples`. Anything bigger gets a 413. The whole body must arrive within 30 seconds (408 otherwise), so a stalled upload can't hold memory.
 
 ## Tests and lint
 
@@ -43,11 +48,18 @@ ruff check .
 ## Code layout
 
 - `main.py`: creates the app, CORS, and turns errors into clear responses
+- `body_limit.py` and `security_headers.py`: refuse oversized requests and add
+  security headers to every response
 - `routers/`: the endpoints (`auth`, `challenge`, `verify`, `enroll`)
 - `config.py`: every setting, read from the environment with defaults
 - `db.py`: MongoDB collections and their indexes
 - One module per check or rule: `content_check.py`, `identity_check.py`,
-  `decision.py`, `rate_limit.py`, `login_lockout.py`, `enrollment.py`
+  `decision.py`, `rate_limit.py`, `login_lockout.py`, `enrollment.py`,
+  `transcription_budget.py`
+- `client_address.py`: which client sent a request (`CLIENT_IP_SOURCE`), for
+  per-client limits. Set `CLIENT_IP_SOURCE=peer` locally; the live default
+  reads Cloudflare's `CF-Connecting-IP`
 - `transcription.py` (OpenAI Whisper) and `embedding.py` (model service):
   calls to outside services
+- `audit.py`: the security event record (and the optional PostHog feed)
 - `scripts/save_voiceprint.py`: dev tool to give a test account a voiceprint

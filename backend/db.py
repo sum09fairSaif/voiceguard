@@ -7,6 +7,32 @@ import config
 
 
 @lru_cache
+def get_switches_collection() -> Collection:
+    # Pause switches (switches.py): one document per switch, set by
+    # scripts/switch.py. No index needed beyond _id.
+    return get_client()[config.MONGO_DB_NAME]["switches"]
+
+
+@lru_cache
+def get_revoked_sessions_collection() -> Collection:
+    # Signed-out sessions (sessions.py). MongoDB deletes each once all the
+    # session's tokens would have expired. Checked on every signed-in
+    # request, so the index is made once per process, not every time.
+    revoked = get_client()[config.MONGO_DB_NAME]["revoked_sessions"]
+    revoked.create_index("expires_at", expireAfterSeconds=0)
+    return revoked
+
+
+@lru_cache
+def get_audit_events_collection() -> Collection:
+    # Security events (audit.py). MongoDB deletes each after
+    # AUDIT_RETENTION_DAYS. Made once per process: written on many requests.
+    events = get_client()[config.MONGO_DB_NAME]["audit_events"]
+    events.create_index("expires_at", expireAfterSeconds=0)
+    return events
+
+
+@lru_cache
 def get_client() -> MongoClient:
     if not config.MONGO_URI:
         raise config.NotConfigured("MONGO_URI is not set. Add it to your .env file.")
@@ -21,7 +47,20 @@ def get_users_collection() -> Collection:
     # The database itself refuses a second account with the same email,
     # even if two signups arrive at the same moment.
     users.create_index([("email", ASCENDING)], unique=True)
+    # Accounts that never confirmed their email (#110) are deleted once
+    # this time passes. Only those carry the field: it's removed when the
+    # email is confirmed, and other accounts never have it.
+    users.create_index("unverified_expires_at", expireAfterSeconds=0)
     return users
+
+
+@lru_cache
+def get_email_codes_collection() -> Collection:
+    # The current email-confirmation code per account, hashed (#110).
+    # MongoDB deletes each once it has expired.
+    codes = get_client()[config.MONGO_DB_NAME]["email_codes"]
+    codes.create_index("expires_at", expireAfterSeconds=0)
+    return codes
 
 
 @lru_cache
@@ -76,3 +115,24 @@ def get_enrollments_collection() -> Collection:
     enrollments = get_client()[config.MONGO_DB_NAME]["enrollments"]
     enrollments.create_index("expires_at", expireAfterSeconds=0)
     return enrollments
+
+
+@lru_cache
+def get_enroll_prompts_collection() -> Collection:
+    # Sentences handed out for enrollment samples, one per document, so a
+    # sample can be checked against what the user was asked to read.
+    # MongoDB deletes each once it has expired.
+    prompts = get_client()[config.MONGO_DB_NAME]["enroll_prompts"]
+    prompts.create_index("expires_at", expireAfterSeconds=0)
+    prompts.create_index("user_id")
+    return prompts
+
+
+@lru_cache
+def get_password_resets_collection() -> Collection:
+    # Password-reset links, by the hash of their token (#109). MongoDB
+    # deletes each once it has expired.
+    resets = get_client()[config.MONGO_DB_NAME]["password_resets"]
+    resets.create_index("expires_at", expireAfterSeconds=0)
+    resets.create_index("user_id")
+    return resets

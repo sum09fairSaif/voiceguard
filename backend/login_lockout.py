@@ -1,6 +1,6 @@
 """Counting failures and locking out after too many: wrong passwords, by
-email (routers/auth.py), and rejected voice checks, by user id
-(voice_attempts.py). Each kind uses its own collection."""
+client + email and by email alone (routers/auth.py), and rejected voice
+checks, by user id (voice_attempts.py). Each kind uses its own collection."""
 
 import hashlib
 import math
@@ -90,6 +90,14 @@ def record_failure(
         {"$set": {"locked_until": locked_until, "expires_at": max(locked_until, _utc(record["window_ends"]))}},
     )
     return lockout_seconds
+
+
+def login_subjects(client: str | None, email: str) -> tuple[str, str]:
+    """The two wrong-password counts for an email: this client's, and
+    everyone's together. An unknown client (no trusted address) shares one
+    count for the email."""
+    email = email.lower()
+    return f"client:{client or 'unknown'}:{email}", f"account:{email}"
 
 
 def clear_failures(login_failures: Collection, subject: str) -> None:

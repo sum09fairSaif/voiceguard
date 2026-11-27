@@ -1,7 +1,8 @@
 # VoiceGuard frontend
 
 The VoiceGuard web app: React + TypeScript, built with Vite. It is deployed
-to Vercel from `main` at https://voiceguard-nu.vercel.app/.
+to Vercel from `main` at https://app.get-voiceguard.tech/ (also still at
+https://voiceguard-nu.vercel.app/).
 
 ## Run locally
 
@@ -21,11 +22,34 @@ the backend first (see [../backend/README.md](../backend/README.md)).
 To use a different backend, create `frontend/.env.local` with:
 
 ```
-VITE_API_BASE_URL=https://voiceguard-83cj.onrender.com
+VITE_API_BASE_URL=https://api.get-voiceguard.tech
 ```
 
-If `VITE_API_BASE_URL` isn't set, a production build falls back to the
-Render backend (see `src/api/client.ts`).
+If `VITE_API_BASE_URL` isn't set, a production build falls back to the live
+API at https://api.get-voiceguard.tech (see `src/api/client.ts`).
+
+## How sign-in is kept
+
+The sign-in token is an HttpOnly cookie that the API sets and clears (#102).
+No script on the page can read it, so the app never stores or sends the
+token itself: requests go out with `withCredentials`, and the browser adds
+the cookie. The app keeps only a note in `sessionStorage` that this tab
+signed in, and the account id, to choose screens and for analytics
+(`src/api/session.ts`). The server checks the cookie on every request; a 401
+sends the person back to sign in.
+
+Browsers only send the cookie when the app and the API share a site. Live,
+that's our own domain: the app on `app.get-voiceguard.tech` and the API on
+`api.get-voiceguard.tech`, so on Vercel `VITE_API_BASE_URL` must be
+`https://api.get-voiceguard.tech` (already set, and listed in `connect-src` in
+`vercel.json`). The older `voiceguard-nu.vercel.app` address is a different
+site, so signing in doesn't work from it once the cookie is the only sign-in. Locally, `localhost:5173` and `localhost:8000` count as the
+same site, so nothing changes (in Safari, set `SESSION_COOKIE_SECURE=false`
+in the backend's `.env`). Vercel preview links aren't on our domain, so
+signing in doesn't work from them.
+
+Only the API can clear the cookie, so signing out always asks it to. If it
+can't be reached, the sign-in screen says so and offers to try again.
 
 ## Scripts
 

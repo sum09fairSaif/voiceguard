@@ -1,0 +1,21 @@
+/* Figma 19:146: 67px tall, 12px corners, padlock 19px in, text centred in
+   the space beside it. Sits at the foot of the screen. */
+.note {
+  margin-top: auto;
+  min-height: 67px;
+  padding: 12px 19px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  column-gap: 12px;
+  border-radius: var(--radius-button);
+  background: var(--color-tile);
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--color-muted);
+}
+
+.text {
+  text-align: center;
+  text-wrap: balance;
+}

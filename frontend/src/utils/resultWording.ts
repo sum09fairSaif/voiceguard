@@ -2,10 +2,10 @@ import type { VerifyResult } from "../api/verify";
 import type { CheckState } from "../components/CheckStatusIcon";
 import type { EmblemTone } from "../components/ResultEmblem";
 
-// For the MVP1 demo, the result screen shows each check's outcome as proof of
-// progress. The end product should show only pass or fail: saying which
-// check failed helps someone tune a fake (tracked as a separate ticket).
-export const SHOW_CHECK_DETAILS = true;
+// Each check's outcome is shown only when the server sends it (backend
+// VERIFY_CHECK_DETAILS, off by default, #112). Otherwise the screen says only
+// the outcome and what to do next: naming the check that failed would help
+// someone tune a replay or voice clone.
 
 export type CheckRow = {
   label: string;
@@ -20,14 +20,17 @@ export type ResultView = {
   subtitle: string;
   // A line under the subtitle about attempts left, after a rejection only.
   note?: string;
+  // Empty when the server hides the check details.
   checks: CheckRow[];
-  // "done" goes back to the start; "retry" gets a fresh passage.
-  action: "done" | "retry";
+  // "home" opens the account (approved only); "done" goes back to the start;
+  // "retry" gets a fresh passage.
+  action: "home" | "done" | "retry";
   actionLabel: string;
 };
 
 function checkRows(result: VerifyResult): CheckRow[] {
   const { content, identity, liveness } = result;
+  if (content === null || identity === null || liveness === null) return [];
   const words = `${content.matched}/${content.total} words`;
   return [
     { label: "Words", state: content.passed ? "passed" : "failed", detail: words },
@@ -45,7 +48,8 @@ function checkRows(result: VerifyResult): CheckRow[] {
 }
 
 function rejectedSubtitle(result: VerifyResult): string {
-  if (!result.content.passed) {
+  // Details hidden: the general line below, whichever check failed.
+  if (result.content && !result.content.passed) {
     return "The words didn’t match the phrase. Find a quiet spot and read it again, word for word.";
   }
   if (result.identity === "failed") {
@@ -79,8 +83,10 @@ export function describeResult(result: VerifyResult): ResultView {
         title: "You’re in. Securely.",
         subtitle: "A more personal way to protect what matters to you.",
         checks,
-        action: "done",
-        actionLabel: "Done",
+        // Figma 19:371's button. The API has swapped in the voice-verified
+        // cookie that opens the account (#102); the page never sees it.
+        action: "home",
+        actionLabel: "Continue to home",
       };
     case "rejected":
       if (result.fallback_required) {
@@ -112,10 +118,10 @@ export function describeResult(result: VerifyResult): ResultView {
         tone: "partial",
         eyebrow: "Partly verified",
         title: "Almost there.",
-        subtitle:
-          result.identity === "passed"
-            ? "Your words and voice both matched. The live-speaker check is coming soon, so we can’t fully confirm you yet."
-            : "You read the phrase correctly. Voice matching starts once your voice is set up, and the live-speaker check is coming soon.",
+        // Only ever an account without Voice ID: words alone can't confirm
+        // someone. Says nothing about the words, so it reads the same with
+        // the details hidden.
+        subtitle: "Your Voice ID isn’t set up yet, so we couldn’t finish confirming it’s you.",
         checks,
         action: "retry",
         actionLabel: "Try again",

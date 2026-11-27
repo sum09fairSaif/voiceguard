@@ -1,13 +1,20 @@
 import secrets
+import uuid
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from functools import lru_cache
 
 import bcrypt
 import jwt
-from fastapi import Depends, HTTPException, status
+from bson import ObjectId
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from pymongo.collection import Collection
 
 import config
+from db import get_users_collection
+from session_cookie import token_from_cookie
+from sessions import is_revoked, revoked_sessions
 
 # Reads the "Authorization: Bearer <token>" header. auto_error=False lets us
 # send our own clear 401 message when it's missing.
@@ -38,16 +45,47 @@ def check_password(password: str, password_hash: str | None) -> bool:
     return bcrypt.checkpw(password_bytes, password_hash.encode("utf-8"))
 
 
-def create_access_token(user_id: str) -> str:
+# Two kinds of sign-in token. A password alone gives a limited one: it can
+# only start the voice check (passages, checks, enrollment). An approved voice
+# check gives a voice-verified one, the only kind that opens the account.
+# Both are signed, so neither the scope nor the factors can be edited.
+PENDING = "pending"
+VERIFIED = "verified"
+
+
+def _encode(payload: dict, minutes: int) -> str:
     if not config.JWT_SECRET:
         raise config.NotConfigured("JWT_SECRET is not set. Add it to your .env file.")
-    now =datetime.now(UTC)
+    now = datetime.now(UTC)
     payload = {
-        "sub": user_id,
+        **payload,
+        "jti": uuid.uuid4().hex,
+        "iss": config.JWT_ISSUER,
+        "aud": config.JWT_AUDIENCE,
         "iat": now,
-        "exp": now + timedelta(minutes=config.JWT_EXPIRE_MINUTES),
+        "exp": now + timedelta(minutes=minutes),
     }
     return jwt.encode(payload, config.JWT_SECRET, algorithm=config.JWT_ALGORITHM)
+
+
+def create_access_token(user_id: str, source: str = "login", session_id: str | None = None) -> str:
+    """A limited token after a password, starting a new session: `source` is
+    "signup" or "login" (enrollment uses it to tell the signup session apart).
+    `session_id` only when the caller must record it first."""
+    return _encode(
+        {"sub": user_id, "sid": session_id or uuid.uuid4().hex, "scope": PENDING, "amr": ["pwd"], "src": source},
+        config.JWT_EXPIRE_MINUTES,
+    )
+
+
+def create_verified_token(user_id: str, session_id: str) -> str:
+    """A voice-verified token, only after an approved voice check. It belongs
+    to the same session as the limited token that ran the check, so signing
+    out ends both."""
+    return _encode(
+        {"sub": user_id, "sid": session_id, "scope": VERIFIED, "amr": ["pwd", "voice"]},
+        config.VERIFIED_TOKEN_MINUTES,
+    )
 
 
 def _not_signed_in(detail: str) -> HTTPException:
@@ -58,22 +96,84 @@ def _not_signed_in(detail: str) -> HTTPException:
     )
 
 
-def get_current_user_id(
+def request_token(request: Request, credentials: HTTPAuthorizationCredentials | None) -> str | None:
+    """The sign-in token: an Authorization: Bearer header if there is one,
+    otherwise the HttpOnly cookie (#102)."""
+    return credentials.credentials if credentials is not None else token_from_cookie(request)
+
+
+def user_accounts() -> Callable[[], Collection]:
+    """The accounts, fetched only when needed, like the revocation list: a
+    request without a valid token gets its 401 without touching the
+    database. Tests replace it."""
+    return get_users_collection
+
+
+def get_token_claims(
+    request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
-) -> str:
-    if credentials is None:
+    revoked: Callable = Depends(revoked_sessions),
+    accounts: Callable = Depends(user_accounts),
+) -> dict:
+    """The claims of any valid sign-in token, limited or voice-verified, whose
+    session hasn't been signed out and whose account still exists."""
+    token = request_token(request, credentials)
+    if token is None:
         raise _not_signed_in("Please sign in first.")
+    claims = claims_for(token, revoked)
+    # A token never outlives its account (#194): an unconfirmed account can
+    # be deleted, or replaced by a new signup with the same email.
+    if not account_exists(accounts(), claims["sub"]):
+        raise _not_signed_in("This account no longer exists. Please sign up or sign in again.")
+    return claims
+
+
+def account_exists(users: Collection, user_id: str) -> bool:
+    return ObjectId.is_valid(user_id) and users.count_documents({"_id": ObjectId(user_id)}, limit=1) > 0
+
+
+def claims_for(token: str, revoked: Callable) -> dict:
     if not config.JWT_SECRET:
         raise config.NotConfigured("JWT_SECRET is not set. Add it to your .env file.")
     try:
         claims = jwt.decode(
-            credentials.credentials,
+            token,
             config.JWT_SECRET,
             algorithms=[config.JWT_ALGORITHM],
-            options={"require": ["sub", "exp"]},
+            audience=config.JWT_AUDIENCE,
+            issuer=config.JWT_ISSUER,
+            options={"require": ["sub", "exp", "jti", "sid", "iss", "aud"]},
         )
     except jwt.ExpiredSignatureError:
         raise _not_signed_in("Your session has expired. Please sign in again.")
     except jwt.InvalidTokenError:
         raise _not_signed_in("Your login token is not valid. Please sign in again.")
+    # Only now the database: a database error here is a 503, never access.
+    if is_revoked(revoked(), claims["sid"], claims["sub"], claims.get("iat")):
+        raise _not_signed_in("This sign-in has ended. Please sign in again.")
+    return claims
+
+
+def get_current_user_id(claims: dict = Depends(get_token_claims)) -> str:
+    """For the steps of signing in (passages, voice checks, enrollment): any
+    valid token will do."""
+    return claims["sub"]
+
+
+def is_voice_verified(claims: dict) -> bool:
+    # Both must hold: a token without a scope (issued before these existed)
+    # or with any other value counts as limited.
+    # "amr" must be a real list: "voice" in a string would match a substring.
+    factors = claims.get("amr")
+    return claims.get("scope") == VERIFIED and isinstance(factors, list) and "voice" in factors
+
+
+def get_verified_user_id(claims: dict = Depends(get_token_claims)) -> str:
+    """For the account itself: only a voice-verified token. A limited one is
+    a real sign-in that hasn't passed the voice check yet, so 403, not 401."""
+    if not is_voice_verified(claims):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Please complete the voice check first.",
+        )
     return claims["sub"]

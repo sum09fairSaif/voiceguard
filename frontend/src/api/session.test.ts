@@ -1,19 +1,38 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { clearToken, getToken, saveToken } from "./session";
+import { TEST_USER } from "../test/session";
+import { api } from "./client";
+import { endSession, isSignedIn, restorePostHogIdentity, startSession } from "./session";
 
 afterEach(() => {
   vi.restoreAllMocks();
-  clearToken();
+  endSession();
 });
 
-describe("session token", () => {
-  it("is saved, read back and cleared", () => {
-    saveToken("token-123");
-    expect(getToken()).toBe("token-123");
-    expect(sessionStorage.getItem("voiceguard.token")).toBe("token-123");
+describe("session", () => {
+  it("notes that this tab signed in, and forgets it", () => {
+    startSession(TEST_USER);
+    expect(isSignedIn()).toBe(true);
 
-    clearToken();
-    expect(getToken()).toBeNull();
+    endSession();
+    expect(isSignedIn()).toBe(false);
+  });
+
+  it("never keeps a token where page scripts could read it (#102)", () => {
+    startSession(TEST_USER);
+
+    // Only the note and the account: nothing a script could replay.
+    const stored = Object.keys(sessionStorage).map((key) => `${key}=${sessionStorage.getItem(key)}`);
+    expect(stored.join(" ")).not.toMatch(/token|eyJ/i);
+    expect(Object.keys(localStorage)).toEqual([]);
+    expect(document.cookie).toBe("");
+  });
+
+  it("removes a token an older version of the app left behind", () => {
+    sessionStorage.setItem("voiceguard.token", "old-token");
+
+    restorePostHogIdentity();
+
+    expect(sessionStorage.getItem("voiceguard.token")).toBeNull();
   });
 
   it("still works when the browser blocks storage", () => {
@@ -24,7 +43,18 @@ describe("session token", () => {
       throw new Error("storage disabled");
     });
 
-    expect(() => saveToken("token-456")).not.toThrow();
-    expect(getToken()).toBe("token-456");
+    expect(() => startSession(TEST_USER)).not.toThrow();
+    expect(isSignedIn()).toBe(true);
+  });
+});
+
+describe("requests to the API", () => {
+  it("send the sign-in cookie and never a token header", () => {
+    startSession(TEST_USER);
+
+    expect(api.defaults.withCredentials).toBe(true);
+    expect(api.defaults.headers.common.Authorization).toBeUndefined();
+    // No interceptor adds one either.
+    expect((api.interceptors.request as unknown as { handlers: unknown[] }).handlers.filter(Boolean)).toEqual([]);
   });
 });

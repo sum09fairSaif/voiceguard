@@ -7,6 +7,7 @@ import voiceIdMark from "../../assets/icons/voice-id-mark.svg";
 import { Button } from "../../components/Button";
 import { PageHeading } from "../../components/PageHeading";
 import { StepProgress } from "../../components/StepProgress";
+import { track } from "../../posthog";
 import styles from "./EnrollIntro.module.css";
 
 const FEATURES = [
@@ -19,6 +20,11 @@ const FEATURES = [
 // data, so the consent box must be ticked before recording can start.
 export function EnrollIntro({ onStart }: { onStart: () => void }) {
   const [agreed, setAgreed] = useState(false);
+
+  function handleStart() {
+    track("voice_id_enrollment_started");
+    onStart();
+  }
 
   return (
     <>
@@ -66,7 +72,7 @@ export function EnrollIntro({ onStart }: { onStart: () => void }) {
       </label>
 
       <div className={styles.action}>
-        <Button type="button" showArrow disabled={!agreed} onClick={onStart}>
+        <Button type="button" showArrow disabled={!agreed} onClick={handleStart}>
           Set up my Voice ID
         </Button>
       </div>

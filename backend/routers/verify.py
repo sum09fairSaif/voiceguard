@@ -1,27 +1,35 @@
 import logging
-import time
+from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from bson import ObjectId
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Response, UploadFile, status
 from pymongo.collection import Collection
+from pymongo.errors import PyMongoError
 
 import config
+import switches
 from audio_upload import read_recording
+from audit import track
 from challenges import use_challenge
 from content_check import check_content
 from db import (
     get_challenges_collection,
     get_rate_limits_collection,
+    get_users_collection,
     get_voice_failures_collection,
     get_voiceprints_collection,
 )
 from decision import decide
+from email_verification import require_verified_email
 from embedding import Embedder, get_embedder
 from identity_check import IdentityResult, IdentityUnavailable, check_identity
 from liveness_check import LivenessResult, check_liveness
-from rate_limit import count_request
+from rate_limit import count_client_request, count_request
 from schemas import ContentScore, VerifyResponse
-from security import get_current_user_id
-from transcription import AudioNotUnderstood, Transcriber, TranscriptionUnavailable, get_transcriber
+from security import create_verified_token, get_current_user_id, get_token_claims
+from session_cookie import set_session_cookie
+from transcription import Transcriber, get_transcriber, transcribe_and_log
+from transcription_budget import release_transcription, reserve_transcription
 from voice_attempts import ensure_not_locked, record_outcome
 from voiceprints import load_voiceprint
 
@@ -29,23 +37,44 @@ router = APIRouter(prefix="/api", tags=["verify"])
 
 logger = logging.getLogger("voiceguard.verify")
 
+# What the user is told while VERIFY_CHECK_DETAILS is off (#112). None of
+# them says which check decided it. "incomplete" only ever means the account
+# has no voiceprint yet, which the user needs to know to set one up.
+GENERAL_REASONS = {
+    "approved": "You're verified.",
+    "rejected": "We couldn't verify you. Please try again with a new passage.",
+    "incomplete": "This account hasn't set up Voice ID yet, so we couldn't finish the check.",
+}
 
-@router.post("/verify", response_model=VerifyResponse)
+
+@router.post(
+    "/verify",
+    response_model=VerifyResponse,
+    # Paused first. Then, before the paid speech-to-text call: no voice
+    # checks until the email address is confirmed (#110).
+    dependencies=[Depends(switches.require("voice_checks")), Depends(require_verified_email)],
+)
 def verify(
+    response: Response,
+    request: Request,
     audio: UploadFile = File(...),
     attempt_id: str = Form(...),
     user_id: str = Depends(get_current_user_id),
+    claims: dict = Depends(get_token_claims),
     challenges: Collection = Depends(get_challenges_collection),
     rate_limits: Collection = Depends(get_rate_limits_collection),
     voiceprints: Collection = Depends(get_voiceprints_collection),
     voice_failures: Collection = Depends(get_voice_failures_collection),
+    users: Collection = Depends(get_users_collection),
     transcribe: Transcriber = Depends(get_transcriber),
     embed: Embedder | None = Depends(get_embedder),
 ) -> VerifyResponse:
     # Checked before the passage is used up, so a refused request doesn't
     # cost the user their passage.
     ensure_not_locked(voice_failures, user_id)
+    count_client_request(rate_limits, "verify", request, config.VERIFY_CLIENT_LIMIT)
     count_request(rate_limits, "verify", user_id, config.VERIFY_RATE_LIMIT, config.RATE_LIMIT_WINDOW_SECONDS)
+    count_request(rate_limits, "verify-day", user_id, config.VERIFY_DAILY_LIMIT, 24 * 3600)
 
     recording, extension = read_recording(audio)
 
@@ -55,16 +84,25 @@ def verify(
     if voiceprint is not None and embed is None:
         raise IdentityUnavailable("EMBEDDING_SERVICE_URL or EMBEDDING_SERVICE_TOKEN is not set.")
 
+    # Before the passage is used up, so a spent budget doesn't cost the
+    # user their passage. Given back below if no paid call follows.
+    reserve_transcription(rate_limits)
+
     # Use up the attempt before transcribing, so a passage can never be
     # checked twice, even if transcription fails part-way.
-    passage = use_challenge(challenges, attempt_id, user_id)
+    try:
+        passage = use_challenge(challenges, attempt_id, user_id)
+    except Exception:
+        release_transcription(rate_limits)
+        raise
     if passage is None:
+        release_transcription(rate_limits)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="This passage has expired or was already used. Please get a new one.",
         )
 
-    transcript = _transcribe_and_log(transcribe, recording, extension, user_id, attempt_id)
+    transcript = transcribe_and_log(transcribe, recording, f"attempt.{extension}", user_id, attempt_id, logger)
     content = check_content(passage, transcript)
     identity = liveness = None
     if voiceprint is not None:
@@ -95,7 +133,47 @@ def verify(
     result = decide(content, identity, liveness)
     attempts_left = record_outcome(voice_failures, user_id, result.decision)
     if result.decision == "rejected":
-        logger.info("voice_check_rejected user=%s attempt=%s attempts_left=%d", user_id, attempt_id, attempts_left)
+        # The words' outcome too: with VERIFY_CHECK_DETAILS off, the log is
+        # the only place that says which check failed. Counts only, never
+        # the transcript.
+        logger.info(
+            "voice_check_rejected user=%s attempt=%s attempts_left=%d words_passed=%s words_matched=%d/%d",
+            user_id,
+            attempt_id,
+            attempts_left,
+            content.passed,
+            content.matched,
+            content.total,
+        )
+    # Which check decided it, as a word: never a score.
+    track(f"voice_check_{result.decision}", user_id, reason=result.check)
+    if result.decision == "rejected" and attempts_left == 0:
+        track("voice_checks_paused", user_id)
+    access_token = None
+    if result.decision == "approved":
+        # Only an approval opens the account: password, voice and liveness.
+        # Same session as the token that ran the check: signing out ends both.
+        access_token = create_verified_token(user_id, claims["sid"])
+        # The voice-verified token replaces the limited one in the cookie.
+        set_session_cookie(response, access_token, config.VERIFIED_TOKEN_MINUTES)
+        if not config.TOKEN_IN_RESPONSE_BODY:
+            access_token = None
+        _record_sign_in(users, user_id)
+        logger.info("voice_check_approved user=%s attempt=%s", user_id, attempt_id)
+    fallback_required = result.decision == "rejected" and attempts_left == 0
+    if not config.VERIFY_CHECK_DETAILS:
+        # Only the outcome and what to do next (#112): nothing that says
+        # which check failed.
+        return VerifyResponse(
+            decision=result.decision,
+            reason=GENERAL_REASONS[result.decision],
+            content=None,
+            identity=None,
+            liveness=None,
+            attempts_left=attempts_left,
+            fallback_required=fallback_required,
+            access_token=access_token,
+        )
     return VerifyResponse(
         decision=result.decision,
         reason=result.reason,
@@ -108,8 +186,26 @@ def verify(
         identity=_identity_status(identity),
         liveness=_liveness_status(liveness),
         attempts_left=attempts_left,
-        fallback_required=result.decision == "rejected" and attempts_left == 0,
+        fallback_required=fallback_required,
+        access_token=access_token,
     )
+
+
+def _record_sign_in(users: Collection, user_id: str) -> None:
+    """Note this voice-verified sign-in, keeping the one before it so the
+    account page can show it. One atomic update, so two approvals at once
+    can't leave an older time behind. Best effort: the user has passed every
+    check, so a failed write is logged rather than costing them the sign-in."""
+    if not ObjectId.is_valid(user_id):
+        return
+    try:
+        users.update_one(
+            {"_id": ObjectId(user_id)},
+            # A pipeline update reads the old last_verified_at in the same step.
+            [{"$set": {"previous_verified_at": "$last_verified_at", "last_verified_at": datetime.now(UTC)}}],
+        )
+    except PyMongoError as exc:
+        logger.warning("sign_in_history_not_saved user=%s reason=%s", user_id, type(exc).__name__)
 
 
 def _identity_status(identity: IdentityResult | None) -> str:
@@ -122,38 +218,3 @@ def _liveness_status(liveness: LivenessResult | None) -> str:
     if liveness is None:
         return "not_checked"
     return "passed" if liveness.passed else "failed"
-
-
-def _transcribe_and_log(
-    transcribe: Transcriber, recording: bytes, extension: str, user_id: str, attempt_id: str
-) -> str:
-    """Transcribe the recording and log one line per paid speech-to-text
-    call, so spend can be traced to a user. Never logs the audio, the
-    passage or what was heard."""
-    started = time.monotonic()
-    outcome = "error"
-    error = "-"
-    try:
-        transcript = transcribe(recording, f"attempt.{extension}")
-        outcome = "ok"
-        return transcript
-    except AudioNotUnderstood as exc:
-        outcome = "unreadable"
-        error = exc.details
-        raise
-    except TranscriptionUnavailable as exc:
-        outcome = "unavailable"
-        error = exc.details
-        raise
-    finally:
-        logger.info(
-            "transcription user=%s attempt=%s model=%s format=%s bytes=%d outcome=%s seconds=%.2f error=%s",
-            user_id,
-            attempt_id,
-            config.WHISPER_MODEL,
-            extension,
-            len(recording),
-            outcome,
-            time.monotonic() - started,
-            error,
-        )
