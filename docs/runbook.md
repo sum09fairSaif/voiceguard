@@ -54,6 +54,12 @@ expires (15 minutes), and after that they ask for a new one. An account that
 never confirms is deleted after 24 hours, so in a pause longer than that, some
 people will need to sign up again.
 
+**Pausing `enrollment` also pauses recording a new Voice ID** (#20). Once failed
+voice checks have paused someone's checks, they can ask for an emailed code and
+record a new Voice ID; a confirmed code opens 30 minutes for that, so both the
+code and the recording wait until enrollment is back. Their old Voice ID keeps
+working meanwhile.
+
 From `backend/`, with the virtual environment active and the team `.env`:
 
 ```

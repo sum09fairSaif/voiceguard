@@ -218,8 +218,9 @@ if not math.isfinite(LIVENESS_THRESHOLD):
 VERIFY_CHECK_DETAILS = os.getenv("VERIFY_CHECK_DETAILS", "false").strip().lower() in ("1", "true", "yes")
 
 # Failed voice checks. After this many rejections within the window, voice
-# checks are locked for the lockout time, and the user falls back to an
-# email code (#20). Only rejections count, not outages or unenrolled users.
+# checks are locked for the lockout time, and the user can record a new
+# Voice ID with an emailed code (#20, recovery.py). Only rejections count,
+# not outages or unenrolled users.
 VOICE_MAX_FAILURES = int(os.getenv("VOICE_MAX_FAILURES", "3"))
 VOICE_FAILURE_WINDOW_SECONDS = int(os.getenv("VOICE_FAILURE_WINDOW_SECONDS", "1800"))
 VOICE_LOCKOUT_SECONDS = int(os.getenv("VOICE_LOCKOUT_SECONDS", "1800"))
@@ -227,8 +228,9 @@ if VOICE_MAX_FAILURES <= 0 or VOICE_FAILURE_WINDOW_SECONDS <= 0 or VOICE_LOCKOUT
     raise RuntimeError("VOICE_MAX_FAILURES, VOICE_FAILURE_WINDOW_SECONDS and VOICE_LOCKOUT_SECONDS must be more than 0.")
 
 # Per-user limits. Each voice check is a paid speech-to-text call, so these
-# cap what one account can spend. After 3 failed voice attempts the user
-# falls back to an email code, so a real user stays well under them.
+# cap what one account can spend. After 3 failed voice attempts checks
+# pause (and a new Voice ID can be recorded, #20), so a real user stays
+# well under them.
 RATE_LIMIT_WINDOW_SECONDS = int(os.getenv("RATE_LIMIT_WINDOW_SECONDS", "3600"))
 CHALLENGE_RATE_LIMIT = int(os.getenv("CHALLENGE_RATE_LIMIT", "20"))
 VERIFY_RATE_LIMIT = int(os.getenv("VERIFY_RATE_LIMIT", "10"))

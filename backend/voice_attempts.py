@@ -7,8 +7,8 @@ about who is speaking, so it doesn't count.
 
 After VOICE_MAX_FAILURES rejections within VOICE_FAILURE_WINDOW_SECONDS,
 voice checks are locked for VOICE_LOCKOUT_SECONDS: no new passages, no
-checks. That's the point where the user is meant to fall back to an email
-code (#20); until that exists, they wait out the lockout.
+checks. That's when the user can record a new Voice ID with an emailed code
+(#20, recovery.py), or wait out the lockout.
 """
 
 from pymongo.collection import Collection
