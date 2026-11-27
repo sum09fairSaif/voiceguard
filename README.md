@@ -60,6 +60,8 @@ as soon as the voiceprint is built or the checks have run.
   fail, never its score, so nobody can tune a voice clone against it. A voice
   check's answer doesn't even say which check failed (#112), unless
   `VERIFY_CHECK_DETAILS=true` is set for a demo or debugging (off by default).
+- **Security controls:** how VoiceGuard maps to NIST SP 800-53 and SP 800-63B-4,
+  control by control, is in [docs/security.md](docs/security.md).
 - **Passwords (NIST SP 800-63B-4):** at least 15 characters, no rules about
   which kinds of character, and never a common or breached password, the
   person's own email name, or a simple repeat or sequence.
