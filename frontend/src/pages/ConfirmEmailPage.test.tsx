@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { confirmEmail, sendEmailCode } from "../api/emailVerification";
-import { MESSAGES } from "../api/errors";
+import { MESSAGES, PAUSED_MESSAGES } from "../api/errors";
 import { isSignedIn } from "../api/session";
 import { apiError, networkError } from "../test/apiError";
 import {
@@ -118,6 +118,18 @@ describe("Confirm email screen", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("Too many attempts. Please try again in 10 minutes.");
   });
 
+  // Confirming pauses with signups (#217); the code stays valid for later.
+  it("says when confirming is paused, and keeps the code", async () => {
+    mockConfirm.mockRejectedValue(apiError(503, { detail: "server words", paused: "signups" }));
+    renderApp();
+    await enter("123456");
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(PAUSED_MESSAGES.signups);
+    expect(isSignedIn()).toBe(false);
+    expect(screen.getByLabelText("Confirmation code")).toHaveValue("123456");
+    expect(screen.getByLabelText("Confirmation code")).toBeEnabled();
+  });
+
   it("sends a new code to the address and says so without saying whether it has an account", async () => {
     mockSend.mockResolvedValue();
     renderApp();
@@ -133,6 +145,14 @@ describe("Confirm email screen", () => {
     await userEvent.setup().click(screen.getByRole("button", { name: "Send a new code" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(MESSAGES.unavailable);
+  });
+
+  it("says when sending a new code is paused", async () => {
+    mockSend.mockRejectedValue(apiError(503, { paused: "signups" }));
+    renderApp();
+    await userEvent.setup().click(screen.getByRole("button", { name: "Send a new code" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(PAUSED_MESSAGES.signups);
   });
 
   it("explains when VoiceGuard can't be reached", async () => {
