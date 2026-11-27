@@ -912,3 +912,140 @@ def test_enrolling_outside_the_signup_session_is_recorded(client, embedder, audi
     send(client, headers=from_login())
 
     assert recorded(audit_events) == [("enroll_sample_refused", "not_signup_session")]
+
+
+# --- Recording a new Voice ID after the voice check keeps failing (#20) --------
+
+OLD_VOICE = [0.0, 1.0, 0.0]
+
+
+class Outbox:
+    def __init__(self):
+        self.sent = []
+        self.fail = False
+
+    def __call__(self, to, subject, text, purpose):
+        if self.fail:
+            from email_sender import EmailUnavailable
+
+            raise EmailUnavailable("The email provider refused the email: status=500 error=-.")
+        self.sent.append({"to": to, "subject": subject, "purpose": purpose})
+
+
+@pytest.fixture
+def outbox(client):
+    from email_sender import get_optional_email_sender
+
+    box = Outbox()
+    app.dependency_overrides[get_optional_email_sender] = lambda: box
+    return box
+
+
+@pytest.fixture
+def recovering(client, users, voiceprints, voice_failures, no_grace):
+    """An enrolled account, its voice checks paused, made a while ago (so
+    no signup window), that confirmed a recovery code in session r1."""
+    from recovery import grant
+    from voice_attempts import record_outcome
+
+    made(users, minutes_ago=120)
+    save_voiceprint(voiceprints, USER_ID, OLD_VOICE)
+    for _ in range(config.VOICE_MAX_FAILURES):
+        record_outcome(voice_failures, USER_ID, "rejected")
+    grant(users, USER_ID, "r1")
+
+
+def recovery_session(sid="r1"):
+    return {"Authorization": f"Bearer {create_access_token(USER_ID, source='login', session_id=sid)}"}
+
+
+def test_a_recovering_session_records_a_new_voice_from_the_start(client, embedder, recovering):
+    body = client.get(STATUS_URL, headers=recovery_session()).json()
+
+    assert body["status"] == "not_started"
+    assert body["can_enroll"] is True
+    assert body["prompt"]
+
+
+def test_the_old_voice_id_keeps_working_until_the_new_one_is_complete(client, embedder, recovering, voiceprints):
+    for _ in range(config.ENROLL_SAMPLES_REQUIRED - 1):
+        assert send(client, headers=recovery_session()).status_code == 200
+        assert load_voiceprint(voiceprints, USER_ID) == OLD_VOICE
+
+
+def test_the_new_voice_id_replaces_the_old_one(client, embedder, recovering, voiceprints, outbox, audit_events):
+    for _ in range(config.ENROLL_SAMPLES_REQUIRED):
+        response = send(client, headers=recovery_session())
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "enrolled"
+    from voiceprints import build_voiceprint
+
+    assert load_voiceprint(voiceprints, USER_ID) == pytest.approx(build_voiceprint(TAKES))
+    events = [e["event"] for e in audit_events.find({}, {"_id": 0})]
+    assert "voiceprint_replaced" in events
+    assert "enrolled" not in events
+
+
+def test_replacing_ends_every_session_and_tells_the_owner(client, embedder, recovering, outbox):
+    other_device = recovery_session("someone-else")
+    for _ in range(config.ENROLL_SAMPLES_REQUIRED):
+        send(client, headers=recovery_session())
+
+    # The voice check is needed again, with the new voice, on every device.
+    assert client.get(STATUS_URL, headers=recovery_session()).status_code == 401
+    assert client.get(STATUS_URL, headers=other_device).status_code == 401
+    [notice] = outbox.sent
+    assert notice["to"] == "sam@example.com"
+    assert notice["purpose"] == "voice_replaced"
+
+
+def test_replacing_clears_the_grant_and_the_failed_checks(client, embedder, recovering, users, voice_failures):
+    from login_lockout import seconds_locked
+
+    for _ in range(config.ENROLL_SAMPLES_REQUIRED):
+        send(client, headers=recovery_session())
+
+    user = users.find_one({"_id": ObjectId(USER_ID)})
+    assert "recovery_sid" not in user and "recovery_at" not in user
+    assert seconds_locked(voice_failures, USER_ID) == 0
+
+
+def test_the_replacement_stands_if_the_notice_cant_be_sent(client, embedder, recovering, voiceprints, outbox):
+    outbox.fail = True
+
+    for _ in range(config.ENROLL_SAMPLES_REQUIRED):
+        response = send(client, headers=recovery_session())
+
+    assert response.status_code == 200
+    assert load_voiceprint(voiceprints, USER_ID) != OLD_VOICE
+
+
+def test_without_a_grant_a_voice_id_still_cant_be_replaced(client, embedder, recovering, voiceprints):
+    response = send(client, headers=recovery_session("not-the-recovering-session"))
+
+    assert response.status_code == 409
+    assert load_voiceprint(voiceprints, USER_ID) == OLD_VOICE
+    body = client.get(STATUS_URL, headers=recovery_session("not-the-recovering-session")).json()
+    assert body["status"] == "enrolled"
+    assert body["can_enroll"] is False
+
+
+def test_an_expired_grant_cant_replace_it(client, embedder, recovering, users, voiceprints):
+    users.update_one(
+        {"_id": ObjectId(USER_ID)},
+        {"$set": {"recovery_at": datetime.now(UTC) - timedelta(minutes=config.ENROLL_WINDOW_MINUTES + 1)}},
+    )
+
+    assert send(client, headers=recovery_session()).status_code == 409
+    assert load_voiceprint(voiceprints, USER_ID) == OLD_VOICE
+
+
+def test_a_new_recording_must_still_pass_the_checks(client, embedder, recovering, voiceprints):
+    # Recovery doesn't loosen enrollment: a replay is turned away as usual.
+    embedder.liveness = config.LIVENESS_THRESHOLD - 1.0
+
+    response = send(client, headers=recovery_session())
+
+    assert response.status_code == 422
+    assert load_voiceprint(voiceprints, USER_ID) == OLD_VOICE
