@@ -39,9 +39,12 @@ is paused for now.
 
 **Pause `signups` whenever you pause `enrollment`, and pause it first:** each switch
 takes up to 30 seconds to apply, so wait that long before pausing `enrollment`.
-A new account can only set up its Voice ID within 30 minutes of signing up, so
-anyone who signs up while enrollment is paused misses that window for good
-(until account recovery exists).
+A new account can only set up its Voice ID within 30 minutes of signing up, or of
+confirming its email when confirmation is on, so anyone whose 30 minutes start
+while enrollment is paused misses that window for good (until account recovery
+exists). A `signups` pause holds both signing up and confirming (see below).
+Turn them back on the other way round: `enrollment` first, wait 30 seconds, then
+`signups`, so no new account starts its 30 minutes while enrollment is still off.
 `switch.py` warns when enrollment is off and sign-ups are on.
 
 **Pausing `voice_checks` locks everyone out of their account.** Sign-in still
@@ -64,9 +67,13 @@ python scripts/switch.py signups off --by <your name> --reason "<why>"
 python scripts/switch.py signups on  --by <your name> --reason "<why>"
 ```
 
-The API picks a change up within 30 seconds. Each change keeps who, when and why.
-Backup if the database can't be reached: on the server, set `SIGNUPS_ENABLED`,
-`VOICE_CHECKS_ENABLED` or `ENROLLMENT_ENABLED` to `false` and redeploy.
+The API picks a change up within 30 seconds, as long as it can read the database.
+Each change keeps who, when and why. If the database can't be read, the API keeps
+the last value it read (`switch_unreadable` in the log), or leaves the part on if
+it hasn't read one since it started. Backup for that case: on the server, set
+`SIGNUPS_ENABLED`, `VOICE_CHECKS_ENABLED` or `ENROLLMENT_ENABLED` to `false` and
+redeploy (a few minutes); that pauses the part whatever the database says, until
+the setting is removed and the server redeployed again.
 
 ## Situations
 
@@ -83,12 +90,14 @@ finish). Check the provider's usage page.
 **The daily speech-to-text budget is spent** (`transcription_budget_used_up`).
 Voice checks and enrollment samples answer `503` "try later" until midnight UTC.
 Pause `signups` until then: a new account has only 30 minutes to set up its Voice
-ID, so anyone who signs up now would miss that window. Turn it back on after
-midnight UTC. People who signed up or confirmed their email in the 30 minutes
+ID from signing up, or from confirming its email, so anyone who signs up or
+confirms now would miss that window (the `signups` pause holds both). Turn it back
+on after midnight UTC. People who signed up or confirmed their email in the 30 minutes
 before the budget ran out can't set up their Voice ID either, and their window may
 close before midnight. Tell the team; if the spend is acceptable, raising
-`TRANSCRIPTION_DAILY_BUDGET` on the server (this redeploys) lets those whose 30
-minutes haven't run out yet finish.
+`TRANSCRIPTION_DAILY_BUDGET` on the server lets those whose 30 minutes haven't
+run out yet finish. It redeploys, which takes a few minutes plus a cold start, so
+it only helps those with time left.
 
 **The voice model service failing or overloaded** (`voice_check_unavailable`
 for the voice model). Pause `signups`, then `enrollment` (see above; enrollment is
