@@ -141,6 +141,8 @@ describe("Passage screen", () => {
     expect(screen.queryByRole("button", { name: /try again|new phrase/i })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Start recording" })).toBeDisabled();
     expect(screen.getByText("Voice checks are paused")).toBeInTheDocument();
+    // #20: the way out is recording a new Voice ID.
+    expect(screen.getByRole("link", { name: "Record a new Voice ID" })).toHaveAttribute("href", "/recover");
     expect(mockRequest).toHaveBeenCalledTimes(1);
   });
 

@@ -26,6 +26,8 @@ export type ResultView = {
   // "retry" gets a fresh passage.
   action: "home" | "done" | "retry";
   actionLabel: string;
+  // Voice checks are paused: offer recording a new Voice ID (#20).
+  offerRecovery?: boolean;
 };
 
 function checkRows(result: VerifyResult): CheckRow[] {
@@ -96,10 +98,11 @@ export function describeResult(result: VerifyResult): ResultView {
           eyebrow: "Not verified",
           title: "Voice checks are paused.",
           subtitle:
-            "That didn’t match, and it was the last attempt for now. To keep your account safe, voice checks are paused for a while. Please come back and try again later.",
+            "That didn’t match, and it was the last attempt for now. To keep your account safe, voice checks are paused for a while. Please come back and try again later, or record a new Voice ID.",
           checks,
           action: "done",
           actionLabel: "Done",
+          offerRecovery: true,
         };
       }
       return {

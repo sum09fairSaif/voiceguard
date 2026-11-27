@@ -1,5 +1,5 @@
 import { isAxiosError } from "axios";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { endSession } from "../api/session";
 import { useEffect, useState } from "react";
 import {
@@ -200,6 +200,10 @@ export function PassagePage() {
               <>
                 <p className={styles.recorderTitle}>Voice checks are paused</p>
                 <p className={styles.recorderHint}>You can try again once the wait is over.</p>
+                {/* #20: if it keeps failing, the Voice ID can be recorded again. */}
+                <Link to="/recover" className={styles.link}>
+                  Record a new Voice ID
+                </Link>
               </>
             ) : recorder.status === "requesting" ? (
               <>

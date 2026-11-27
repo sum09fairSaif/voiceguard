@@ -110,3 +110,17 @@
   margin-top: 30px;
   width: 100%;
 }
+
+/* After the voice pause: the way to record a new Voice ID (#20). */
+.recover {
+  align-self: center;
+  margin-top: 18px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-gold);
+}
+
+.recover:hover,
+.recover:focus-visible {
+  text-decoration: underline;
+}

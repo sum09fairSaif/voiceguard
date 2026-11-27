@@ -34,6 +34,7 @@ function renderResult(state?: { result: VerifyResult }) {
         <Route path="/verify" element={<p>passage screen</p>} />
         <Route path="/account" element={<p>account screen</p>} />
         <Route path="/signin" element={<p>sign-in screen</p>} />
+        <Route path="/recover" element={<p>recover screen</p>} />
       </Routes>
     </MemoryRouter>,
   );
@@ -122,6 +123,24 @@ describe("Result page", () => {
     await userEvent.setup().click(screen.getByRole("button", { name: /done/i }));
     expect(screen.getByText("sign-in screen")).toBeInTheDocument();
     expect(isSignedIn()).toBe(false);
+  });
+
+  it("offers recording a new Voice ID once voice checks are paused (#20)", async () => {
+    signInForTest();
+    renderResult({
+      result: result({ decision: "rejected", identity: "failed", attempts_left: 0, fallback_required: true }),
+    });
+
+    await userEvent.setup().click(screen.getByRole("link", { name: "Record a new Voice ID" }));
+
+    expect(screen.getByText("recover screen")).toBeInTheDocument();
+    expect(isSignedIn()).toBe(true);
+  });
+
+  it("doesn't offer a new Voice ID after an ordinary rejection", () => {
+    renderResult({ result: result({ decision: "rejected", identity: "failed", attempts_left: 2 }) });
+
+    expect(screen.queryByRole("link", { name: "Record a new Voice ID" })).not.toBeInTheDocument();
   });
 
   it("goes back to the passage screen when there's no result to show", () => {
