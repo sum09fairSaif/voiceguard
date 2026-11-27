@@ -361,3 +361,49 @@ def test_a_signed_out_session_is_still_refused_with_the_account_given(revoked):
 
     assert is_revoked(revoked, "s1", "u1", datetime.now(UTC).timestamp())
     assert is_revoked(revoked, "s1")
+
+
+# Security events (#167): a reset nobody asked for is what a takeover looks like.
+
+
+def recorded(audit_events, event):
+    return list(audit_events.find({"event": event}))
+
+
+def account_stand_in(users):
+    from audit import hashed
+
+    return hashed(str(users.find_one({"email": EMAIL})["_id"]))
+
+
+def test_asking_for_a_link_is_recorded_under_the_account(client, account, outbox, users, audit_events):
+    ask(client)
+
+    [event] = recorded(audit_events, "password_reset_requested")
+    assert event["user"] == account_stand_in(users)
+    assert event["reason"] is None
+
+
+def test_asking_for_an_address_without_an_account_is_recorded_without_one(client, account, outbox, audit_events):
+    # Recorded either way, so both answers take the same time.
+    ask(client, "nobody@example.com")
+
+    [event] = recorded(audit_events, "password_reset_requested")
+    assert event["user"] is None
+    assert "nobody" not in str(event)
+
+
+def test_setting_a_new_password_is_recorded(client, account, outbox, users, audit_events):
+    ask(client)
+    assert confirm(client, outbox.token()).status_code == 204
+
+    [event] = recorded(audit_events, "password_reset")
+    assert event["user"] == account_stand_in(users)
+
+
+def test_a_refused_reset_isnt_recorded_as_one(client, account, outbox, audit_events):
+    ask(client)
+    assert confirm(client, "x" * 43).status_code == 400
+    assert confirm(client, outbox.token(), password="short").status_code == 422
+
+    assert recorded(audit_events, "password_reset") == []
