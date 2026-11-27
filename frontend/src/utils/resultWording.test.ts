@@ -73,6 +73,15 @@ describe("describeResult", () => {
     expect(view).toMatchObject({ tone: "failure", title: "Voice checks are paused.", action: "done" });
     expect(view.subtitle).toMatch(/last attempt/);
     expect(view.note).toBeUndefined();
+    // #20: the way out is recording a new Voice ID.
+    expect(view.offerRecovery).toBe(true);
+  });
+
+  it("offers a new Voice ID only once voice checks are paused", () => {
+    expect(describeResult(result({ decision: "rejected", identity: "failed", attempts_left: 2 })).offerRecovery).toBeFalsy();
+    expect(
+      describeResult(result({ decision: "approved", identity: "passed", liveness: "passed" })).offerRecovery,
+    ).toBeFalsy();
   });
 
   it("leaves the attempts note out when the server didn't send it", () => {

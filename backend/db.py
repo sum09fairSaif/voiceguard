@@ -64,6 +64,15 @@ def get_email_codes_collection() -> Collection:
 
 
 @lru_cache
+def get_recovery_codes_collection() -> Collection:
+    # The current code for recording a new Voice ID per account, hashed
+    # (#20). Kept apart from email_codes, so neither kind works for the other.
+    codes = get_client()[config.MONGO_DB_NAME]["recovery_codes"]
+    codes.create_index("expires_at", expireAfterSeconds=0)
+    return codes
+
+
+@lru_cache
 def get_challenges_collection() -> Collection:
     challenges = get_client()[config.MONGO_DB_NAME]["challenges"]
     # MongoDB deletes each attempt by itself once its expiry time has passed.

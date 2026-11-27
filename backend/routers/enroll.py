@@ -14,8 +14,10 @@ from db import (
     get_enrollments_collection,
     get_rate_limits_collection,
     get_users_collection,
+    get_voice_failures_collection,
     get_voiceprints_collection,
 )
+from email_sender import EmailSender, EmailUnavailable, get_optional_email_sender
 from email_verification import require_verified_email
 from embedding import Embedder, Embedding, get_embedder
 from enrollment import (
@@ -36,9 +38,12 @@ from enrollment import (
 )
 from enrollment_window import may_enroll
 from identity_check import IdentityUnavailable
+from login_lockout import clear_failures
 from rate_limit import count_client_request, count_request
+from recovery import clear_grant, in_recovery_session, replaced_email
 from schemas import EnrollmentStatus
 from security import get_current_user_id, get_token_claims
+from sessions import revoke_all, revoked_sessions
 from transcription import AudioNotUnderstood, Transcriber, get_transcriber, transcribe_and_log
 from transcription_budget import reserve_transcription
 from voiceprints import build_voiceprint, has_voiceprint, save_voiceprint
@@ -76,7 +81,7 @@ def enrollment_status(
     enrollments: Collection = Depends(get_enrollments_collection),
     prompts: Collection = Depends(get_enroll_prompts_collection),
 ) -> EnrollmentStatus:
-    return _status(voiceprints, enrollments, prompts, user_id, _may_enroll(users, claims, user_id))
+    return _status_for(users, claims, voiceprints, enrollments, prompts, user_id)
 
 
 @router.post(
@@ -98,6 +103,9 @@ def add_enrollment_sample(
     prompts: Collection = Depends(get_enroll_prompts_collection),
     embed: Embedder | None = Depends(get_embedder),
     transcribe: Transcriber = Depends(get_transcriber),
+    voice_failures: Collection = Depends(get_voice_failures_collection),
+    revoked=Depends(revoked_sessions),
+    send: EmailSender | None = Depends(get_optional_email_sender),
 ) -> EnrollmentStatus:
     # Replacing a voiceprint needs more than a password: otherwise anyone
     # who learned the password could swap in their own voice and pass the
@@ -105,12 +113,16 @@ def add_enrollment_sample(
     # Per client first, refused or not: one address flooding uploads runs out
     # of its own allowance (the owner, elsewhere, is unaffected).
     count_client_request(rate_limits, "enroll", request, config.ENROLL_CLIENT_LIMIT)
-    if has_voiceprint(voiceprints, user_id):
+    # The one exception: a session that confirmed an emailed recovery code
+    # (#20) may record a new voice over the old one, which keeps working
+    # until the new one is complete.
+    replacing = has_voiceprint(voiceprints, user_id)
+    if replacing and not _recovering(users, claims, user_id):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Your voice is already enrolled.")
     # Setting the voice needs more than a password, too: only the signup
     # session (or the one-off grace period) may do it. Checked before the
     # count, so refused requests can't use up the owner's allowance.
-    if not _may_enroll(users, claims, user_id):
+    if not replacing and not _may_enroll(users, claims, user_id):
         track("enroll_sample_refused", user_id, reason="not_signup_session")
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=NOT_NOW)
     count_request(rate_limits, "enroll", user_id, config.ENROLL_RATE_LIMIT, config.RATE_LIMIT_WINDOW_SECONDS)
@@ -171,11 +183,38 @@ def add_enrollment_sample(
         samples = take_samples(enrollments, user_id)
         # None if a request arriving at the same moment already finished.
         if samples is not None:
+            # One write: until here the old voiceprint is the one checked.
             save_voiceprint(voiceprints, user_id, build_voiceprint(samples))
             discard_prompts(prompts, user_id)
-            logger.info("enrolled user=%s samples=%d", user_id, len(samples))
-            track("enrolled", user_id)
-    return _status(voiceprints, enrollments, prompts, user_id, True)  # already checked above
+            logger.info("enrolled user=%s samples=%d replaced=%s", user_id, len(samples), replacing)
+            if replacing:
+                _finish_replacing(users, voice_failures, revoked(), send, user_id)
+            else:
+                track("enrolled", user_id)
+    return _status_for(users, claims, voiceprints, enrollments, prompts, user_id)
+
+
+def _finish_replacing(
+    users: Collection, voice_failures: Collection, revoked: Collection, send: EmailSender | None, user_id: str
+) -> None:
+    """After a new Voice ID replaces the old one (#20): it never opens the
+    account by itself. Every session ends, so the person signs in again and
+    passes a voice check with the new voice; the failed checks that paused
+    them are forgotten; the owner is told by email."""
+    clear_grant(users, user_id)
+    clear_failures(voice_failures, user_id)
+    revoke_all(revoked, user_id)
+    track("voiceprint_replaced", user_id)
+    user = users.find_one({"_id": ObjectId(user_id)}, {"email": 1})
+    if send is None or user is None:
+        logger.warning("voiceprint_replaced_notice_not_sent user=%s reason=not_configured", user_id)
+        return
+    subject, text = replaced_email()
+    try:
+        send(user["email"], subject, text, "voice_replaced")
+    except EmailUnavailable as exc:
+        # The replacement stands; the notice is best effort.
+        logger.warning("voiceprint_replaced_notice_not_sent user=%s reason=%s", user_id, type(exc).__name__)
 
 
 @router.delete("/samples", response_model=EnrollmentStatus)
@@ -189,6 +228,23 @@ def start_over(
 ) -> EnrollmentStatus:
     """Throw away the samples given so far. Leaves a finished voiceprint alone."""
     discard_samples(enrollments, user_id)
+    return _status_for(users, claims, voiceprints, enrollments, prompts, user_id)
+
+
+def _recovering(users: Collection, claims: dict, user_id: str) -> bool:
+    """Whether this session confirmed a recovery code recently (#20)."""
+    fields = {"recovery_sid": 1, "recovery_at": 1}
+    user = users.find_one({"_id": ObjectId(user_id)}, fields) if ObjectId.is_valid(user_id) else None
+    return in_recovery_session(claims, user)
+
+
+def _status_for(
+    users: Collection, claims: dict, voiceprints: Collection, enrollments: Collection, prompts: Collection, user_id: str
+) -> EnrollmentStatus:
+    # A recovering session sees its new recording's progress, not the old
+    # voiceprint it is replacing.
+    if _recovering(users, claims, user_id):
+        return _status(voiceprints, enrollments, prompts, user_id, True, replacing=True)
     return _status(voiceprints, enrollments, prompts, user_id, _may_enroll(users, claims, user_id))
 
 
@@ -205,10 +261,15 @@ def _may_enroll(users: Collection, claims: dict, user_id: str) -> bool:
 
 
 def _status(
-    voiceprints: Collection, enrollments: Collection, prompts: Collection, user_id: str, can_enroll: bool
+    voiceprints: Collection,
+    enrollments: Collection,
+    prompts: Collection,
+    user_id: str,
+    can_enroll: bool,
+    replacing: bool = False,
 ) -> EnrollmentStatus:
     required = config.ENROLL_SAMPLES_REQUIRED
-    if has_voiceprint(voiceprints, user_id):
+    if not replacing and has_voiceprint(voiceprints, user_id):
         return EnrollmentStatus(
             status="enrolled", samples_accepted=required, samples_required=required, prompt=None, can_enroll=False
         )

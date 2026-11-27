@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import type { ResultView as View } from "../utils/resultWording";
 import { Button } from "./Button";
 import { CheckStatusIcon } from "./CheckStatusIcon";
@@ -36,6 +37,11 @@ export function ResultView({ view, onAction }: { view: View; onAction: () => voi
           {view.actionLabel}
         </Button>
       </div>
+      {view.offerRecovery && (
+        <Link to="/recover" className={styles.recover}>
+          Record a new Voice ID
+        </Link>
+      )}
     </div>
   );
 }

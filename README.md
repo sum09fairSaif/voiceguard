@@ -84,9 +84,13 @@ as soon as the voiceprint is built or the checks have run.
   15 minutes lock that client out of the account for 30 minutes (20 from
   everyone together lock it for everyone), and a daily budget caps the paid
   speech-to-text calls, from voice checks and enrollment alike.
-- **Fallback:** after 3 rejected voice checks within 30 minutes, voice
-  checks pause for 30 minutes and the app is told to offer an email code
-  (the code itself is planned, #20).
+- **Fallback (#20):** after 3 rejected voice checks within 30 minutes, voice
+  checks pause for 30 minutes, and the person can record a new Voice ID: a
+  6-digit code is emailed to the account's own address, and that session may
+  then record for 30 minutes. The old Voice ID works until the new one is
+  complete. The code never opens the account: once the new Voice ID is saved,
+  every session ends, the owner is emailed, and they sign in and pass a voice
+  check with it.
 
 ## Project status
 
@@ -105,7 +109,7 @@ Each row is a user story (see the
 | #17 Liveness / anti-spoof check | 🟡 First model live (AASIST, fine-tuned); about 1 fake in 4 still passes | — |
 | #18 Combine the three checks | ✅ All three must pass; liveness can veto | — |
 | #19 Result screen with retry | ✅ Counts failed checks; pauses them after 3 | ✅ Done (shows attempts left and the pause) |
-| #20 Account recovery (email code) | ⏳ Not started | ⏳ Not started |
+| #20 Account recovery (email code) | ✅ Email code, then a new Voice ID replaces the old one | ✅ Offered once voice checks pause; code screen, then recording |
 
 An enrolled user who reads the passage live in their own voice is approved.
 A recording that doesn't sound like a live voice is rejected even when the

@@ -45,6 +45,10 @@ EVENTS = frozenset(
         # address has one), and a new password set with one (#109).
         "password_reset_requested",
         "password_reset",
+        # Recording a new Voice ID after the voice check kept failing (#20).
+        "recovery_code_sent",
+        "recovery_confirmed",
+        "voiceprint_replaced",
     }
 )
 
