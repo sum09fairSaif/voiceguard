@@ -30,9 +30,9 @@ function status(accepted: number, prompt = `amber lantern river ${accepted}`): E
   };
 }
 
-function renderPage() {
+function renderPage(state?: { recovering: boolean }) {
   render(
-    <MemoryRouter initialEntries={["/enroll"]}>
+    <MemoryRouter initialEntries={[{ pathname: "/enroll", state }]}>
       <Routes>
         <Route path="/enroll" element={<EnrollPage />} />
         <Route path="/signin" element={<p>sign-in screen</p>} />
@@ -155,6 +155,30 @@ describe("EnrollPage: recording samples", () => {
     await user.click(screen.getByRole("button", { name: /save sample/i }));
 
     expect(await screen.findByRole("heading", { name: "One voice. All yours." })).toBeInTheDocument();
+  });
+
+  it("after recording a new Voice ID (#20), sends the person to sign in again", async () => {
+    mockGet.mockResolvedValue(status(2));
+    mockAdd.mockResolvedValue(status(3));
+    renderPage({ recovering: true });
+    const user = userEvent.setup();
+    await screen.findByText(/sample 3 of 3/i);
+
+    await record(user);
+    await user.click(screen.getByRole("button", { name: /save sample/i }));
+
+    expect(await screen.findByText(/signed out everywhere/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /sign in again/i }));
+    expect(screen.getByText("sign-in screen")).toBeInTheDocument();
+    expect(isSignedIn()).toBe(false);
+  });
+
+  it("opening it from recovery with a Voice ID already in place shows the usual done screen", async () => {
+    mockGet.mockResolvedValue(status(3));
+    renderPage({ recovering: true });
+
+    await screen.findByRole("heading", { name: "One voice. All yours." });
+    expect(screen.getByRole("button", { name: /try your voice id/i })).toBeInTheDocument();
   });
 
   it("explains a rejected sample in our own words and lets the user try again", async () => {

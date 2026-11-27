@@ -1,10 +1,11 @@
 import { isAxiosError } from "axios";
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { describeEnrollError, getEnrollment, type Enrollment } from "../../api/enroll";
 import { endSession } from "../../api/session";
 import { SignedInHeader } from "../../components/SignedInHeader";
 import { Page } from "../../components/Page";
+import type { RecoveringState } from "../RecoverPage";
 import { EnrollClosed } from "./EnrollClosed";
 import { EnrollDone } from "./EnrollDone";
 import { EnrollIntro } from "./EnrollIntro";
@@ -18,6 +19,9 @@ type Step = "loading" | "intro" | "record" | "done" | "closed";
 // enrolled → done.
 export function EnrollPage() {
   const navigate = useNavigate();
+  // Came from /recover (#20): finishing replaces the old Voice ID.
+  const recovering = (useLocation().state as RecoveringState | null)?.recovering === true;
+  const [replaced, setReplaced] = useState(false);
   const [step, setStep] = useState<Step>("loading");
   const [enrollment, setEnrollment] = useState<Enrollment | null>(null);
   const [error, setError] = useState("");
@@ -80,12 +84,23 @@ export function EnrollPage() {
         <EnrollRecord
           enrollment={enrollment}
           onChange={setEnrollment}
-          onEnrolled={() => setStep("done")}
+          onEnrolled={() => {
+            // Only a recording finished here replaces anything; opening the
+            // page with a Voice ID already in place is the usual done screen.
+            setReplaced(recovering);
+            setStep("done");
+          }}
           onSignedOut={sessionEnded}
           onClosed={() => setStep("closed")}
         />
       )}
-      {step === "done" && <EnrollDone onContinue={() => navigate("/verify")} />}
+      {step === "done" && (
+        <EnrollDone
+          replaced={replaced}
+          // The server ended every session when the new Voice ID replaced the old one.
+          onContinue={replaced ? sessionEnded : () => navigate("/verify")}
+        />
+      )}
       {step === "closed" && <EnrollClosed />}
     </Page>
   );

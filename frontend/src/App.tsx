@@ -6,6 +6,7 @@ import { EnrollPage } from "./pages/enroll/EnrollPage";
 import { ForgotPasswordPage } from "./pages/ForgotPasswordPage";
 import { PassagePage } from "./pages/PassagePage";
 import { PrivacyPage } from "./pages/PrivacyPage";
+import { RecoverPage } from "./pages/RecoverPage";
 import { ResetPasswordPage } from "./pages/ResetPasswordPage";
 import { ResultPage } from "./pages/ResultPage";
 import { SignInPage } from "./pages/SignInPage";
@@ -30,6 +31,14 @@ function App() {
           element={
             <RequireSession>
               <EnrollPage />
+            </RequireSession>
+          }
+        />
+        <Route
+          path="/recover"
+          element={
+            <RequireSession>
+              <RecoverPage />
             </RequireSession>
           }
         />
