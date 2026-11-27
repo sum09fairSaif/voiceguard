@@ -8,6 +8,7 @@ import { PassagePage } from "./pages/PassagePage";
 import { PrivacyPage } from "./pages/PrivacyPage";
 import { ResetPasswordPage } from "./pages/ResetPasswordPage";
 import { ResultPage } from "./pages/ResultPage";
+import { SettingsPage } from "./pages/SettingsPage";
 import { SignInPage } from "./pages/SignInPage";
 import { SignupPage } from "./pages/SignupPage";
 import { WelcomePage } from "./pages/WelcomePage";
@@ -54,6 +55,14 @@ function App() {
           element={
             <RequireSession>
               <AccountPage />
+            </RequireSession>
+          }
+        />
+        <Route
+          path="/settings"
+          element={
+            <RequireSession>
+              <SettingsPage />
             </RequireSession>
           }
         />
