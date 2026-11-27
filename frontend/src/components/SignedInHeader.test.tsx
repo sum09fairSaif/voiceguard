@@ -3,7 +3,8 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { logOut } from "../api/auth";
-import { getToken, saveToken } from "../api/session";
+import { isSignedIn } from "../api/session";
+import { signInForTest } from "../test/session";
 import { networkError } from "../test/apiError";
 import { SignedInHeader } from "./SignedInHeader";
 
@@ -30,7 +31,7 @@ function renderHeader() {
 }
 
 beforeEach(() => {
-  saveToken("session-token");
+  signInForTest();
   mockLogOut.mockReset();
 });
 
@@ -43,7 +44,7 @@ describe("Sign out", () => {
 
     expect(await screen.findByText("sign-in screen")).toBeInTheDocument();
     expect(mockLogOut).toHaveBeenCalledTimes(1);
-    expect(getToken()).toBeNull();
+    expect(isSignedIn()).toBe(false);
   });
 
   it("still signs out on this device when the server can't be reached", async () => {
@@ -54,7 +55,7 @@ describe("Sign out", () => {
 
     // Signed out here, and sign-in is told the server didn't confirm it.
     expect(await screen.findByText("sign-in screen (server sign-out failed)")).toBeInTheDocument();
-    expect(getToken()).toBeNull();
+    expect(isSignedIn()).toBe(false);
   });
 
   it("can't be pressed twice while signing out", async () => {

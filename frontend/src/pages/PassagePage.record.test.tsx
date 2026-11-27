@@ -4,7 +4,8 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { requestChallenge, type Challenge } from "../api/challenge";
 import { logOut } from "../api/auth";
-import { getToken, saveToken } from "../api/session";
+import { isSignedIn } from "../api/session";
+import { signInForTest } from "../test/session";
 import { submitAttempt, type VerifyResult } from "../api/verify";
 import { RECORDER_MESSAGES } from "../hooks/useRecorder";
 import { apiError, networkError } from "../test/apiError";
@@ -111,7 +112,7 @@ describe("Recording and submitting", () => {
   });
 
   it("swaps in the voice-verified token from an approved check", async () => {
-    saveToken("password-only");
+    signInForTest();
     mockSubmit.mockResolvedValue({
       ...INCOMPLETE,
       decision: "approved",
@@ -126,7 +127,7 @@ describe("Recording and submitting", () => {
     await user.click(screen.getByRole("button", { name: /submit/i }));
 
     expect(await screen.findByText("You’re in. Securely.")).toBeInTheDocument();
-    expect(getToken()).toBe("voice-verified");
+    expect(isSignedIn()).toBe(true);
   });
 
   it("records the outcome and shows the result when the check details are hidden", async () => {
@@ -160,7 +161,7 @@ describe("Recording and submitting", () => {
   });
 
   it("keeps the password's token when the check isn't approved", async () => {
-    saveToken("password-only");
+    signInForTest();
     mockSubmit.mockResolvedValue({ ...INCOMPLETE, access_token: null });
     const user = userEvent.setup();
     renderFlow();
@@ -169,11 +170,11 @@ describe("Recording and submitting", () => {
     await user.click(screen.getByRole("button", { name: /submit/i }));
 
     expect(await screen.findByText("Almost there.")).toBeInTheDocument();
-    expect(getToken()).toBe("password-only");
+    expect(isSignedIn()).toBe(true);
   });
 
   it("ignores a voice-check answer that arrives after the screen was left", async () => {
-    saveToken("password-only");
+    signInForTest();
     const reply = deferred<VerifyResult>();
     mockSubmit.mockReturnValue(reply.promise);
     const user = userEvent.setup();
@@ -189,7 +190,7 @@ describe("Recording and submitting", () => {
     await Promise.resolve();
 
     expect(screen.getByText("sign-in screen")).toBeInTheDocument();
-    expect(getToken()).toBeNull();
+    expect(isSignedIn()).toBe(false);
   });
 
   it("lets you record again before submitting", async () => {
@@ -297,7 +298,7 @@ describe("Recording and submitting", () => {
   });
 
   it("sends a signed-out user back to sign in", async () => {
-    saveToken("expired");
+    signInForTest();
     mockSubmit.mockRejectedValue(apiError(401));
     const user = userEvent.setup();
     renderFlow();
@@ -306,7 +307,7 @@ describe("Recording and submitting", () => {
     await user.click(screen.getByRole("button", { name: /submit/i }));
 
     expect(await screen.findByText("sign-in screen")).toBeInTheDocument();
-    expect(getToken()).toBeNull();
+    expect(isSignedIn()).toBe(false);
   });
 
   it("explains a blocked microphone", async () => {

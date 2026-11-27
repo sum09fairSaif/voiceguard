@@ -11,6 +11,7 @@ from bson import ObjectId
 
 import config
 import db
+import switches
 from email_sender import EmailUnavailable, get_email_sender, get_optional_email_sender
 from email_verification import CONFIRMED, NO_CODE, NOT_CONFIRMED, WRONG, check_code, issue_code
 from enrollment_window import may_enroll
@@ -362,9 +363,7 @@ def test_confirming_is_limited_per_client(client, required, outbox, monkeypatch)
     for _ in range(2):
         client.post("/api/auth/email/verify", json={"email": "a@example.com", "code": "123456"}, headers=headers)
 
-    response = client.post(
-        "/api/auth/email/verify", json={"email": "b@example.com", "code": "123456"}, headers=headers
-    )
+    response = client.post("/api/auth/email/verify", json={"email": "b@example.com", "code": "123456"}, headers=headers)
 
     assert response.status_code == 429
 
@@ -559,3 +558,57 @@ def test_only_the_confirming_session(monkeypatch):
 
     assert may_enroll({"src": "login", "sid": "s2"}, confirmed_account(1), NOW) is False
     assert may_enroll({"src": "login"}, confirmed_account(1, sid=None), NOW) is False
+
+
+# --- Paused with signups (#217) ---------------------------------------------------
+
+
+def pause_signups(switch_store):
+    switches.set_switch(switch_store, "signups", False, by="tester", reason="test")
+    switches._cache.clear()
+
+
+def resume_signups(switch_store):
+    switches.set_switch(switch_store, "signups", True, by="tester", reason="test")
+    switches._cache.clear()
+
+
+def test_confirming_is_paused_with_signups_and_the_code_still_works_after(
+    client, required, outbox, users, switch_store
+):
+    sign_up(client)
+    code = outbox.last_code()
+    pause_signups(switch_store)
+
+    response = confirm(client, code)
+
+    # The same answer as signup, so no Voice ID window opens while paused.
+    assert response.status_code == 503
+    assert response.json() == {"detail": switches.PAUSED_MESSAGES["signups"], "paused": "signups"}
+    assert "set-cookie" not in response.headers
+    assert users.find_one({})["email_verified"] is False
+
+    resume_signups(switch_store)
+    assert confirm(client, code).status_code == 200
+
+
+def test_asking_for_a_new_code_is_paused_with_signups(client, required, outbox, switch_store):
+    sign_up(client)
+    sent = len(outbox.sent)
+    pause_signups(switch_store)
+
+    response = resend(client)
+
+    assert response.status_code == 503
+    assert response.json()["paused"] == "signups"
+    assert len(outbox.sent) == sent
+
+
+def test_other_pauses_leave_confirming_alone(client, required, outbox, switch_store):
+    sign_up(client)
+    for name in ("voice_checks", "enrollment"):
+        switches.set_switch(switch_store, name, False, by="tester", reason="test")
+    switches._cache.clear()
+
+    assert resend(client).status_code == 202
+    assert confirm(client, outbox.last_code()).status_code == 200

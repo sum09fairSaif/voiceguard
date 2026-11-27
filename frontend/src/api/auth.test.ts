@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { apiError, networkError } from "../test/apiError";
-import { WRONG_CREDENTIALS, describeLoginError, lockedOutMessage, logIn, logOut, signup } from "./auth";
+import { WRONG_CREDENTIALS, describeLoginError, isSignedIn, lockedOutMessage, logIn, logOut, signup } from "./auth";
 import { api } from "./client";
 import { MESSAGES } from "./errors";
 
@@ -21,6 +21,18 @@ describe("signup", () => {
 
     await expect(signup(body)).resolves.toEqual(account);
     expect(post).toHaveBeenCalledWith("/api/auth/signup", body);
+  });
+});
+
+describe("isSignedIn", () => {
+  it("is true when signup answers with the account, with or without the token in the body (#102)", () => {
+    expect(isSignedIn(account)).toBe(true);
+    expect(isSignedIn({ ...account, access_token: null })).toBe(true);
+    expect(isSignedIn({ user: account.user, token_type: "bearer" })).toBe(true);
+  });
+
+  it("is false for “check your email” (#111)", () => {
+    expect(isSignedIn({ detail: "Check your email." })).toBe(false);
   });
 });
 

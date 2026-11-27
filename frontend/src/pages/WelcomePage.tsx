@@ -1,5 +1,5 @@
 import { Navigate, useNavigate } from "react-router-dom";
-import { getToken } from "../api/session";
+import { isSignedIn } from "../api/session";
 import footerShield from "../assets/icons/welcome-footer-shield.svg";
 import mark from "../assets/icons/welcome-mark.svg";
 import shieldInner from "../assets/icons/welcome-shield-inner.svg";
@@ -16,7 +16,7 @@ import styles from "./WelcomePage.module.css";
 export function WelcomePage() {
   const navigate = useNavigate();
 
-  if (getToken()) {
+  if (isSignedIn()) {
     return <Navigate to="/enroll" replace />;
   }
 

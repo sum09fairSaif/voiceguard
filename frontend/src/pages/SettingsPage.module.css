@@ -1,0 +1,138 @@
+/* Settings, from Figma 19:545. */
+.heading {
+  margin-top: 56px;
+}
+
+/* The grey account card: 84px tall, 14px corners. */
+.profile {
+  margin-top: 38px;
+  min-height: 84px;
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  background: var(--color-tile);
+}
+
+.avatar {
+  flex: none;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--color-avatar);
+  font-family: var(--font-inter);
+  font-size: 19px;
+  font-weight: 600;
+  color: var(--color-primary);
+}
+
+.profileText {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+}
+
+.name {
+  font-family: var(--font-heading);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.email {
+  font-size: 14px;
+  color: var(--color-muted);
+  overflow-wrap: anywhere;
+}
+
+.sectionTitle {
+  margin: 36px 0 0;
+  font-family: var(--font-heading);
+  font-size: 14px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--color-text);
+}
+
+.rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* 53px rows under a hairline, as in the design. */
+.row {
+  min-height: 53px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  font-size: 14px;
+  color: var(--color-text);
+}
+
+.row + .row {
+  border-top: 1px solid var(--color-track);
+}
+
+.value {
+  text-align: right;
+  color: var(--color-muted);
+}
+
+.rowLink {
+  flex: 1;
+  align-self: stretch;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-right: 8px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.rowLink:hover span,
+.rowLink:focus-visible span {
+  text-decoration: underline;
+}
+
+.signOut {
+  align-self: center;
+  margin: 32px 0 24px;
+  min-height: 44px;
+  padding: 0 16px;
+  border: none;
+  background: none;
+  font-family: var(--font-heading);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.signOut:hover:not(:disabled),
+.signOut:focus-visible {
+  text-decoration: underline;
+}
+
+.signOut:disabled {
+  color: var(--color-muted);
+  cursor: default;
+}
+
+.status {
+  margin-top: 28px;
+  font-size: 14px;
+  color: var(--color-muted);
+}
+
+.error {
+  margin-top: 28px;
+  font-size: 14px;
+  color: var(--color-error);
+}
