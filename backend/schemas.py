@@ -104,6 +104,11 @@ class PasswordResetRequest(BaseModel):
     email: EmailStr
 
 
+class PasswordResetCheck(BaseModel):
+    # From the emailed link, as in PasswordResetConfirm.
+    token: str = Field(min_length=20, max_length=200)
+
+
 class PasswordResetConfirm(BaseModel):
     # From the emailed link (43 characters today; some room for change).
     token: str = Field(min_length=20, max_length=200)

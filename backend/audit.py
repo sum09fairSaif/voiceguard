@@ -1,5 +1,5 @@
 """A record of security events: sign-ups, sign-ins, lockouts, enrollment,
-voice-check decisions and sign-outs.
+voice-check decisions, password resets and sign-outs.
 
 Kept in our own `audit_events` collection for AUDIT_RETENTION_DAYS, and, if
 POSTHOG_API_KEY is set, also sent to PostHog for dashboards and spike alerts.
@@ -41,6 +41,10 @@ EVENTS = frozenset(
         "voice_check_rejected",
         "voice_check_incomplete",
         "voice_checks_paused",
+        # A reset link asked for (with the account's stand-in only when the
+        # address has one), and a new password set with one (#109).
+        "password_reset_requested",
+        "password_reset",
         # Recording a new Voice ID after the voice check kept failing (#20).
         "recovery_code_sent",
         "recovery_confirmed",
