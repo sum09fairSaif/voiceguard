@@ -127,10 +127,35 @@ class EmailCodeRequest(BaseModel):
     @field_validator("code")
     @classmethod
     def six_digits(cls, value: str) -> str:
-        value = "".join(value.split())
-        if len(value) != 6 or not value.isascii() or not value.isdigit():
-            raise ValueError("The code is 6 digits.")
-        return value
+        return _six_digits(value)
+
+
+def _six_digits(value: str) -> str:
+    value = "".join(value.split())
+    if len(value) != 6 or not value.isascii() or not value.isdigit():
+        raise ValueError("The code is 6 digits.")
+    return value
+
+
+class RecoveryCodeRequest(BaseModel):
+    """The emailed code for recording a new Voice ID (#20)."""
+
+    code: str = Field(min_length=1, max_length=20)
+
+    @field_validator("code")
+    @classmethod
+    def six_digits(cls, value: str) -> str:
+        return _six_digits(value)
+
+
+class RecoveryCodeSent(BaseModel):
+    detail: str
+
+
+class RecoveryConfirmed(BaseModel):
+    """The session may now record a new Voice ID, for this many minutes."""
+
+    enroll_minutes: int
 
 
 class ChallengeResponse(BaseModel):

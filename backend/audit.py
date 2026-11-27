@@ -41,6 +41,10 @@ EVENTS = frozenset(
         "voice_check_rejected",
         "voice_check_incomplete",
         "voice_checks_paused",
+        # Recording a new Voice ID after the voice check kept failing (#20).
+        "recovery_code_sent",
+        "recovery_confirmed",
+        "voiceprint_replaced",
     }
 )
 
