@@ -41,14 +41,19 @@ Three parts of the app can be paused without a code change or redeploy:
 |---|---|
 | `signups` | Creating accounts |
 | `voice_checks` | New passages and voice checks (paid speech-to-text) |
-| `enrollment` | Adding Voice ID samples (the voice model service) |
+| `enrollment` | Adding Voice ID samples (paid speech-to-text and the voice model service) |
 
 Sign-in is never paused. A paused route answers `503` and the app says that part
 is paused for now.
 
-**Pause `signups` whenever you pause `enrollment`.** A new account can only set up
-its Voice ID within 30 minutes of signing up, so anyone who signs up while
-enrollment is paused misses that window for good (until account recovery exists).
+**Pause `signups` whenever you pause `enrollment`, and pause it first:** each switch
+takes up to 30 seconds to apply, so wait that long before pausing `enrollment`.
+A new account can only set up its Voice ID within 30 minutes of signing up, or of
+confirming its email when confirmation is on, so anyone whose 30 minutes start
+while enrollment is paused misses that window for good (until account recovery
+exists). A `signups` pause holds both signing up and confirming (see below).
+Turn them back on the other way round: `enrollment` first, wait 30 seconds, then
+`signups`, so no new account starts its 30 minutes while enrollment is still off.
 `switch.py` warns when enrollment is off and sign-ups are on.
 
 **Pausing `voice_checks` locks everyone out of their account.** Sign-in still
@@ -71,9 +76,13 @@ python scripts/switch.py signups off --by <your name> --reason "<why>"
 python scripts/switch.py signups on  --by <your name> --reason "<why>"
 ```
 
-The API picks a change up within 30 seconds. Each change keeps who, when and why.
-Backup if the database can't be reached: on the server, set `SIGNUPS_ENABLED`,
-`VOICE_CHECKS_ENABLED` or `ENROLLMENT_ENABLED` to `false` and redeploy.
+The API picks a change up within 30 seconds, as long as it can read the database.
+Each change keeps who, when and why. If the database can't be read, the API keeps
+the last value it read (`switch_unreadable` in the log), or leaves the part on if
+it hasn't read one since it started. Backup for that case: on the server, set
+`SIGNUPS_ENABLED`, `VOICE_CHECKS_ENABLED` or `ENROLLMENT_ENABLED` to `false` and
+redeploy (a few minutes); that pauses the part whatever the database says, until
+the setting is removed and the server redeployed again.
 
 ## Situations
 
@@ -81,13 +90,28 @@ Backup if the database can't be reached: on the server, set `SIGNUPS_ENABLED`,
 cap already slow this down; the switch stops it outright. Turn it back on once
 the logs are quiet.
 
-**Speech-to-text spend climbing fast.** Pause `voice_checks`. The daily budget
-stops paid calls when it runs out; pausing stops them now. Check the provider's
-usage page.
+**Speech-to-text spend climbing fast.** Pause `voice_checks`, and `enrollment`
+together with `signups` (see above): enrollment samples use the same paid
+speech-to-text and the same daily budget. The daily budget stops paid calls when
+it runs out; pausing stops new ones within 30 seconds (calls already under way
+finish). Check the provider's usage page.
+
+**The daily speech-to-text budget is spent** (`transcription_budget_used_up`).
+Voice checks and enrollment samples answer `503` "try later" until midnight UTC.
+Pause `signups` until then: a new account has only 30 minutes to set up its Voice
+ID from signing up, or from confirming its email, so anyone who signs up or
+confirms now would miss that window (the `signups` pause holds both). Turn it back
+on after midnight UTC. People who signed up or confirmed their email in the 30 minutes
+before the budget ran out can't set up their Voice ID either, and their window may
+close before midnight. Tell the team; if the spend is acceptable, raising
+`TRANSCRIPTION_DAILY_BUDGET` on the server lets those whose 30 minutes haven't
+run out yet finish. It redeploys, which takes a few minutes plus a cold start, so
+it only helps those with time left.
 
 **The voice model service failing or overloaded** (`voice_check_unavailable`
-for the voice model). Pause `enrollment` first (it's the heaviest), **together with
-`signups`** (see above); if voice checks fail too, pause `voice_checks`. Check the model service's status page.
+for the voice model). Pause `signups`, then `enrollment` (see above; enrollment is
+the heaviest); if voice checks fail too, pause `voice_checks`. Check the model
+service's status page.
 
 **One client hammering the API.** Per-client limits answer `429` to it on their
 own. If it gets past them, pause the part it's hitting and tell the team; blocking
