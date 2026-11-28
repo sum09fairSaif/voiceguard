@@ -230,3 +230,25 @@ def test_kaggle_pins_reads_only_what_kaggle_needs(tmp_path):
     requirements.write_text("soxr==1.1.0\nsoundfile>=0.13\n", encoding="utf-8")
     with pytest.raises(ValueError, match="soundfile, miniaudio"):
         kaggle_pack.kaggle_pins(requirements)
+
+
+def test_an_ssl_run_installs_transformers_and_skips_the_aasist_checkpoint(tmp_path):
+    out = tmp_path / "script"
+    kaggle_pack.write_script(kaggle_pack.Path(kaggle_pack.__file__).parent, out, "someone", "xlsr", 6, 8.0,
+                             resume=False, noise=True, arch="ssl")
+    script = (out / "run.py").read_text(encoding="utf-8")
+    compile(script, "run.py", "exec")
+    assert f"TRAIN_ARGS, EXTRA_PACKAGES = {kaggle_pack.SSL_TRAIN_ARGS!r}, {[kaggle_pack.TRANSFORMERS]!r}" in script
+    # The pretrained front end comes from Hugging Face; no AASIST --init.
+    assert 'elif "--arch" not in TRAIN_ARGS:' in script
+    code = script.split("CODE = '", 1)[1].split("'", 1)[0]
+    with tarfile.open(fileobj=io.BytesIO(base64.b64decode(code))) as tar:
+        assert "models/ssl_aasist.py" in tar.getnames()
+
+
+def test_an_aasist_run_is_unchanged_by_the_ssl_option(tmp_path):
+    out = tmp_path / "script"
+    kaggle_pack.write_script(kaggle_pack.Path(kaggle_pack.__file__).parent, out, "someone", "run1", 3, 7.5,
+                             resume=False)
+    script = (out / "run.py").read_text(encoding="utf-8")
+    assert "TRAIN_ARGS, EXTRA_PACKAGES = [], []" in script

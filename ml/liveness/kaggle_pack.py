@@ -60,7 +60,11 @@ NOISE_PACK = "rirs_noises.tar.gz"
 # one can't be uploaded or picked up beside the new one.
 OLD_NOISE_PACK = "rirs_noises.tar"
 CODE = ["audio.py", "augment.py", "manifest.py", "score_baseline.py", "train.py", "training_data.py",
-        "validate.py", "models/__init__.py", "models/aasist.py", "models/LICENSE-AASIST"]
+        "validate.py", "models/__init__.py", "models/aasist.py", "models/ssl_aasist.py", "models/LICENSE-AASIST"]
+# --arch ssl: wav2vec 2.0 XLS-R + AASIST. The front end is downloaded from
+# Hugging Face on Kaggle (internet is on), so nothing extra is uploaded.
+TRANSFORMERS = "transformers==5.21.1"
+SSL_TRAIN_ARGS = ["--arch", "ssl", "--batch", "8", "--lr", "1e-4", "--ssl-lr", "1e-5"]
 # What Kaggle has to install. It already has torch, numpy and pandas, and
 # reinstalling our numpy over its own could break its torch, so only these.
 # Their versions come from requirements.txt, so Kaggle trains on the same
@@ -214,6 +218,7 @@ def noise_usable(root):
     return echoes and noises
 
 NAME, EPOCHS, MAX_HOURS, RESUME, NOISE = {name!r}, {epochs}, {max_hours}, {resume}, {noise}
+TRAIN_ARGS, EXTRA_PACKAGES = {train_args!r}, {extra_packages!r}
 CODE = {code!r}
 
 
@@ -229,11 +234,11 @@ work = Path("/kaggle/working")
 code = work / "code"
 with tarfile.open(fileobj=io.BytesIO(base64.b64decode(CODE))) as t:
     t.extractall(code, filter="data")
-subprocess.run([sys.executable, "-m", "pip", "install", "-q", *{pins!r}], check=True)
+subprocess.run([sys.executable, "-m", "pip", "install", "-q", *{pins!r}, *EXTRA_PACKAGES], check=True)
 
 data = Path(find("manifest.processed.parquet")[0]).parent
 args = ["--name", NAME, "--data-dir", str(data), "--out-dir", str(work / "runs"), "--epochs", str(EPOCHS),
-        "--max-hours", str(MAX_HOURS), "--workers", "4"]
+        "--max-hours", str(MAX_HOURS), "--workers", "4", *TRAIN_ARGS]
 
 # The echoes and noises: unpacked if Kaggle unpacked them, or a tar file in
 # the data pack or the separate noise dataset. The gzipped pack is the
@@ -262,7 +267,7 @@ elif RESUME:
     for depth in range(1, 5):
         print(*sorted(glob.glob("/kaggle/input/" + "*/" * depth)), sep="\\n")
     sys.exit(f"no runs/{{NAME}}/last.pth in the inputs above, so there's nothing to carry on from")
-else:
+elif "--arch" not in TRAIN_ARGS:
     args += ["--init", str(data / {weights!r})]
 
 print("train.py", *args, flush=True)
@@ -271,7 +276,7 @@ subprocess.run([sys.executable, "train.py", *args], cwd=code, check=True)
 
 
 def write_script(here: Path, out: Path, user: str, name: str, epochs: int, max_hours: float, resume: bool,
-                 noise: bool = False) -> None:
+                 noise: bool = False, arch: str = "aasist") -> None:
     buffer = io.BytesIO()
     with tarfile.open(fileobj=buffer, mode="w:gz") as tar:
         for file in CODE:
@@ -279,7 +284,10 @@ def write_script(here: Path, out: Path, user: str, name: str, epochs: int, max_h
     out.mkdir(parents=True, exist_ok=True)
     (out / "run.py").write_text(RUN_SCRIPT.format(
         name=name, epochs=epochs, max_hours=max_hours, resume=resume, noise=noise, weights=WEIGHTS,
-        pins=kaggle_pins(here / "requirements.txt"), code=base64.b64encode(buffer.getvalue()).decode()), encoding="utf-8")
+        pins=kaggle_pins(here / "requirements.txt"),
+        train_args=SSL_TRAIN_ARGS if arch == "ssl" else [],
+        extra_packages=[TRANSFORMERS] if arch == "ssl" else [],
+        code=base64.b64encode(buffer.getvalue()).decode()), encoding="utf-8")
     (out / "kernel-metadata.json").write_text(json.dumps({
         "id": f"{user}/{SCRIPT}", "title": SCRIPT, "code_file": "run.py", "language": "python",
         "kernel_type": "script", "is_private": True, "enable_gpu": True, "enable_internet": True,
@@ -288,7 +296,7 @@ def write_script(here: Path, out: Path, user: str, name: str, epochs: int, max_h
         "kernel_sources": [f"{user}/{SCRIPT}"] if resume else [],
         "competition_sources": [],
     }, indent=2))
-    print(f"{out / 'run.py'}: run {name!r}, {epochs} epochs, up to {max_hours} h a session"
+    print(f"{out / 'run.py'}: run {name!r} ({arch}), {epochs} epochs, up to {max_hours} h a session"
           + (", with echo and noise" if noise else "")
           + (", carrying on from the last session" if resume else ""))
 
@@ -306,6 +314,8 @@ def main() -> None:
     parser.add_argument("--noise-only", action="store_true", help="pack the echoes and noises as their own dataset")
     parser.add_argument("--noise", action="store_true",
                         help="attach the noise dataset, and stop on Kaggle if it isn't there")
+    parser.add_argument("--arch", choices=["aasist", "ssl"], default="aasist",
+                        help="ssl: wav2vec 2.0 XLS-R + AASIST (models/ssl_aasist.py)")
     args = parser.parse_args()
 
     out = args.data_dir / "kaggle"
@@ -320,7 +330,7 @@ def main() -> None:
     if (out / "data").is_dir():
         write_dataset_metadata(out / "data", args.user)
     write_script(Path(__file__).parent, out / "script", args.user, args.name, args.epochs, args.max_hours,
-                 args.resume, args.noise)
+                 args.resume, args.noise, args.arch)
 
 
 if __name__ == "__main__":

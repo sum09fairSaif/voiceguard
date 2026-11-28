@@ -160,3 +160,90 @@ def test_the_real_model_loads_and_scores_repeatably():
     assert liveness.score(np.zeros(TARGET_RATE, np.float32)) is None
     # A longer recording is several windows, and gets one score.
     assert np.isfinite(liveness.score(tone(7.0)))
+
+
+def test_the_weights_setting_ignores_stray_spaces_and_line_breaks(monkeypatch):
+    # Pasted into the Space's settings, a value can pick up a trailing newline.
+    import importlib
+
+    import liveness
+
+    monkeypatch.setenv("LIVENESS_WEIGHTS", " /app/liveness-first-try.pth\n")
+    assert importlib.reload(liveness).WEIGHTS == "/app/liveness-first-try.pth"
+
+    monkeypatch.setenv("LIVENESS_WEIGHTS", "\n")
+    assert importlib.reload(liveness).WEIGHTS.endswith("liveness-first-try.pth")
+
+    monkeypatch.delenv("LIVENESS_WEIGHTS")
+    importlib.reload(liveness)
+
+
+def test_the_model_is_named_after_its_weights_file(monkeypatch):
+    # The name goes to the backend with every score, so its logs say which
+    # model made it and which model the threshold belongs to.
+    import importlib
+
+    import liveness
+
+    assert liveness.LIVENESS_MODEL == "aasist-first-try"
+
+    monkeypatch.setenv("LIVENESS_WEIGHTS", "/app/liveness-xlsr.pth")
+    assert importlib.reload(liveness).LIVENESS_MODEL == "aasist-xlsr"
+
+    monkeypatch.delenv("LIVENESS_WEIGHTS")
+    importlib.reload(liveness)
+
+
+def test_the_xlsr_model_code_matches_the_code_it_was_trained_with():
+    # ssl_aasist.py is a copy of ml/liveness/models/ssl_aasist.py: a different
+    # model here would load the trained weights into the wrong shape, or
+    # score differently from the tests that chose the threshold.
+    trained = (Path(__file__).resolve().parents[2] / "ml" / "liveness" / "models" / "ssl_aasist.py").read_text(
+        encoding="utf-8"
+    )
+    served = (Path(__file__).resolve().parents[1] / "ssl_aasist.py").read_text(encoding="utf-8")
+
+    expected = trained.replace("from models.aasist import Model as Aasist", "from aasist import Model as Aasist")
+    # Everything after the docstring's note on where it was copied from.
+    assert served.split("\n\n", 1)[1] == expected.removeprefix('"""')
+
+
+def tiny_xlsr():
+    """An untrained wav2vec 2.0 with XLS-R's layout but tiny, so the test runs
+    in seconds without downloading the real model."""
+    import transformers
+
+    return transformers.Wav2Vec2Config(
+        hidden_size=32, num_hidden_layers=2, num_attention_heads=2, intermediate_size=64,
+        conv_dim=(16,) * 7, num_conv_pos_embeddings=16, num_conv_pos_embedding_groups=4,
+        do_stable_layer_norm=True, feat_extract_norm="layer",
+    )
+
+
+def test_an_xlsr_checkpoint_loads_as_the_xlsr_model(monkeypatch, tmp_path):
+    # Only where PyTorch and transformers are installed (the Space, or a
+    # local run): CI tests the service without them.
+    torch = pytest.importorskip("torch")
+    transformers = pytest.importorskip("transformers")
+    import importlib
+
+    import liveness
+    from ssl_aasist import SslAasist
+
+    monkeypatch.setattr(transformers.Wav2Vec2Config, "from_pretrained", lambda name: tiny_xlsr())
+    torch.manual_seed(0)
+    weights = tmp_path / "liveness-xlsr.pth"
+    torch.save(SslAasist(liveness.MODEL_CONFIG, tiny_xlsr()).state_dict(), weights)
+    monkeypatch.setenv("LIVENESS_WEIGHTS", str(weights))
+    liveness = importlib.reload(liveness)
+
+    liveness.load_model()
+    first = liveness.score(tone(7.0))
+
+    assert isinstance(liveness._model, SslAasist)
+    assert liveness.LIVENESS_MODEL == "aasist-xlsr"
+    assert isinstance(first, float) and np.isfinite(first)
+    assert liveness.score(tone(7.0)) == first
+
+    monkeypatch.delenv("LIVENESS_WEIGHTS")
+    importlib.reload(liveness)

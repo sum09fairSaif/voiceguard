@@ -251,6 +251,12 @@ Kaggle gives about 30 free GPU hours a week, in sessions of up to 9-12 hours.
    the noise dataset, and the run stops at once on Kaggle if it can't find
    it, rather than spending GPU hours training without it.
 
+9. For wav2vec 2.0 XLS-R + AASIST (`models/ssl_aasist.py`), add `--arch ssl`
+   to `kaggle_pack.py --script-only` (resumes included). Nothing new is
+   uploaded: Kaggle downloads XLS-R (1.2 GB) from Hugging Face, and the run
+   installs `transformers`. It trains with batches of 8, the front end at
+   1e-5 and the new back end at 1e-4, in mixed precision.
+
 If `download.py rirs_noises` says openslr.org's certificate isn't valid
 while a browser opens the site fine, Python's certificate list is out of
 date rather than the site being unsafe: download `rirs_noises.zip` in the
@@ -322,7 +328,8 @@ clips, each with a room echo, noise at 10-20 dB and Opus compression):
 | In-the-Wild fakes passing at threshold 0.0 | 79.7% | 80.3% |
 
 So it does what it was trained for, about half as many live voices wrongly
-rejected in a room, and the app uses it. But neither model separates fakes
+rejected in a room. (It was never deployed: on the team's recordings, below,
+it did worse than first-try.) But neither model separates fakes
 from real speech once room noise is added (EER 40-50%, near guessing). The
 echoes here come from the same RIRS_NOISES rooms used in training, so its
 numbers are if anything optimistic. Next: a model with a self-supervised
@@ -336,13 +343,64 @@ libsndfile 1.2.0 read them. So `validate.read_audio` decodes a FLAC file that
 soundfile can't read again with miniaudio, and validation, preprocessing and
 raw scoring all read through it.
 
+### XLS-R model
+
+`xlsr` (November 2026): wav2vec 2.0 XLS-R + AASIST (`models/ssl_aasist.py`,
+`--arch ssl`), 8 epochs on Kaggle with room echo and noise. Its weights are
+1.26 GB against AASIST's 1.2 MB.
+
+| EER % | xlsr | echo-noise | first-try |
+|---|---|---|---|
+| Clean processed test audio, pooled (5,500 clips) | **14.0** | 29.0 | 27.3 |
+| In-the-Wild, clean | **14.6** | 25.4 | 22.4 |
+| Room audio, pooled (2,700 clips) | **32.6** | 40.1 | 45.8 |
+| Room audio, In-the-Wild | 43.0 | 43.7 | 49.3 |
+
+It halves the error on clean audio and does best in a room, though
+In-the-Wild deepfakes in a room are still close to guessing.
+
+## Team recordings and the threshold
+
+Four of us recorded ourselves (with written consent) in November 2026: 10
+live reads each (a few in noisy rooms) and 3 replays, a live read played
+back through a phone or laptop speaker and recorded again. 40 live and 12
+replays, as WAV and M4A from our own devices, in `data/raw/team/` (see
+`sources/team.py`). spk01 and spk02 are the `dev` split, where the
+threshold is chosen; spk03 and spk04 are `test`, to check it on voices it
+wasn't chosen on.
+
+Each clip was scored as the live check scores it: decoded by the model
+service's ffmpeg command, prepared by its `liveness.prepare()`, and the
+lowest window's score kept, by `score_team.py` (its docstring has the
+command). Scores are in `data/team-scores/scores.csv`.
+
+| Model | EER %, all 52 clips |
+|---|---|
+| first-try (deployed until #231) | 50 |
+| echo-noise | 58 |
+| **xlsr** | **9** |
+
+first-try and echo-noise can't tell our replays from our live reads: replays
+often score *higher*. At first-try's threshold of 0.5, 10 of 12 replays
+passed. xlsr separates them, so the app now uses it (#231), with the
+threshold at **1.7**, the lowest that let no `dev` replay through:
+
+| xlsr at 1.7 | Live reads rejected | Replays passing |
+|---|---|---|
+| dev (spk01, spk02) | 3 of 20 | 0 of 6 |
+| test (spk03, spk04) | 1 of 20 | 1 of 6 |
+
+This is a small sample: one clip is 5% of a speaker pair's live reads and
+17% of its replays. Live reads in noisy rooms score lower (median 1.60
+against 2.14), so expect more real people rejected in noisy places. No
+voice clones were recorded, so they're untested against our own voices.
+
 ## Next steps
 
-- Train with room echo and noise once RIRS_NOISES can be downloaded.
-- Team recordings (live and replayed), to test against our own microphones.
-- Try a stronger front end (wav2vec 2.0 + AASIST), which generalises much
-  better in published results but is heavier to train and host.
-- Add the liveness check to the model service and `/api/verify`.
+- Record voice clones of teammates who agree, and check the threshold
+  against them.
+- More team recordings, especially in noisy rooms, to choose the threshold
+  more precisely.
 
 ## Tests
 

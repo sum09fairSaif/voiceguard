@@ -47,9 +47,19 @@ MODEL_CONFIG = {
 
 
 def load_model(weights: Path) -> torch.nn.Module:
-    """AASIST with a checkpoint's weights. weights_only stops the file running code."""
-    model = Model(MODEL_CONFIG)
-    model.load_state_dict(torch.load(weights, map_location="cpu", weights_only=True))
+    """AASIST, or wav2vec 2.0 + AASIST (models/ssl_aasist.py), with a
+    checkpoint's weights. weights_only stops the file running code."""
+    state = torch.load(weights, map_location="cpu", weights_only=True)
+    if any(key.startswith("ssl.") for key in state):
+        from transformers import Wav2Vec2Config
+
+        from models.ssl_aasist import SSL_NAME, SslAasist
+
+        # Only the shape is downloaded; every weight comes from the checkpoint.
+        model = SslAasist(MODEL_CONFIG, Wav2Vec2Config.from_pretrained(SSL_NAME))
+    else:
+        model = Model(MODEL_CONFIG)
+    model.load_state_dict(state)
     return model.eval()
 
 
