@@ -9,6 +9,15 @@ Who is watching, and when, is in the team's own rota (not in this repo).
 - **Is it up?** `curl -sI https://api.get-voiceguard.tech/health` should say
   `200`. The free Render instance sleeps when idle: the first request after a
   quiet spell can take about a minute.
+- **Down alerts (#167):** two checks watch `/health`:
+  - **UptimeRobot** (free plan, Sumehra's account) every 5 minutes. It emails
+    Sumehra when the API stops answering and again when it's back; a Gmail
+    filter on that inbox forwards the alerts to the rest of the team (#229; the free
+    plan has no team members). This is the one to rely on, and it also keeps
+    Render from sleeping.
+  - **GitHub's Uptime workflow** (`.github/workflows/uptime.yml`) opens an
+    "API is down" issue after two failed tries and closes it when it's back.
+    GitHub runs it only every few hours in practice, so treat it as a backup.
 - **Backend logs:** the Render dashboard (needs the Render account owner). Lines to look for:
 
   | Log line | Means |
@@ -45,6 +54,14 @@ enrollment is paused misses that window for good (until account recovery exists)
 **Pausing `voice_checks` locks everyone out of their account.** Sign-in still
 works, but the account only opens after a passed voice check, so pause it only
 for a real emergency (for example, speech-to-text spend running away).
+
+**Pausing `signups` also pauses confirming an email and sending a new code**
+(#217). Confirming opens the 30 minutes in which a new account can set up its
+Voice ID, so it waits until sign-ups are back. People waiting to confirm are
+told sign-ups are paused; a code they already have keeps working until it
+expires (15 minutes), and after that they ask for a new one. An account that
+never confirms is deleted after 24 hours, so in a pause longer than that, some
+people will need to sign up again.
 
 From `backend/`, with the virtual environment active and the team `.env`:
 

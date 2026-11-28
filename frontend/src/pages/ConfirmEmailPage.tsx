@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { confirmEmail, isWellFormedCode, normalizeCode, sendEmailCode } from "../api/emailVerification";
-import { describeApiError, MESSAGES } from "../api/errors";
+import { describeApiError } from "../api/errors";
 import { startSession } from "../api/session";
 import badgeLock from "../assets/icons/badge-lock.svg";
 import { Button } from "../components/Button";
@@ -97,7 +97,7 @@ export function ConfirmEmailPage() {
       setNotice(NEW_CODE_SENT);
     } catch (error) {
       if (!shown.current) return;
-      setFormError(describeApiError(error, { 503: MESSAGES.unavailable }));
+      setFormError(describeApiError(error));
     }
     setBusy("");
   }
