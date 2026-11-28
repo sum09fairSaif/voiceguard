@@ -64,6 +64,9 @@ SHOWN_TO_USER = frozenset(
         "voice_check_rejected",
         "voice_check_incomplete",
         "voice_checks_paused",
+        # A reset the user didn't ask for is what this screen is for.
+        "password_reset_requested",
+        "password_reset",
     }
 )
 # The most a user is shown at once, newest first.

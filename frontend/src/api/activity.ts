@@ -12,7 +12,9 @@ export type ActivityKind =
   | "voice_check_approved"
   | "voice_check_rejected"
   | "voice_check_incomplete"
-  | "voice_checks_paused";
+  | "voice_checks_paused"
+  | "password_reset_requested"
+  | "password_reset";
 
 export type ActivityEvent = { kind: ActivityKind; at: string };
 
