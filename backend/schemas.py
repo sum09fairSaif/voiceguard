@@ -192,6 +192,36 @@ class MeResponse(BaseModel):
     previous_sign_in_at: datetime | None
 
 
+# The security events a user is shown of their own (audit.SHOWN_TO_USER).
+ActivityKind = Literal[
+    "signup",
+    "email_verified",
+    "login_succeeded",
+    "login_failed",
+    "login_locked",
+    "logout",
+    "enrolled",
+    "voice_check_approved",
+    "voice_check_rejected",
+    "voice_check_incomplete",
+    "voice_checks_paused",
+    "password_reset_requested",
+    "password_reset",
+]
+
+
+class ActivityEvent(BaseModel):
+    kind: ActivityKind
+    at: datetime
+
+
+class ActivityResponse(BaseModel):
+    """A user's own security events, newest first: what happened and when,
+    never why (a voice check's reason would say which check failed)."""
+
+    events: list[ActivityEvent]
+
+
 class EnrollmentStatus(BaseModel):
     status: Literal["not_started", "in_progress", "enrolled"]
     samples_accepted: int

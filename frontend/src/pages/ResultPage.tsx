@@ -34,8 +34,7 @@ export function ResultPage() {
   }
 
   return (
-    <Page>
-      <SignedInHeader />
+    <Page header={<SignedInHeader />}>
       <ResultView view={view} onAction={handleAction} />
     </Page>
   );

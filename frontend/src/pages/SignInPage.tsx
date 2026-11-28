@@ -8,7 +8,7 @@ import { endSession, startSession } from "../api/session";
 import { track } from "../posthog";
 import { Button } from "../components/Button";
 import { Logo } from "../components/Logo";
-import { Page } from "../components/Page";
+import { Columns, Page } from "../components/Page";
 import { PageHeading } from "../components/PageHeading";
 import { TextField } from "../components/TextField";
 import { signOutOnServer, type SignOutState } from "../hooks/useSignOut";
@@ -99,97 +99,100 @@ export function SignInPage() {
   }
 
   return (
-    <Page>
-      <Logo />
-      <div className={styles.heading}>
-        <PageHeading
-          eyebrow="Good to have you back"
-          title="Welcome back."
-          subtitle="Sign in to your own little corner of peace of mind."
-        />
-      </div>
-
-      {signOutRetry === "failed" && (
-        <div className={styles.notice} role="status">
-          <p>
-            We couldn't reach VoiceGuard to finish signing you out, so your session may stay active in this browser
-            for up to 75 minutes.
-          </p>
-          <button type="button" className={styles.retry} onClick={retrySignOut} disabled={retryingSignOut}>
-            {retryingSignOut ? "Signing out…" : "Try signing out again"}
-          </button>
-        </div>
-      )}
-      {signOutRetry === "done" && (
-        <p className={styles.notice} role="status">
-          You're signed out.
-        </p>
-      )}
-
-      {passwordChanged && (
-        <p className={styles.notice} role="status">
-          Your password has been changed, and your account has been signed out on every device. Sign in with your new
-          password.
-        </p>
-      )}
-
-      {/* Fields lock while sending, so a server error always matches what was sent. */}
-      <form className={styles.form} onSubmit={handleSubmit} noValidate>
-        <TextField
-          id="email"
-          label="Email address"
-          type="email"
-          placeholder="you@example.com"
-          autoComplete="email"
-          value={form.email}
-          onChange={(event) => update("email", event.target.value)}
-          error={errors.email}
-          disabled={submitting}
-        />
-        <TextField
-          id="password"
-          label="Password"
-          type="password"
-          placeholder="Your password"
-          autoComplete="current-password"
-          value={form.password}
-          onChange={(event) => update("password", event.target.value)}
-          error={errors.password}
-          disabled={submitting}
-        />
-        {/* Carries over the email, if one was typed, so it needn't be typed twice. */}
-        <Link
-          to="/forgot-password"
-          state={{ email: form.email.trim() } satisfies ForgotPasswordState}
-          className={styles.forgot}
-        >
-          Forgot password?
-        </Link>
-
-        {formError && (
-          <p className={styles.formError} role="alert">
-            {formError}
-          </p>
+    <Page header={<Logo />}>
+      <Columns
+        aside={
+          <div className={styles.heading}>
+            <PageHeading
+              eyebrow="Good to have you back"
+              title="Welcome back."
+              subtitle="Sign in to your own little corner of peace of mind."
+            />
+          </div>
+        }
+      >
+        {signOutRetry === "failed" && (
+          <div className={styles.notice} role="status">
+            <p>
+              We couldn't reach VoiceGuard to finish signing you out, so your session may stay active in this browser
+              for up to 75 minutes.
+            </p>
+            <button type="button" className={styles.retry} onClick={retrySignOut} disabled={retryingSignOut}>
+              {retryingSignOut ? "Signing out…" : "Try signing out again"}
+            </button>
+          </div>
         )}
-        {formError && offerConfirm && (
-          <p className={styles.confirmHint}>
-            Signed up but haven’t confirmed your email yet?{" "}
-            <Link to="/confirm-email" state={{ email: form.email.trim() } satisfies ConfirmEmailState}>
-              Enter your code
-            </Link>
+        {signOutRetry === "done" && (
+          <p className={styles.notice} role="status">
+            You're signed out.
           </p>
         )}
 
-        <div className={styles.submit}>
-          <Button type="submit" showArrow={!submitting} disabled={submitting}>
-            {submitting ? "Signing in…" : "Sign in securely"}
-          </Button>
-        </div>
-      </form>
+        {passwordChanged && (
+          <p className={styles.notice} role="status">
+            Your password has been changed, and your account has been signed out on every device. Sign in with your new
+            password.
+          </p>
+        )}
 
-      <p className={styles.switch}>
-        New to VoiceGuard? <Link to="/signup">Create account</Link>
-      </p>
+        {/* Fields lock while sending, so a server error always matches what was sent. */}
+        <form className={styles.form} onSubmit={handleSubmit} noValidate>
+          <TextField
+            id="email"
+            label="Email address"
+            type="email"
+            placeholder="you@example.com"
+            autoComplete="email"
+            value={form.email}
+            onChange={(event) => update("email", event.target.value)}
+            error={errors.email}
+            disabled={submitting}
+          />
+          <TextField
+            id="password"
+            label="Password"
+            type="password"
+            placeholder="Your password"
+            autoComplete="current-password"
+            value={form.password}
+            onChange={(event) => update("password", event.target.value)}
+            error={errors.password}
+            disabled={submitting}
+          />
+          {/* Carries over the email, if one was typed, so it needn't be typed twice. */}
+          <Link
+            to="/forgot-password"
+            state={{ email: form.email.trim() } satisfies ForgotPasswordState}
+            className={styles.forgot}
+          >
+            Forgot password?
+          </Link>
+
+          {formError && (
+            <p className={styles.formError} role="alert">
+              {formError}
+            </p>
+          )}
+          {formError && offerConfirm && (
+            <p className={styles.confirmHint}>
+              Signed up but haven’t confirmed your email yet?{" "}
+              <Link to="/confirm-email" state={{ email: form.email.trim() } satisfies ConfirmEmailState}>
+                Enter your code
+              </Link>
+            </p>
+          )}
+
+          <div className={styles.submit}>
+            <Button type="submit" showArrow={!submitting} disabled={submitting}>
+              {submitting ? "Signing in…" : "Sign in securely"}
+            </Button>
+          </div>
+        </form>
+
+        <p className={styles.switch}>
+          New to VoiceGuard? <Link to="/signup">Create account</Link>
+        </p>
+      </Columns>
     </Page>
   );
 }

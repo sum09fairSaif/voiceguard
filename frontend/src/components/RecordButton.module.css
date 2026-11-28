@@ -66,3 +66,32 @@
     border-color: var(--color-primary);
   }
 }
+
+/* Tablet (Figma 139:700, 139:703): the rings and button are 1.4 times the
+   size; the microphone grows a little less, as in the frames. */
+@media (min-width: 960px) {
+  .outer {
+    width: 220px;
+    height: 220px;
+  }
+
+  .middle {
+    width: 174px;
+    height: 174px;
+  }
+
+  .button {
+    width: 126px;
+    height: 126px;
+  }
+
+  .button img {
+    scale: 1.29;
+  }
+
+  .stop {
+    width: 34px;
+    height: 34px;
+    border-radius: 6px;
+  }
+}

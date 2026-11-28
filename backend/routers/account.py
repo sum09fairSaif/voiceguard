@@ -4,8 +4,9 @@ from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, status
 from pymongo.collection import Collection
 
+from audit import recent_events
 from db import get_users_collection, get_voiceprints_collection
-from schemas import MeResponse
+from schemas import ActivityEvent, ActivityResponse, MeResponse
 from security import get_verified_user_id
 
 router = APIRouter(prefix="/api", tags=["account"])
@@ -43,3 +44,12 @@ def me(
         enrolled_at=_utc(voiceprint["created_at"]) if voiceprint else None,
         previous_sign_in_at=_utc(user.get("previous_verified_at")),
     )
+
+
+@router.get("/activity", response_model=ActivityResponse)
+def activity(user_id: str = Depends(get_verified_user_id)) -> ActivityResponse:
+    """The user's own security events from the last AUDIT_RETENTION_DAYS,
+    newest first: what happened and when, never why. Needs a voice-verified
+    token, like the account summary."""
+    events = recent_events(user_id)
+    return ActivityResponse(events=[ActivityEvent(kind=e["event"], at=_utc(e["at"])) for e in events])

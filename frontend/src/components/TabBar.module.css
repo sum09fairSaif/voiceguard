@@ -58,3 +58,17 @@
     border-radius: 0 0 24px 24px;
   }
 }
+
+/* Tablet (139:819, 139:821, 139:823): the bar runs the full width of the
+   screen, with the three tabs close together in the middle. */
+@media (min-width: 960px) {
+  .bar {
+    justify-content: center;
+    border-radius: 0;
+  }
+
+  .tab,
+  .active {
+    flex: 0 0 207px;
+  }
+}

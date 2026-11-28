@@ -10,6 +10,7 @@ import {
   type Enrollment,
 } from "../../api/enroll";
 import { Button } from "../../components/Button";
+import { Columns } from "../../components/Page";
 import { PageHeading } from "../../components/PageHeading";
 import { RecordButton } from "../../components/RecordButton";
 import { StepProgress } from "../../components/StepProgress";
@@ -106,51 +107,55 @@ export function EnrollRecord({ enrollment, onChange, onEnrolled, onSignedOut, on
   }
 
   return (
-    <>
-      <div className={styles.progress}>
-        <StepProgress current={2} total={3} />
-      </div>
-      <div className={styles.heading}>
-        <PageHeading
-          showBadge={false}
-          eyebrow="Voice ID / 02"
-          title="Let’s hear you."
-          subtitle="Find a quiet spot and read the phrase below in your natural voice."
-        />
-      </div>
+    <Columns
+      aside={
+        <>
+          <div className={styles.progress}>
+            <StepProgress current={2} total={3} />
+          </div>
+          <div className={styles.heading}>
+            <PageHeading
+              showBadge={false}
+              eyebrow="Voice ID / 02"
+              title="Let’s hear you."
+              subtitle="Find a quiet spot and read the phrase below in your natural voice."
+            />
+          </div>
 
-      <section className={styles.card} aria-labelledby="phrase-label">
-        <p id="phrase-label" className={styles.cardLabel}>
-          Your secure phrase · Sample {sampleNumber} of {enrollment.samples_required}
-        </p>
-        <p className={busy === "phrase" ? `${styles.passage} ${styles.faded}` : styles.passage} aria-live="polite">
-          “{displayPassage(enrollment.prompt ?? "")}”
-        </p>
-        <div className={styles.footer}>
-          <button
-            type="button"
-            className={styles.link}
-            onClick={() => void run("phrase", getEnrollment)}
-            disabled={microphoneBusy || busy !== ""}
-          >
-            ↻ New phrase
-          </button>
-          {enrollment.samples_accepted > 0 && (
-            <>
-              <span aria-hidden="true">·</span>
+          <section className={styles.card} aria-labelledby="phrase-label">
+            <p id="phrase-label" className={styles.cardLabel}>
+              Your secure phrase · Sample {sampleNumber} of {enrollment.samples_required}
+            </p>
+            <p className={busy === "phrase" ? `${styles.passage} ${styles.faded}` : styles.passage} aria-live="polite">
+              “{displayPassage(enrollment.prompt ?? "")}”
+            </p>
+            <div className={styles.footer}>
               <button
                 type="button"
                 className={styles.link}
-                onClick={() => void run("restart", startOver)}
+                onClick={() => void run("phrase", getEnrollment)}
                 disabled={microphoneBusy || busy !== ""}
               >
-                Start over
+                ↻ New phrase
               </button>
-            </>
-          )}
-        </div>
-      </section>
-
+              {enrollment.samples_accepted > 0 && (
+                <>
+                  <span aria-hidden="true">·</span>
+                  <button
+                    type="button"
+                    className={styles.link}
+                    onClick={() => void run("restart", startOver)}
+                    disabled={microphoneBusy || busy !== ""}
+                  >
+                    Start over
+                  </button>
+                </>
+              )}
+            </div>
+          </section>
+        </>
+      }
+    >
       <section className={styles.recorder} aria-label="Record your voice">
         {recorded && !error ? (
           <>
@@ -204,6 +209,6 @@ export function EnrollRecord({ enrollment, onChange, onEnrolled, onSignedOut, on
           </div>
         )}
       </section>
-    </>
+    </Columns>
   );
 }

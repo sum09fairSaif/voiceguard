@@ -7,7 +7,7 @@ import { startSession } from "../api/session";
 import { track } from "../posthog";
 import { Button } from "../components/Button";
 import { Logo } from "../components/Logo";
-import { Page } from "../components/Page";
+import { Columns, Page } from "../components/Page";
 import { PageHeading } from "../components/PageHeading";
 import { PasswordStrength } from "../components/PasswordStrength";
 import { TextField } from "../components/TextField";
@@ -94,71 +94,74 @@ export function SignupPage() {
   }
 
   return (
-    <Page>
-      <Logo />
-      <div className={styles.heading}>
-        <PageHeading
-          eyebrow="Let’s get to know you"
-          title="Your security starts here."
-          subtitle="Create an account. Take the first step toward a safer digital life."
-        />
-      </div>
+    <Page header={<Logo />}>
+      <Columns
+        aside={
+          <div className={styles.heading}>
+            <PageHeading
+              eyebrow="Let’s get to know you"
+              title="Your security starts here."
+              subtitle="Create an account. Take the first step toward a safer digital life."
+            />
+          </div>
+        }
+      >
+        {/* Fields lock while sending, so a server error always matches what was sent. */}
+        <form className={styles.form} onSubmit={handleSubmit} noValidate>
+          <TextField
+            id="full-name"
+            label="Full name"
+            placeholder="Alex Morgan"
+            autoComplete="name"
+            value={form.fullName}
+            onChange={(event) => update("fullName", event.target.value)}
+            error={errors.fullName}
+            disabled={submitting}
+          />
+          <TextField
+            id="email"
+            label="Email address"
+            type="email"
+            placeholder="you@example.com"
+            autoComplete="email"
+            value={form.email}
+            onChange={(event) => update("email", event.target.value)}
+            error={errors.email}
+            disabled={submitting}
+          />
+          <TextField
+            id="password"
+            label="Password"
+            type="password"
+            placeholder={`At least ${MIN_PASSWORD_LENGTH} characters`}
+            autoComplete="new-password"
+            value={form.password}
+            onChange={(event) => update("password", event.target.value)}
+            error={errors.password}
+            disabled={submitting}
+          />
+          <PasswordStrength password={form.password} />
 
-      {/* Fields lock while sending, so a server error always matches what was sent. */}
-      <form className={styles.form} onSubmit={handleSubmit} noValidate>
-        <TextField
-          id="full-name"
-          label="Full name"
-          placeholder="Alex Morgan"
-          autoComplete="name"
-          value={form.fullName}
-          onChange={(event) => update("fullName", event.target.value)}
-          error={errors.fullName}
-          disabled={submitting}
-        />
-        <TextField
-          id="email"
-          label="Email address"
-          type="email"
-          placeholder="you@example.com"
-          autoComplete="email"
-          value={form.email}
-          onChange={(event) => update("email", event.target.value)}
-          error={errors.email}
-          disabled={submitting}
-        />
-        <TextField
-          id="password"
-          label="Password"
-          type="password"
-          placeholder={`At least ${MIN_PASSWORD_LENGTH} characters`}
-          autoComplete="new-password"
-          value={form.password}
-          onChange={(event) => update("password", event.target.value)}
-          error={errors.password}
-          disabled={submitting}
-        />
-        <PasswordStrength password={form.password} />
+          {formError && (
+            <p className={styles.formError} role="alert">
+              {formError}
+            </p>
+          )}
 
-        {formError && (
-          <p className={styles.formError} role="alert">
-            {formError}
-          </p>
-        )}
+          <div className={styles.submit}>
+            <Button type="submit" showArrow={!submitting} disabled={submitting}>
+              {submitting ? "Creating account…" : "Create account"}
+            </Button>
+          </div>
+        </form>
 
-        <div className={styles.submit}>
-          <Button type="submit" showArrow={!submitting} disabled={submitting}>
-            {submitting ? "Creating account…" : "Create account"}
-          </Button>
-        </div>
-      </form>
-
-      <p className={styles.switch}>
-        Already a member? <Link to="/signin">Sign in</Link>
-      </p>
-      <p className={styles.terms}>
-        What we keep, and why: <Link to="/privacy">Privacy note</Link>
-      </p>
+        <p className={styles.switch}>
+          Already a member? <Link to="/signin">Sign in</Link>
+        </p>
+        <p className={styles.terms}>
+          What we keep, and why: <Link to="/privacy">Privacy note</Link>
+        </p>
+      </Columns>
     </Page>
   );
 }

@@ -1,5 +1,13 @@
-.result {
+/* The emblem, then the text under it, centred (Figma 19:287 and 19:371). On a
+   tablet the emblem is the left column and the text the right (139:701,
+   139:818). */
+.emblem {
   margin-top: 54px;
+  display: flex;
+  justify-content: center;
+}
+
+.result {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -8,7 +16,7 @@
 
 /* Figma 19:371: the emblem sits lower here than on "Voice ID ready" (19:287),
    with the text in the same place. */
-.verdict {
+.emblem.verdict {
   margin-top: 71px;
 }
 
@@ -109,4 +117,10 @@
 .action {
   margin-top: 30px;
   width: 100%;
+}
+
+@media (min-width: 960px) {
+  .result > :first-child {
+    margin-top: 0;
+  }
 }

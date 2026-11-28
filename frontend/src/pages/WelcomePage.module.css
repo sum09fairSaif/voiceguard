@@ -78,3 +78,48 @@
   font-size: 10px;
   color: var(--color-muted);
 }
+
+/* Only on a tablet. */
+.heroTablet {
+  display: none;
+}
+
+/* Tablet (Figma 141:2): larger shields on the left, the text and buttons on
+   the right. Each shield sits at its Figma box less the half-pixel its
+   outline draws outside it; the mark's outline is 6px. */
+@media (min-width: 960px) {
+  .hero {
+    display: none;
+  }
+
+  .heroTablet {
+    display: block;
+    position: relative;
+    width: 348px;
+    height: 426px;
+  }
+
+  .heroTablet .outer {
+    top: -0.5px;
+    left: -0.5px;
+  }
+
+  .heroTablet .middle {
+    top: 44.5px;
+    left: 40px;
+  }
+
+  .heroTablet .inner {
+    top: 85px;
+    left: 88px;
+  }
+
+  .heroTablet .mark {
+    top: 117px;
+    left: 73.5px;
+  }
+
+  .heroTablet .badge {
+    top: 400px;
+  }
+}

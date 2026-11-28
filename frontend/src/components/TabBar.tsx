@@ -1,4 +1,6 @@
 import { NavLink } from "react-router-dom";
+import activityIcon from "../assets/icons/tab-activity.svg";
+import activityActiveIcon from "../assets/icons/tab-activity-active.svg";
 import homeIcon from "../assets/icons/tab-home.svg";
 import homeActiveIcon from "../assets/icons/tab-home-active.svg";
 import settingsIcon from "../assets/icons/tab-settings.svg";
@@ -11,10 +13,13 @@ type Tab = {
   icon: { src: string; activeSrc: string; width: number; height: number };
 };
 
-// The designs also have an Activity tab; it comes with the Activity screen,
-// once the server can list a user's own security events.
 const TABS: Tab[] = [
   { to: "/account", label: "Home", icon: { src: homeIcon, activeSrc: homeActiveIcon, width: 18.88, height: 18.88 } },
+  {
+    to: "/activity",
+    label: "Activity",
+    icon: { src: activityIcon, activeSrc: activityActiveIcon, width: 18.88, height: 15.05 },
+  },
   {
     to: "/settings",
     label: "Settings",
@@ -22,7 +27,7 @@ const TABS: Tab[] = [
   },
 ];
 
-// The bar along the foot of the signed-in screens (Figma 19:413, 19:545).
+// The bar along the foot of the signed-in screens (Figma 19:413, 19:476, 19:545).
 export function TabBar() {
   return (
     <nav className={styles.bar} aria-label="Main">

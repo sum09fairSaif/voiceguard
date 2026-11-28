@@ -8,7 +8,7 @@ import { heldResetLinkToken } from "../resetLinkToken";
 import badgeLock from "../assets/icons/badge-lock.svg";
 import { Button } from "../components/Button";
 import { Logo } from "../components/Logo";
-import { Page } from "../components/Page";
+import { Columns, Page } from "../components/Page";
 import { PageHeading } from "../components/PageHeading";
 import { PasswordStrength } from "../components/PasswordStrength";
 import { ProtectedNote } from "../components/ProtectedNote";
@@ -95,69 +95,72 @@ export function ResetPasswordPage() {
   }
 
   return (
-    <Page>
-      <Logo />
-      <div className={styles.heading}>
-        <PageHeading
-          badgeIcon={BADGE}
-          eyebrow="Almost there"
-          title="A new password."
-          subtitle="Choose a new password for your account. You’ll use it to sign in from now on."
-        />
-      </div>
-
-      {linkUnusable ? (
-        <div className={styles.sent} role="alert">
-          <p className={styles.sentTitle}>This link can’t be used</p>
-          <p>
-            Reset links work once, for 30 minutes, and only the newest one works. <Link to="/forgot-password">Ask for a
-            new link</Link>.
-          </p>
-          {refusedByServer && (
-            // The link may have been used up by an earlier save, including
-            // one whose answer never arrived (e.g. the connection dropped).
-            <p>
-              If you’ve already set a new password with this link, <Link to="/signin">sign in</Link> with it.
-            </p>
-          )}
-        </div>
-      ) : (
-        <form className={styles.form} onSubmit={handleSubmit} noValidate>
-          <TextField
-            id="password"
-            label="New password"
-            type="password"
-            placeholder="At least 15 characters"
-            autoComplete="new-password"
-            value={password}
-            onChange={(event) => {
-              setPassword(event.target.value);
-              setPasswordError("");
-            }}
-            error={passwordError}
-            disabled={submitting}
-          />
-          <PasswordStrength password={password} />
-
-          {formError && (
-            <p className={styles.formError} role="alert">
-              {formError}
-            </p>
-          )}
-
-          <div className={styles.submit}>
-            <Button type="submit" showArrow={!submitting} disabled={submitting}>
-              {submitting ? "Saving…" : "Save new password"}
-            </Button>
+    <Page header={<Logo />}>
+      <Columns
+        aside={
+          <div className={styles.heading}>
+            <PageHeading
+              badgeIcon={BADGE}
+              eyebrow="Almost there"
+              title="A new password."
+              subtitle="Choose a new password for your account. You’ll use it to sign in from now on."
+            />
           </div>
-        </form>
-      )}
+        }
+      >
+        {linkUnusable ? (
+          <div className={styles.sent} role="alert">
+            <p className={styles.sentTitle}>This link can’t be used</p>
+            <p>
+              Reset links work once, for 30 minutes, and only the newest one works. <Link to="/forgot-password">Ask for a
+              new link</Link>.
+            </p>
+            {refusedByServer && (
+              // The link may have been used up by an earlier save, including
+              // one whose answer never arrived (e.g. the connection dropped).
+              <p>
+                If you’ve already set a new password with this link, <Link to="/signin">sign in</Link> with it.
+              </p>
+            )}
+          </div>
+        ) : (
+          <form className={styles.form} onSubmit={handleSubmit} noValidate>
+            <TextField
+              id="password"
+              label="New password"
+              type="password"
+              placeholder="At least 15 characters"
+              autoComplete="new-password"
+              value={password}
+              onChange={(event) => {
+                setPassword(event.target.value);
+                setPasswordError("");
+              }}
+              error={passwordError}
+              disabled={submitting}
+            />
+            <PasswordStrength password={password} />
 
-      <Link to="/signin" className={styles.back}>
-        Back to sign in
-      </Link>
+            {formError && (
+              <p className={styles.formError} role="alert">
+                {formError}
+              </p>
+            )}
 
-      <ProtectedNote>Saving your new password signs your account out on every device</ProtectedNote>
+            <div className={styles.submit}>
+              <Button type="submit" showArrow={!submitting} disabled={submitting}>
+                {submitting ? "Saving…" : "Save new password"}
+              </Button>
+            </div>
+          </form>
+        )}
+
+        <Link to="/signin" className={styles.back}>
+          Back to sign in
+        </Link>
+
+        <ProtectedNote>Saving your new password signs your account out on every device</ProtectedNote>
+      </Columns>
     </Page>
   );
 }
