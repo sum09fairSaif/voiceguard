@@ -205,6 +205,8 @@ ActivityKind = Literal[
     "voice_check_rejected",
     "voice_check_incomplete",
     "voice_checks_paused",
+    "password_reset_requested",
+    "password_reset",
 ]
 
 

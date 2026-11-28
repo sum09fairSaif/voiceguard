@@ -75,6 +75,18 @@ def test_never_says_which_voice_check_failed(client, users, audit_events):
     assert "liveness" not in body
 
 
+def test_shows_password_reset_requests_and_resets(client, users, audit_events):
+    # A reset link asked for by someone else, or a reset the user didn't
+    # make, is what they need to spot.
+    user_id = make_account(users)
+    record(audit_events, user_id, "password_reset_requested", 10)
+    record(audit_events, user_id, "password_reset", 5)
+
+    events = get_activity(client, user_id).json()["events"]
+
+    assert [e["kind"] for e in events] == ["password_reset", "password_reset_requested"]
+
+
 def test_shows_wrong_passwords_typed_for_the_account_by_anyone(client, users, audit_events):
     user_id = make_account(users)
     record(audit_events, user_id, "login_failed", 3, reason="wrong_password")

@@ -43,6 +43,13 @@ const EVENTS: Record<ActivityKind, { title: string; detail: string; icon: Icon; 
   signup: { title: "Account created", detail: "Welcome to VoiceGuard", icon: SHIELD },
   email_verified: { title: "Email confirmed", detail: "Your address was confirmed", icon: SHIELD },
   enrolled: { title: "Voice ID created", detail: "Your voiceprint was encrypted", icon: SHIELD },
+  password_reset_requested: {
+    title: "Password reset requested",
+    detail: "A reset link was emailed to you",
+    icon: LOCK,
+    look: true,
+  },
+  password_reset: { title: "Password changed", detail: "Your password was reset", icon: LOCK, look: true },
 };
 
 // The server sends at most this many (backend audit.ACTIVITY_LIMIT).

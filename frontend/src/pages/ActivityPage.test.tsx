@@ -99,6 +99,19 @@ describe("Activity", () => {
     expect(screen.getByText("Secure sign in").closest("li")).not.toHaveTextContent("Worth a look");
   });
 
+  it("points out password reset requests and resets", async () => {
+    mockGetActivity.mockResolvedValue([
+      { kind: "password_reset", at: minutesAgo(1) },
+      { kind: "password_reset_requested", at: minutesAgo(5) },
+    ]);
+    renderActivity();
+
+    const summary = await screen.findByRole("region", { name: "The last 30 days" });
+    expect(summary).toHaveTextContent("2 worth a look");
+    expect(screen.getByText("Password changed").closest("li")).toHaveTextContent("Worth a look");
+    expect(screen.getByText("Password reset requested").closest("li")).toHaveTextContent("Worth a look");
+  });
+
   it("never says which voice check failed", async () => {
     mockGetActivity.mockResolvedValue([{ kind: "voice_check_rejected", at: minutesAgo(1) }]);
     renderActivity();
