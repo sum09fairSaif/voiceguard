@@ -87,6 +87,18 @@ describe("Activity", () => {
     expect(screen.getByText("Voice check failed")).toBeInTheDocument();
   });
 
+  it("says which rows are worth a look in words, not only by the dot's colour", async () => {
+    mockGetActivity.mockResolvedValue([
+      { kind: "login_failed", at: minutesAgo(2) },
+      { kind: "login_succeeded", at: minutesAgo(1) },
+    ]);
+    renderActivity();
+
+    const flagged = (await screen.findByText("Wrong password")).closest("li")!;
+    expect(flagged).toHaveTextContent("Worth a look");
+    expect(screen.getByText("Secure sign in").closest("li")).not.toHaveTextContent("Worth a look");
+  });
+
   it("never says which voice check failed", async () => {
     mockGetActivity.mockResolvedValue([{ kind: "voice_check_rejected", at: minutesAgo(1) }]);
     renderActivity();

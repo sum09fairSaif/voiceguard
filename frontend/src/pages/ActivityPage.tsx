@@ -30,7 +30,9 @@ const EVENTS: Record<ActivityKind, { title: string; detail: string; icon: Icon; 
   voice_check_incomplete: { title: "Voice check incomplete", detail: "No Voice ID to compare with yet", icon: MIC },
   voice_checks_paused: {
     title: "Voice checks paused",
-    detail: "After 3 failed checks, for 30 minutes",
+    // How many and how long are server settings (VOICE_MAX_FAILURES,
+    // VOICE_LOCKOUT_SECONDS), so no numbers here.
+    detail: "Too many failed checks",
     icon: MIC,
     look: true,
   },
@@ -138,6 +140,8 @@ export function ActivityPage() {
                           {timeLabel(new Date(event.at), now)}
                         </time>
                       </span>
+                      {/* The dot's colour alone can't say it (WCAG 1.4.1), so screen readers get words. */}
+                      {shown.look && <span className={styles.visuallyHidden}>Worth a look</span>}
                       <span className={shown.look ? styles.lookDot : styles.dot} aria-hidden="true" />
                     </li>
                   );
