@@ -225,7 +225,16 @@ def _email_owner(send: EmailSender, email: str) -> None:
         logger.warning("account_exists_notice_not_sent reason=%s", type(exc).__name__)
 
 
-@router.post("/email/code", status_code=status.HTTP_202_ACCEPTED, response_model=SignupAccepted)
+# Confirming an address, and asking for a new code, pause with signups
+# (#217): confirming starts the session that may set up Voice ID for a while
+# (enrollment_window.py), and that window could run out while enrollment is
+# paused too. A code waiting to be used stays valid until it expires.
+@router.post(
+    "/email/code",
+    status_code=status.HTTP_202_ACCEPTED,
+    response_model=SignupAccepted,
+    dependencies=[Depends(switches.require("signups"))],
+)
 def send_email_code(
     body: EmailAddressRequest,
     request: Request,
@@ -254,7 +263,7 @@ def _resend_code(users: Collection, codes: Collection, send: EmailSender, email:
         _email_code(codes, send, str(user["_id"]), email)
 
 
-@router.post("/email/verify", response_model=SignupResponse)
+@router.post("/email/verify", response_model=SignupResponse, dependencies=[Depends(switches.require("signups"))])
 def confirm_email(
     body: EmailCodeRequest,
     response: Response,

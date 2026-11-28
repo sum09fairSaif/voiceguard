@@ -1,10 +1,10 @@
 name: Uptime
 
-# Checks the live API every 5 minutes (GitHub's shortest schedule; runs can be
-# late or skipped when GitHub is busy). Opens an "API is down" issue after two
-# failed tries, so everyone watching the repo is notified, and closes it when
-# the API answers again. Keeping the API busy also stops Render's free plan
-# from sleeping most of the time, but that's a side effect, not a promise.
+# Checks the live API, asking for every 5 minutes (GitHub's shortest schedule).
+# In practice GitHub runs it only every few hours, so it's the backup: the
+# alert to rely on is UptimeRobot, every 5 minutes (docs/runbook.md, #167).
+# Opens an "API is down" issue after two failed tries, so everyone watching
+# the repo is notified, and closes it when the API answers again.
 # Scheduled runs only start once this file is on the default branch (main).
 on:
   schedule:
