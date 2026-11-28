@@ -48,6 +48,30 @@ EVENTS = frozenset(
     }
 )
 
+# What a user sees of their own record (GET /api/activity): each event's name
+# and time, never its reason (for a voice check, that says which check
+# failed, which #112 keeps hidden), and not each enrollment sample.
+SHOWN_TO_USER = frozenset(
+    {
+        "signup",
+        "email_verified",
+        "login_succeeded",
+        "login_failed",
+        "login_locked",
+        "logout",
+        "enrolled",
+        "voice_check_approved",
+        "voice_check_rejected",
+        "voice_check_incomplete",
+        "voice_checks_paused",
+        # A reset the user didn't ask for is what this screen is for.
+        "password_reset_requested",
+        "password_reset",
+    }
+)
+# The most a user is shown at once, newest first.
+ACTIVITY_LIMIT = 50
+
 # The database write happens inside the request, so it gets a short deadline:
 # a slow database delays a request by at most this, then the event is dropped.
 WRITE_SECONDS = 1.0
@@ -125,6 +149,25 @@ def _enqueue(event: str, user: str | None, reason: str | None) -> None:
         # The first drop, then every 100th, so a flood doesn't flood the log too.
         if _dropped % 100 == 1:
             logger.warning("audit_not_recorded where=posthog_queue_full event=%s dropped=%d", event, _dropped)
+
+
+def recent_events(user_id: str, limit: int = ACTIVITY_LIMIT) -> list[dict]:
+    """A user's own security events, newest first, as {"event", "at"} only.
+    Includes wrong passwords typed for their account by anyone, so they can
+    spot someone trying it. Raises on a database error (answered 503)."""
+    since = datetime.now(UTC) - timedelta(days=config.AUDIT_RETENTION_DAYS)
+    cursor = (
+        _collection()
+        .find(
+            # MongoDB deletes expired events within a minute or so; the time
+            # filter keeps one that's waiting from showing.
+            {"user": hashed(user_id), "event": {"$in": sorted(SHOWN_TO_USER)}, "at": {"$gte": since}},
+            {"_id": 0, "event": 1, "at": 1},
+        )
+        .sort("at", pymongo.DESCENDING)
+        .limit(limit)
+    )
+    return list(cursor)
 
 
 def track(event: str, user_id: str | None = None, reason: str | None = None) -> None:

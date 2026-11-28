@@ -1,0 +1,151 @@
+/* Activity, from Figma 19:476. */
+.heading {
+  margin-top: 56px;
+}
+
+/* The pale teal summary card: 94px tall, 15px corners. */
+.summary {
+  margin-top: 17px;
+  min-height: 94px;
+  padding: 0 23px 0 19px;
+  display: flex;
+  align-items: center;
+  gap: 19px;
+  border: 1px solid var(--color-brand-border);
+  border-radius: 15px;
+  background: var(--color-brand-soft);
+}
+
+.count {
+  flex: none;
+  min-width: 55px;
+  font-family: var(--font-heading);
+  font-size: 45px;
+  line-height: 40px;
+  font-weight: 700;
+  color: var(--color-primary);
+}
+
+.summaryText {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.summaryTitle {
+  font-family: var(--font-heading);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.summaryDetail {
+  font-size: 14px;
+  color: var(--color-muted);
+}
+
+.day {
+  margin: 29px 0 0;
+  font-family: var(--font-inter);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--color-primary);
+}
+
+.events {
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* Icons centred 19.5px in from the edge; the text starts at 53px. */
+.event {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.icon {
+  flex: none;
+  width: 39px;
+  margin-top: 10px;
+  display: grid;
+  place-items: center;
+}
+
+.text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.title {
+  font-family: var(--font-heading);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.detail {
+  font-size: 14px;
+  color: var(--color-muted);
+}
+
+.dot,
+.lookDot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  margin: 6px 6px 0 0;
+  border-radius: 50%;
+  background: var(--color-success);
+}
+
+.lookDot {
+  background: var(--color-error);
+}
+
+/* Read by screen readers, not shown. */
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.note {
+  margin: 28px 0 24px;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--color-muted);
+}
+
+.note a {
+  color: var(--color-gold);
+  font-weight: 600;
+}
+
+.status {
+  margin-top: 28px;
+  font-size: 14px;
+  color: var(--color-muted);
+}
+
+.error {
+  margin-top: 28px;
+  font-size: 14px;
+  color: var(--color-error);
+}

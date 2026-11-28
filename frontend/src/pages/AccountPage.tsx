@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import cardShield from "../assets/icons/home-card-shield.svg";
 import rowMic from "../assets/icons/row-mic.svg";
+import rowArrow from "../assets/icons/row-arrow.svg";
 import rowPulse from "../assets/icons/row-pulse.svg";
 import { Logo } from "../components/Logo";
 import { Page } from "../components/Page";
@@ -9,16 +10,13 @@ import { TabBar } from "../components/TabBar";
 import { useMe } from "../hooks/useMe";
 import styles from "./AccountPage.module.css";
 
-const MOMENT = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
-
 function firstName(fullName: string): string {
   return fullName.trim().split(/\s+/)[0] ?? "";
 }
 
 // Home, after a full sign-in (password and an approved voice check), from
-// Figma 19:413. The design's "Recent activity" row shows the last sign-in
-// instead until there's an Activity screen, and the "All systems ready" label
-// is left out: nothing here checks that.
+// Figma 19:413. The "All systems ready" label is left out: nothing here
+// checks that.
 export function AccountPage() {
   const { me, error } = useMe();
   const enrolled = Boolean(me?.enrolled_at);
@@ -82,21 +80,19 @@ export function AccountPage() {
                   <span className={styles.rowDetail}>{enrolled ? "Enrolled & encrypted" : "Not set up"}</span>
                 </span>
               </li>
-              <li className={styles.row}>
-                <span className={styles.rowIcon}>
-                  <img src={rowPulse} alt="" width={18.88} height={15.05} />
-                </span>
-                <span className={styles.rowText}>
-                  <span className={styles.rowTitle}>Last sign-in</span>
-                  <span className={styles.rowDetail}>
-                    {me.previous_sign_in_at
-                      ? MOMENT.format(new Date(me.previous_sign_in_at))
-                      : "This is your first"}
+              <li>
+                <Link to="/activity" className={styles.row}>
+                  <span className={styles.rowIcon}>
+                    <img src={rowPulse} alt="" width={18.88} height={15.05} />
                   </span>
-                </span>
+                  <span className={styles.rowText}>
+                    <span className={styles.rowTitle}>Recent activity</span>
+                    <span className={styles.rowDetail}>Your latest security events</span>
+                  </span>
+                  <img className={styles.rowArrow} src={rowArrow} alt="" width={11.12} height={8.29} />
+                </Link>
               </li>
             </ul>
-            <p className={styles.note}>Don’t recognise your last sign-in? Sign out and tell the VoiceGuard team.</p>
           </section>
         </>
       )}
